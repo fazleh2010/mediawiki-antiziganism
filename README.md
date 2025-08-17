@@ -1,4 +1,29 @@
-# MediaWiki
+#	 MediaWiki
+
+
+# All steps to most recent version of mediawiki with database and upload 
+## Step 1:
+cd /home/melahi/code/A-mediawiki-project/ambivalenz-database
+docker compose up --build
+http://localhost:5000
+* cd /home/melahi/code/A-mediawiki-project/ambivalenz-database
+* docker compose up --build
+* http://localhost:5000
+
+##Step 2:
+* cd /home/melahi/code/A-mediawiki-project/copyparty
+* docker build -t copyparty-python .
+* docker run -d -p 5010:5010 -v /home/melahi/code/A-mediawiki-project/copyparty:/copyparty copyparty-python 
+* http://localhost:5010
+
+## Step3
+* cd /home/melahi/code/A-mediawiki-project/mediawiki
+* composer serve
+* docker run -d -p 5010:5010 -v /home/melahi/code/A-mediawiki-project/copyparty:/copyparty copyparty-python 
+* Open google chrome as it is slow fire-fox
+* http://localhost:4000/index.php/Main_Page
+
+# Mediwiki original instruction
 
 MediaWiki is a free and open-source wiki software package written in PHP. It
 serves as the platform for Wikipedia and the other Wikimedia projects, used
