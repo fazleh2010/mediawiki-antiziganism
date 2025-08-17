@@ -30,7 +30,7 @@ use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -53,14 +53,17 @@ class SpecialMostInterwikis extends QueryPage {
 		$this->setLinkBatchFactory( $linkBatchFactory );
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return [
 			'tables' => [
@@ -90,7 +93,7 @@ class SpecialMostInterwikis extends QueryPage {
 	/**
 	 * Pre-fill the link cache
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -128,6 +131,7 @@ class SpecialMostInterwikis extends QueryPage {
 		return $this->getLanguage()->specialList( $link, $count );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'highuse';
 	}

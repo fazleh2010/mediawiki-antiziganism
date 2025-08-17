@@ -85,7 +85,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 	protected $conns;
 	/** @var float[] Map of (shard index => UNIX timestamps) */
 	protected $connFailureTimes = [];
-	/** @var Exception[] Map of (shard index => Exception) */
+	/** @var DBConnectionError[] Map of (shard index => Exception) */
 	protected $connFailureErrors = [];
 
 	/** @var bool Whether zlib methods are available to PHP */
@@ -186,6 +186,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		$this->hasZlib = extension_loaded( 'zlib' );
 	}
 
+	/** @inheritDoc */
 	protected function doGet( $key, $flags = 0, &$casToken = null ) {
 		$getToken = ( $casToken === self::PASS_BY_REF );
 		$casToken = null;
@@ -207,26 +208,29 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doSet( $key, $value, $exptime = 0, $flags = 0 ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForSet' ],
+			$this->modifyTableSpecificBlobsForSet( ... ),
 			$mtime,
 			[ $key => [ $value, $exptime ] ]
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doDelete( $key, $flags = 0 ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForDelete' ],
+			$this->modifyTableSpecificBlobsForDelete( ... ),
 			$mtime,
 			[ $key => [] ]
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doAdd( $key, $value, $exptime = 0, $flags = 0 ) {
 		$mtime = $this->newLockingWriteSectionModificationTimestamp( $key, $scope );
 		if ( $mtime === null ) {
@@ -235,12 +239,13 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		}
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForAdd' ],
+			$this->modifyTableSpecificBlobsForAdd( ... ),
 			$mtime,
 			[ $key => [ $value, $exptime ] ]
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doCas( $casToken, $key, $value, $exptime = 0, $flags = 0 ) {
 		$mtime = $this->newLockingWriteSectionModificationTimestamp( $key, $scope );
 		if ( $mtime === null ) {
@@ -249,29 +254,31 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		}
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForCas' ],
+			$this->modifyTableSpecificBlobsForCas( ... ),
 			$mtime,
 			[ $key => [ $value, $exptime, $casToken ] ]
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doChangeTTL( $key, $exptime, $flags ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForChangeTTL' ],
+			$this->modifyTableSpecificBlobsForChangeTTL( ... ),
 			$mtime,
 			[ $key => [ $exptime ] ]
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doIncrWithInit( $key, $exptime, $step, $init, $flags ) {
 		$mtime = $this->getCurrentTime();
 
 		if ( $flags & self::WRITE_BACKGROUND ) {
-			$callback = [ $this, 'modifyTableSpecificBlobsForIncrInitAsync' ];
+			$callback = $this->modifyTableSpecificBlobsForIncrInitAsync( ... );
 		} else {
-			$callback = [ $this, 'modifyTableSpecificBlobsForIncrInit' ];
+			$callback = $this->modifyTableSpecificBlobsForIncrInit( ... );
 		}
 
 		$result = $this->modifyBlobs(
@@ -284,6 +291,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doGetMulti( array $keys, $flags = 0 ) {
 		$result = [];
 		$valueSizeByKey = [];
@@ -309,11 +317,12 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doSetMulti( array $data, $exptime = 0, $flags = 0 ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForSet' ],
+			$this->modifyTableSpecificBlobsForSet( ... ),
 			$mtime,
 			array_map(
 				static function ( $value ) use ( $exptime ) {
@@ -324,21 +333,23 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		);
 	}
 
+	/** @inheritDoc */
 	protected function doDeleteMulti( array $keys, $flags = 0 ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForDelete' ],
+			$this->modifyTableSpecificBlobsForDelete( ... ),
 			$mtime,
 			array_fill_keys( $keys, [] )
 		);
 	}
 
+	/** @inheritDoc */
 	public function doChangeTTLMulti( array $keys, $exptime, $flags = 0 ) {
 		$mtime = $this->getCurrentTime();
 
 		return $this->modifyBlobs(
-			[ $this, 'modifyTableSpecificBlobsForChangeTTL' ],
+			$this->modifyTableSpecificBlobsForChangeTTL( ... ),
 			$mtime,
 			array_fill_keys( $keys, [ $exptime ] )
 		);
@@ -1431,14 +1442,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		}
 	}
 
-	/**
-	 * @deprecated since 1.41, use deleteObjectsExpiringBefore() instead
-	 */
-	public function expireAll() {
-		wfDeprecated( __METHOD__, '1.41' );
-		$this->deleteObjectsExpiringBefore( (int)$this->getCurrentTime() );
-	}
-
+	/** @inheritDoc */
 	public function deleteObjectsExpiringBefore(
 		$timestamp,
 		?callable $progress = null,
@@ -1535,6 +1539,17 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		$batchSize = min( $this->writeBatchSize, $limit );
 
 		foreach ( $tableIndexes as $numShardsDone => $tableIndex ) {
+			// don't do more than 10% of tables. To avoid overwhelming
+			// when there are too many of them. Add one to make sure small number
+			// of tables have been taken care of.
+			if (
+				$numShardsDone > ( ( $this->numTableShards / 10 ) + 1 ) &&
+				// running in context of purge maint script. Go through all tables
+				$limit !== INF
+			) {
+				break;
+			}
+
 			// The oldest expiry of a row we have deleted on this shard
 			// (the first row that we deleted)
 			$minExpUnix = null;
@@ -1601,35 +1616,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		}
 	}
 
-	/**
-	 * Delete content of shard tables in every server.
-	 * Return true if the operation is successful, false otherwise.
-	 *
-	 * @deprecated since 1.41, unused.
-	 *
-	 * @return bool
-	 */
-	public function deleteAll() {
-		wfDeprecated( __METHOD__, '1.41' );
-		/** @noinspection PhpUnusedLocalVariableInspection */
-		$silenceScope = $this->silenceTransactionProfiler();
-		foreach ( $this->getShardServerIndexes() as $shardIndex ) {
-			try {
-				$db = $this->getConnection( $shardIndex );
-				for ( $i = 0; $i < $this->numTableShards; $i++ ) {
-					$db->newDeleteQueryBuilder()
-						->deleteFrom( $this->getTableNameByShard( $i ) )
-						->where( $db::ALL_ROWS )
-						->caller( __METHOD__ )->execute();
-				}
-			} catch ( DBError $e ) {
-				$this->handleDBError( $e, $shardIndex );
-				return false;
-			}
-		}
-		return true;
-	}
-
+	/** @inheritDoc */
 	public function doLock( $key, $timeout = 6, $exptime = 6 ) {
 		/** @noinspection PhpUnusedLocalVariableInspection */
 		$silenceScope = $this->silenceTransactionProfiler();
@@ -1653,6 +1640,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $lockTsUnix;
 	}
 
+	/** @inheritDoc */
 	public function doUnlock( $key ) {
 		/** @noinspection PhpUnusedLocalVariableInspection */
 		$silenceScope = $this->silenceTransactionProfiler();
@@ -1672,40 +1660,27 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $released;
 	}
 
+	/** @inheritDoc */
 	protected function makeKeyInternal( $keyspace, $components ) {
-		// SQL schema for 'objectcache' specifies keys as varchar(255). From that,
-		// subtract the number of characters we need for the keyspace and for
-		// the separator character needed for each argument. To handle some
-		// custom prefixes used by things like WANObjectCache, limit to 205.
-		$keyspace = strtr( $keyspace, ' ', '_' );
-		$charsLeft = 205 - strlen( $keyspace ) - count( $components );
-		foreach ( $components as &$component ) {
-			$component = strtr(
-				$component ?? '',
-				[
-					' ' => '_', // Avoid unnecessary misses from pre-1.35 code
-					':' => '%3A',
-				]
-			);
-
-			// 33 = 32 characters for the MD5 + 1 for the '#' prefix.
-			if ( $charsLeft > 33 && strlen( $component ) > $charsLeft ) {
-				$component = '#' . md5( $component );
-			}
-			$charsLeft -= strlen( $component );
+		$key = strtr( $keyspace, ' ', '_' );
+		foreach ( $components as $component ) {
+			$component = strtr( $component ?? '', [
+				' ' => '_', // Avoid unnecessary misses from pre-1.35 code
+				':' => '%3A',
+			] );
+			$key .= ':' . $component;
 		}
-		unset( $component );
 
-		if ( $charsLeft < 0 ) {
-			return $keyspace . ':BagOStuff-long-key:##' . md5( implode( ':', $components ) );
-		}
-		return $keyspace . ':' . implode( ':', $components );
+		// SQL schema for 'objectcache' specifies keys as varchar(255).
+		// * Reserve 45 chars for prefixes used by wrappers like WANObjectCache.
+		return $this->makeFallbackKey( $key, 205 );
 	}
 
 	protected function requireConvertGenericKey(): bool {
 		return true;
 	}
 
+	/** @inheritDoc */
 	protected function serialize( $value ) {
 		if ( is_int( $value ) ) {
 			return $value;
@@ -1720,6 +1695,7 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 		return $serial;
 	}
 
+	/** @inheritDoc */
 	protected function unserialize( $value ) {
 		if ( $value === self::TOMB_SERIAL ) {
 			return false; // tombstone
@@ -1868,19 +1844,21 @@ class SqlBagOStuff extends MediumSpecificBagOStuff {
 	}
 
 	/**
-	 * Create the shard tables on all databases
+	 * Create the shard tables on all databases.
 	 *
-	 * This is typically called manually by a sysadmin via eval.php, e.g. for ParserCache:
+	 * @note This method is typically called manually by a sysadmin via eval.php,
+	 * e.g. for ParserCache:
 	 *
 	 * @code
-	 *     ObjectCache::getInstance( 'myparsercache' )->createTables();
+	 *     $objectCacheFactory = MW::srv()->getObjectCacheFactory();
+	 *     $objectCacheFactory->getInstance( 'myparsercache' )->createTables();
 	 * @endcode
 	 *
 	 * This is different from `$services->getParserCache()->getCacheStorage()->createTables()`,
 	 * which would use the backend set via $wgParserCacheType, which shouldn't be
 	 * set yet for the backend you are creating shard tables on. The expectation
-	 * is to first add the new backend to $wgObjectCaches, run the above, and then enable
-	 * it for live ParserCache traffic by setting $wgParserCacheType.
+	 * is to first add the new backend to $wgObjectCaches, run the above, and then
+	 * enable it for live ParserCache traffic by setting $wgParserCacheType.
 	 */
 	public function createTables() {
 		foreach ( $this->getShardServerIndexes() as $shardIndex ) {

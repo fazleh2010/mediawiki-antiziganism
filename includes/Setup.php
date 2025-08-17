@@ -69,6 +69,7 @@ use MediaWiki\Message\Message;
 use MediaWiki\Registration\ExtensionRegistry;
 use MediaWiki\Registration\MissingExtensionException;
 use MediaWiki\Request\HeaderCallback;
+use MediaWiki\Session\SessionManager;
 use MediaWiki\Settings\DynamicDefaultValues;
 use MediaWiki\Settings\LocalSettingsLoader;
 use MediaWiki\Settings\SettingsBuilder;
@@ -95,12 +96,6 @@ use Wikimedia\Telemetry\TracerState;
 // This file must be included from a valid entry point (e.g. WebStart.php, Maintenance.php)
 if ( !defined( 'MEDIAWIKI' ) ) {
 	exit( 1 );
-}
-
-// PHP must not be configured to overload mbstring functions. (T5782, T122807)
-// This was deprecated by upstream in PHP 7.2 and was removed in PHP 8.0.
-if ( ini_get( 'mbstring.func_overload' ) ) {
-	die( 'MediaWiki does not support installations where mbstring.func_overload is non-zero.' );
 }
 
 // The MW_ENTRY_POINT constant must always exists, to make it safe to access.
@@ -314,13 +309,22 @@ if ( defined( 'MW_FINAL_SETUP_CALLBACK' ) ) {
 // Config can no longer be changed.
 $wgSettings->enterReadOnlyStage();
 
-// Set an appropriate locale (T291234)
-// setlocale() will return the locale name actually set.
+// Determine an appropriate locale (T291234)
+// As of version 8, php no longer inherits the platform's locale so there
+// shouldn't be a need to set a locale.  However, setlocale is used to
+// determine if the locale is available.  macOS is avoided because setting
+// it to C.UTF-8 changes pcre character classes on that platform.
+if ( PHP_OS_FAMILY !== 'Darwin' && setlocale( LC_ALL, 'C.UTF-8' ) ) {
+	$locale = 'C.UTF-8';
+} else {
+	$locale = 'C';
+}
 // The putenv() is meant to propagate the choice of locale to shell commands
 // so that they will interpret UTF-8 correctly. If you have a problem with a
 // shell command and need to send a special locale, you can override the locale
 // with Command::environment().
-putenv( "LC_ALL=" . setlocale( LC_ALL, 'C.UTF-8', 'C' ) );
+putenv( "LC_ALL={$locale}" );
+unset( $locale );
 
 // Set PHP runtime to the desired timezone
 date_default_timezone_set( $wgLocaltimezone );
@@ -411,7 +415,7 @@ if ( !$wgNoReplyAddress ) {
 
 // Non-trivial expansion of: $wgSecureLogin
 // (due to calling wfWarn).
-if ( $wgSecureLogin && substr( $wgServer, 0, 2 ) !== '//' ) {
+if ( $wgSecureLogin && !str_starts_with( $wgServer, '//' ) ) {
 	$wgSecureLogin = false;
 	wfWarn( 'Secure login was enabled on a server that only supports '
 		. 'HTTP or HTTPS. Disabling secure login.' );
@@ -505,7 +509,7 @@ if ( !defined( 'MW_NO_SESSION' ) && MW_ENTRY_POINT !== 'cli' ) {
 	// unless we're specifically asked not to.
 	if ( !defined( 'MW_NO_SESSION_HANDLER' ) ) {
 		MediaWiki\Session\PHPSessionHandler::install(
-			MediaWiki\Session\SessionManager::singleton()
+			MediaWikiServices::getInstance()->getSessionManager()
 		);
 	}
 
@@ -556,7 +560,7 @@ if ( !defined( 'MW_NO_SESSION' ) && MW_ENTRY_POINT !== 'cli' ) {
 	// handler unless specifically requested not to.
 	if ( !defined( 'MW_NO_SESSION_HANDLER' ) ) {
 		MediaWiki\Session\PHPSessionHandler::install(
-			MediaWiki\Session\SessionManager::singleton()
+			MediaWikiServices::getInstance()->getSessionManager()
 		);
 	}
 }
@@ -649,5 +653,8 @@ $wgFullyInitialised = true;
 
 // T264370
 if ( !defined( 'MW_NO_SESSION' ) && MW_ENTRY_POINT !== 'cli' ) {
-	MediaWiki\Session\SessionManager::singleton()->logPotentialSessionLeakage();
+	$manager = MediaWikiServices::getInstance()->getSessionManager();
+	if ( $manager instanceof SessionManager ) {
+		$manager->logPotentialSessionLeakage();
+	}
 }

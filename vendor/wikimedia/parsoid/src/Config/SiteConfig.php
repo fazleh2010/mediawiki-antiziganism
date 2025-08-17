@@ -160,14 +160,11 @@ abstract class SiteConfig {
 			// Treat this as a configuration array, create a new anonymous
 			// ExtensionModule object for it.
 			$module = new class( $configOrSpec ) implements ExtensionModule {
-				private $config;
-
-				/** @param array $config */
-				public function __construct( $config ) {
-					$this->config = $config;
+				public function __construct(
+					private readonly array $config,
+				) {
 				}
 
-				/** @inheritDoc */
 				public function getConfig(): array {
 					return $this->config;
 				}
@@ -202,9 +199,9 @@ abstract class SiteConfig {
 	 * Return the set of Parsoid extension modules associated with this
 	 * SiteConfig.
 	 *
-	 * @return ExtensionModule[]
+	 * @return list<ExtensionModule>
 	 */
-	final public function getExtensionModules() {
+	final public function getExtensionModules(): array {
 		if ( $this->extModules === null ) {
 			$this->extModules = [];
 			foreach ( self::$coreExtModules as $m ) {
@@ -354,6 +351,24 @@ abstract class SiteConfig {
 	 * @return void
 	 */
 	abstract public function observeTiming( string $name, float $value, array $labels );
+
+	/**
+	 * Record a histogram metric
+	 * @param string $name
+	 * @param float $value A time value in milliseconds
+	 * @param array $buckets The buckets used in this histogram
+	 * @param array $labels The metric labels
+	 * @return void
+	 */
+	abstract public function observeHistogram( string $name, float $value, array $buckets, array $labels );
+
+	/**
+	 * Generate histogram buckets based on mean and skip
+	 * @param float $mean
+	 * @param int $skip
+	 * @return array
+	 */
+	abstract public function getHistogramBuckets( float $mean, int $skip );
 
 	/**
 	 * If enabled, bidi chars adjacent to category links will be stripped
@@ -572,11 +587,11 @@ abstract class SiteConfig {
 			$patterns = [ [], [] ];
 			foreach ( $this->interwikiMapNoNamespaces() as $key => $iw ) {
 				$key = (string)$key;
-				$lang = (int)( !empty( $iw['language'] ) );
+				$lang = (int)( isset( $iw['language'] ) );
 
 				$url = $iw['url'];
-				$protocolRelative = substr( $url, 0, 2 ) === '//';
-				if ( !empty( $iw['protorel'] ) ) {
+				$protocolRelative = str_starts_with( $url, '//' );
+				if ( $iw['protorel'] ?? false ) {
 					$url = preg_replace( '/^https?:/', '', $url );
 					$protocolRelative = true;
 				}
@@ -589,7 +604,7 @@ abstract class SiteConfig {
 					// Convert placeholder to group match
 					. strtr( preg_quote( $url, '/' ), [ '\\$1' => '(.*?)' ] );
 
-				if ( !empty( $iw['local'] ) ) {
+				if ( $iw['local'] ?? false ) {
 					// ./$interwikiPrefix:$title and
 					// $interwikiPrefix%3A$title shortcuts
 					// are recognized and the local wiki forwards
@@ -688,7 +703,7 @@ abstract class SiteConfig {
 		if ( $this->linkTrailRegex === false ) {
 			$trail = $this->linkTrail();
 			$trail = str_replace( '(.*)$', '', $trail );
-			if ( strpos( $trail, '()' ) !== false ) {
+			if ( str_contains( $trail, '()' ) ) {
 				// Empty regex from zh-hans
 				$this->linkTrailRegex = null;
 			} else {
@@ -802,7 +817,7 @@ abstract class SiteConfig {
 			if ( $jsConfigVars ) {
 				$content = PHPUtils::jsonEncode( $jsConfigVars );
 			}
-		} catch ( \Exception $e ) {
+		} catch ( \Exception ) {
 			// Similar to ResourceLoader::makeConfigSetScript.  See T289358
 			$this->getLogger()->log(
 				LogLevel::WARNING,
@@ -1035,7 +1050,7 @@ abstract class SiteConfig {
 	}
 
 	private function populateMagicWords() {
-		if ( !empty( $this->mwAliases ) ) {
+		if ( $this->mwAliases !== null ) {
 			return;
 		}
 
@@ -1054,7 +1069,7 @@ abstract class SiteConfig {
 					$alias = mb_strtolower( $alias );
 					$this->mwAliases[$magicword][] = $alias;
 				}
-				if ( substr( $alias, 0, 2 ) === '__' ) {
+				if ( str_starts_with( $alias, '__' ) ) {
 					$this->behaviorSwitches[$alias] = [ $caseSensitive, $magicword ];
 				}
 				if ( $isVariable ) {
@@ -1284,15 +1299,7 @@ abstract class SiteConfig {
 		$pats = [
 			'ISBN' => '(?:\.\.?/)*(?i:' . $nsAliases . ')(?:%3[Aa]|:)'
 				. '(?i:' . $pageAliases . ')(?:%2[Ff]|/)(?P<ISBN>\d+[Xx]?)',
-			// Recently the target url for RFCs changed from
-			// tools.ietf.org to datatracker.ietf.org/docs.
-			// Given edit stash storage on Wikimedia wikis, we need to retain the
-			// old mapping to ensure html->wt can handle that HTML properly
-			// But, 3rd party wikis with Parsoid HTML in their caches will also
-			// need this b/c support for much longer. Once the MW LTS release with
-			// tools.ietf.org EOLs, we can remove the tools.ietf.org string here.
-			// T382963 tracks the eventual removal of this b/c.
-			'RFC' => '[^/]*//(?:datatracker\.ietf\.org/doc|tools\.ietf\.org)/html/rfc(?P<RFC>\w+)',
+			'RFC' => '[^/]*//datatracker\.ietf\.org/doc/html/rfc(?P<RFC>\w+)',
 			'PMID' => '[^/]*//www\.ncbi\.nlm\.nih\.gov/pubmed/(?P<PMID>\w+)\?dopt=Abstract',
 		];
 		// T145590: remove patterns for disabled magic links
@@ -1304,7 +1311,7 @@ abstract class SiteConfig {
 		$regex = '!^(?:' . implode( '|', $pats ) . ')$!';
 		return static function ( $text ) use ( $pats, $regex ) {
 			if ( preg_match( $regex, $text, $m ) ) {
-				foreach ( $pats as $k => $re ) {
+				foreach ( $pats as $k => $_re ) {
 					if ( isset( $m[$k] ) && $m[$k] !== '' ) {
 						return [ $k, $m[$k] ];
 					}
@@ -1898,7 +1905,7 @@ abstract class SiteConfig {
 		$handler->setFormatter( new LineFormatter( $format, null, true ) );
 		$logger->pushHandler( $handler );
 
-		if ( $filePath ) {
+		if ( $filePath && !str_starts_with( $filePath, 'php://' ) ) {
 			// Separator between logs since StreamHandler appends
 			$logger->log( Logger::INFO, "-------------- starting fresh log --------------" );
 		}

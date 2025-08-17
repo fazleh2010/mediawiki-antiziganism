@@ -16,6 +16,7 @@
 			"Huajing",
 			"Hydra",
 			"Irati",
+			"Key0121",
 			"Kishinsagi",
 			"Lakejason0",
 			"Lantx",
@@ -40,8 +41,7 @@
 			"Yining Chen",
 			"沈澄心",
 			"落花有意12138",
-			"魔琴",
-			"Key0121"
+			"魔琴"
 		]
 	},
 	"skinname-vector": "旧版Vector（2010）",
@@ -91,8 +91,6 @@
 	"skin-theme-night-label": "深色",
 	"skin-theme-os-label": "自动",
 	"skin-theme-exclusion-notice": "此页面始终处于浅色模式。",
-	"vector-search-loader": "正在加载搜索建议",
-	"vector-searchsuggest-containing": "搜索包含<strong class=\"cdx-typeahead-search__search-footer__query\">$1</strong>的页面",
 	"vector-intro-page": "Help:新手入门",
 	"vector-toc-label": "目录",
 	"vector-toc-beginning": "序言",

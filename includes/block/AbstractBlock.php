@@ -68,16 +68,14 @@ abstract class AbstractBlock implements Block {
 	/** @var bool */
 	protected $isSitewide = true;
 
-	/** @var string|false */
-	protected $wikiId;
+	protected string|false $wikiId;
 
 	/**
 	 * Create a new block with specified parameters on a user, IP or IP range.
 	 *
 	 * @param array $options Parameters of the block, with supported options:
 	 *  - target: (BlockTarget) The target object (since 1.44)
-	 *  - address: (string|UserIdentity) Target user name, user identity object,
-	 *     IP address or IP range.
+	 *  - address: (string|UserIdentity) Deprecated since 1.45, use 'target'.
 	 *  - wiki: (string|false) The wiki the block has been issued in,
 	 *    self::LOCAL for the local wiki (since 1.38)
 	 *  - reason: (string|Message|CommentStoreComment) Reason for the block
@@ -107,6 +105,9 @@ abstract class AbstractBlock implements Block {
 			}
 			$this->setTarget( $options['target'] );
 		} elseif ( isset( $options['address'] ) ) {
+			wfDeprecatedMsg(
+				'The address parameter to AbstractBlock::__construct is deprecated since 1.45',
+				'1.45' );
 			$this->setTarget( $options['address'] );
 		} else {
 			$this->setTarget( null );
@@ -407,7 +408,8 @@ abstract class AbstractBlock implements Block {
 
 	/**
 	 * Set the target for this block
-	 * @param BlockTarget|string|UserIdentity|null $target
+	 * @param BlockTarget|string|UserIdentity|null $target Passing UserIdentity|string is deprecated
+	 *   since 1.45. Set the target by passing BlockTarget|null.
 	 */
 	public function setTarget( $target ) {
 		// Small optimization to make this code testable, this is what would happen anyway
@@ -417,6 +419,10 @@ abstract class AbstractBlock implements Block {
 			$this->assertWiki( $target->getWikiId() );
 			$this->target = $target;
 		} else {
+			wfDeprecatedMsg(
+				'Passing UserIdentity|string to AbstractBlock::setTarget is deprecated since 1.45',
+				'1.45'
+			);
 			$parsedTarget = MediaWikiServices::getInstance()
 				->getCrossWikiBlockTargetFactory()
 				->getFactory( $this->wikiId )

@@ -162,9 +162,9 @@ class ApiUnblock extends ApiBase {
 		$targetName = $targetType === Block::TYPE_AUTO ? '' : $block->getTargetName();
 		$targetUserId = $block->getTargetUserIdentity() ? $block->getTargetUserIdentity()->getId() : 0;
 
-		$watchlistExpiry = $this->getExpiryFromParams( $params );
-		$watchuser = $params['watchuser'];
 		$userPage = Title::makeTitle( NS_USER, $targetName );
+		$watchlistExpiry = $this->getExpiryFromParams( $params, $userPage, $this->getUser() );
+		$watchuser = $params['watchuser'];
 		if ( $watchuser && $targetType !== Block::TYPE_RANGE && $targetType !== Block::TYPE_AUTO ) {
 			$this->setWatch( 'watch', $userPage, $this->getUser(), null, $watchlistExpiry );
 		} else {
@@ -191,14 +191,17 @@ class ApiUnblock extends ApiBase {
 		$this->getResult()->addValue( null, $this->getModuleName(), $res );
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$params = [
 			'id' => [
@@ -237,10 +240,12 @@ class ApiUnblock extends ApiBase {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=unblock&id=105'
@@ -250,6 +255,7 @@ class ApiUnblock extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Block';
 	}

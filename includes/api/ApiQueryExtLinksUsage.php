@@ -23,6 +23,7 @@
 
 namespace MediaWiki\Api;
 
+use MediaWiki\Deferred\LinksUpdate\ExternalLinksTable;
 use MediaWiki\ExternalLinks\LinkFilter;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Parser\Parser;
@@ -30,6 +31,7 @@ use MediaWiki\Title\Title;
 use MediaWiki\Utils\UrlUtils;
 use Wikimedia\ParamValidator\ParamValidator;
 use Wikimedia\ParamValidator\TypeDef\IntegerDef;
+use Wikimedia\Rdbms\IConnectionProvider;
 use Wikimedia\Rdbms\IExpression;
 use Wikimedia\Rdbms\LikeValue;
 
@@ -39,21 +41,30 @@ use Wikimedia\Rdbms\LikeValue;
 class ApiQueryExtLinksUsage extends ApiQueryGeneratorBase {
 
 	private UrlUtils $urlUtils;
+	private IConnectionProvider $dbProvider;
 
-	public function __construct( ApiQuery $query, string $moduleName, UrlUtils $urlUtils ) {
+	public function __construct(
+		ApiQuery $query,
+		string $moduleName,
+		UrlUtils $urlUtils,
+		IConnectionProvider $dbProvider
+	) {
 		parent::__construct( $query, $moduleName, 'eu' );
 
 		$this->urlUtils = $urlUtils;
+		$this->dbProvider = $dbProvider;
 	}
 
 	public function execute() {
 		$this->run();
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode( $params ) {
 		return 'public';
 	}
 
+	/** @inheritDoc */
 	public function executeGenerator( $resultPageSet ) {
 		$this->run( $resultPageSet );
 	}
@@ -134,7 +145,11 @@ class ApiQueryExtLinksUsage extends ApiQueryGeneratorBase {
 			$this->addWhere( $db->buildComparison( '>=', $conds ) );
 		}
 
+		$this->getQueryBuilder()->connection(
+			$this->dbProvider->getReplicaDatabase( ExternalLinksTable::VIRTUAL_DOMAIN, 'api' )
+		);
 		$res = $this->select( __METHOD__ );
+		$this->getQueryBuilder()->connection( $this->getDB() );
 
 		$result = $this->getResult();
 
@@ -198,6 +213,7 @@ class ApiQueryExtLinksUsage extends ApiQueryGeneratorBase {
 		$this->setContinueEnumParameter( 'continue', implode( '|', $fields ) );
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$ret = [
 			'prop' => [
@@ -245,6 +261,7 @@ class ApiQueryExtLinksUsage extends ApiQueryGeneratorBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=query&list=exturlusage&euquery=www.mediawiki.org'
@@ -252,6 +269,7 @@ class ApiQueryExtLinksUsage extends ApiQueryGeneratorBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Exturlusage';
 	}

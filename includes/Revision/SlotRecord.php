@@ -72,10 +72,7 @@ class SlotRecord {
 
 		return new SlotRecord(
 			$row,
-			/**
-			 * @return never
-			 */
-			static function () {
+			static function (): never {
 				throw new SuppressedDataException( 'Content suppressed!' );
 			}
 		);
@@ -542,7 +539,7 @@ class SlotRecord {
 	public function getSize() {
 		try {
 			$size = $this->getIntField( 'content_size' );
-		} catch ( IncompleteRevisionException $ex ) {
+		} catch ( IncompleteRevisionException ) {
 			$size = $this->getContent()->getSize();
 			$this->setField( 'content_size', $size );
 		}
@@ -558,7 +555,7 @@ class SlotRecord {
 	public function getSha1() {
 		try {
 			$sha1 = $this->getStringField( 'content_sha1' );
-		} catch ( IncompleteRevisionException $ex ) {
+		} catch ( IncompleteRevisionException ) {
 			$sha1 = null;
 		}
 
@@ -586,7 +583,7 @@ class SlotRecord {
 	public function getModel() {
 		try {
 			$model = $this->getStringField( 'model_name' );
-		} catch ( IncompleteRevisionException $ex ) {
+		} catch ( IncompleteRevisionException ) {
 			$model = $this->getContent()->getModel();
 			$this->setField( 'model_name', $model );
 		}

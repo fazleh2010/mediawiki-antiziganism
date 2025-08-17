@@ -6,7 +6,7 @@ return [
 	'config-schema-inverse' => [
 		'default' => [
 			'ConfigRegistry' => [
-				'main' => 'GlobalVarConfig::newInstance',
+				'main' => 'MediaWiki\\Config\\GlobalVarConfig::newInstance',
 			],
 			'Sitename' => 'MediaWiki',
 			'Server' => false,
@@ -110,6 +110,7 @@ return [
 			'ThumbnailScriptPath' => false,
 			'SharedThumbnailScriptPath' => false,
 			'HashedUploadDirectory' => true,
+			'CSPUploadEntryPoint' => true,
 			'FileExtensions' => [
 				'png',
 				'gif',
@@ -346,8 +347,6 @@ return [
 			'EnotifUserTalk' => false,
 			'EnotifRevealEditorAddress' => false,
 			'EnotifMinorEdits' => true,
-			'EnotifImpersonal' => false,
-			'EnotifMaxRecips' => 500,
 			'EnotifUseRealName' => false,
 			'UsersNotifiedOnAllChanges' => [
 			],
@@ -392,9 +391,8 @@ return [
 			'MaxExecutionTimeForExpensiveQueries' => 0,
 			'VirtualDomainsMapping' => [
 			],
-			'PageLinksSchemaMigrationStage' => 768,
 			'FileSchemaMigrationStage' => 3,
-			'CategoryLinksSchemaMigrationStage' => 3,
+			'CategoryLinksSchemaMigrationStage' => 769,
 			'ExternalLinksDomainGaps' => [
 			],
 			'ContentHandlers' => [
@@ -410,9 +408,36 @@ return [
 						'ParsoidParserFactory',
 					],
 				],
-				'javascript' => 'MediaWiki\\Content\\JavaScriptContentHandler',
-				'json' => 'MediaWiki\\Content\\JsonContentHandler',
-				'css' => 'MediaWiki\\Content\\CssContentHandler',
+				'javascript' => [
+					'class' => 'MediaWiki\\Content\\JavaScriptContentHandler',
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
+				'json' => [
+					'class' => 'MediaWiki\\Content\\JsonContentHandler',
+					'services' => [
+						'ParsoidParserFactory',
+						'TitleFactory',
+					],
+				],
+				'css' => [
+					'class' => 'MediaWiki\\Content\\CssContentHandler',
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
+				'vue' => [
+					'class' => 'MediaWiki\\Content\\VueContentHandler',
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+					],
+				],
 				'text' => 'MediaWiki\\Content\\TextContentHandler',
 				'unknown' => 'MediaWiki\\Content\\FallbackContentHandler',
 			],
@@ -430,10 +455,6 @@ return [
 			],
 			'DefaultExternalStore' => false,
 			'RevisionCacheExpiry' => 604800,
-			'RevisionSlotsCacheExpiry' => [
-				'local' => 3600,
-				'WAN' => 86400,
-			],
 			'PageLanguageUseDB' => false,
 			'DiffEngine' => null,
 			'ExternalDiffEngine' => false,
@@ -613,10 +634,7 @@ return [
 			'ForceUIMsgAsContentMsg' => [
 			],
 			'RawHtmlMessages' => [
-				'copyright',
-				'history_copyright',
 			],
-			'AllowRawHtmlCopyrightMessages' => false,
 			'Localtimezone' => null,
 			'LocalTZoffset' => null,
 			'OverrideUcfirstCharacters' => [
@@ -784,6 +802,7 @@ return [
 				'tel:',
 				'telnet://',
 				'urn:',
+				'wikipedia://',
 				'worldwind://',
 				'xmpp:',
 				'//',
@@ -798,9 +817,6 @@ return [
 				'useSelser' => true,
 			],
 			'ParsoidExperimentalParserFunctionOutput' => false,
-			'ParserEnableLegacyMediaDOM' => false,
-			'ParserEnableLegacyHeadingDOM' => false,
-			'UseContentMediaStyles' => false,
 			'UseLegacyMediaStyles' => false,
 			'RawHtml' => false,
 			'ExternalLinkTarget' => false,
@@ -1101,7 +1117,9 @@ return [
 				'uselivepreview' => 0,
 				'usenewrc' => 1,
 				'watchcreations' => 1,
+				'watchcreations-expiry' => 'infinite',
 				'watchdefault' => 1,
+				'watchdefault-expiry' => 'infinite',
 				'watchdeletion' => 0,
 				'watchlistdays' => 7,
 				'watchlisthideanons' => 0,
@@ -1116,6 +1134,8 @@ return [
 				'watchmoves' => 0,
 				'watchrollback' => 0,
 				'watchuploads' => 1,
+				'watchrollback-expiry' => 'infinite',
+				'watchstar-expiry' => 'infinite',
 				'wlenhancedfilters-disable' => 0,
 				'wllimit' => 250,
 			],
@@ -1946,6 +1966,12 @@ return [
 			'SearchForwardUrl' => null,
 			'SitemapNamespaces' => false,
 			'SitemapNamespacesPriorities' => false,
+			'SitemapApiConfig' => [
+				'enabled' => false,
+				'sitemapsPerIndex' => 50000,
+				'pagesPerSitemap' => 10000,
+				'expiry' => 3600,
+			],
 			'EnableSearchContributorsByIP' => true,
 			'SpecialSearchFormOptions' => [
 			],
@@ -2111,17 +2137,17 @@ return [
 			'ServiceWiringFiles' => [
 			],
 			'JobClasses' => [
-				'deletePage' => 'MediaWiki\\JobQueue\\Jobs\\DeletePageJob',
+				'deletePage' => 'MediaWiki\\Page\\DeletePageJob',
 				'refreshLinks' => 'MediaWiki\\JobQueue\\Jobs\\RefreshLinksJob',
-				'deleteLinks' => 'MediaWiki\\JobQueue\\Jobs\\DeleteLinksJob',
+				'deleteLinks' => 'MediaWiki\\Page\\DeleteLinksJob',
 				'htmlCacheUpdate' => 'MediaWiki\\JobQueue\\Jobs\\HTMLCacheUpdateJob',
 				'sendMail' => [
-					'class' => 'EmaillingJob',
+					'class' => 'MediaWiki\\Mail\\EmaillingJob',
 					'services' => [
 						'Emailer',
 					],
 				],
-				'enotifNotify' => 'EnotifNotifyJob',
+				'enotifNotify' => 'MediaWiki\\RecentChanges\\RecentChangeNotifyJob',
 				'fixDoubleRedirect' => [
 					'class' => 'MediaWiki\\JobQueue\\Jobs\\DoubleRedirectJob',
 					'services' => [
@@ -2307,6 +2333,12 @@ return [
 				'managetags/deactivate' => 'MediaWiki\\Logging\\LogFormatter',
 				'managetags/delete' => 'MediaWiki\\Logging\\LogFormatter',
 				'merge/merge' => [
+					'class' => 'MediaWiki\\Logging\\MergeLogFormatter',
+					'services' => [
+						'TitleParser',
+					],
+				],
+				'merge/merge-into' => [
 					'class' => 'MediaWiki\\Logging\\MergeLogFormatter',
 					'services' => [
 						'TitleParser',
@@ -2573,6 +2605,8 @@ return [
 			],
 			'RestAPIAdditionalRouteFiles' => [
 			],
+			'RestSandboxSpecs' => [
+			],
 			'MaxShellMemory' => 307200,
 			'MaxShellFileSize' => 102400,
 			'MaxShellTime' => 180,
@@ -2631,6 +2665,7 @@ return [
 			],
 			'SpecialContributeSkinsEnabled' => [
 			],
+			'SpecialContributeNewPageTarget' => null,
 			'EnableEditRecovery' => false,
 			'EditRecoveryExpiry' => 2592000,
 			'UseCodexSpecialBlock' => false,
@@ -2640,6 +2675,7 @@ return [
 			],
 			'FeatureShutdown' => [
 			],
+			'UseLeximorph' => false,
 		],
 		'type' => [
 			'ConfigRegistry' => 'object',
@@ -2706,6 +2742,7 @@ return [
 				'boolean',
 			],
 			'HashedUploadDirectory' => 'boolean',
+			'CSPUploadEntryPoint' => 'boolean',
 			'FileExtensions' => 'array',
 			'ProhibitedFileExtensions' => 'array',
 			'MimeTypeExclusions' => 'array',
@@ -2792,7 +2829,6 @@ return [
 			'LBFactoryConf' => 'object',
 			'LocalDatabases' => 'array',
 			'VirtualDomainsMapping' => 'object',
-			'PageLinksSchemaMigrationStage' => 'integer',
 			'FileSchemaMigrationStage' => 'integer',
 			'CategoryLinksSchemaMigrationStage' => 'integer',
 			'ExternalLinksDomainGaps' => 'object',
@@ -2806,7 +2842,6 @@ return [
 				'boolean',
 			],
 			'RevisionCacheExpiry' => 'integer',
-			'RevisionSlotsCacheExpiry' => 'object',
 			'PageLanguageUseDB' => 'boolean',
 			'DiffEngine' => [
 				'string',
@@ -2869,7 +2904,6 @@ return [
 			'DisabledVariants' => 'object',
 			'ForceUIMsgAsContentMsg' => 'object',
 			'RawHtmlMessages' => 'array',
-			'AllowRawHtmlCopyrightMessages' => 'boolean',
 			'OverrideUcfirstCharacters' => 'object',
 			'XhtmlNamespaces' => 'object',
 			'BrowserFormatDetection' => 'string',
@@ -3036,6 +3070,7 @@ return [
 				'boolean',
 				'object',
 			],
+			'SitemapApiConfig' => 'object',
 			'SpecialSearchFormOptions' => 'object',
 			'SearchMatchRedirectPreference' => 'boolean',
 			'SearchRunSuggestedQuery' => 'boolean',
@@ -3104,6 +3139,7 @@ return [
 			'CrossSiteAJAXdomainExceptions' => 'object',
 			'AllowedCorsHeaders' => 'array',
 			'RestAPIAdditionalRouteFiles' => 'array',
+			'RestSandboxSpecs' => 'object',
 			'ShellRestrictionMethod' => [
 				'string',
 				'boolean',
@@ -3135,6 +3171,10 @@ return [
 			'FeaturePolicyReportOnly' => 'array',
 			'SkinsPreferred' => 'array',
 			'SpecialContributeSkinsEnabled' => 'array',
+			'SpecialContributeNewPageTarget' => [
+				'string',
+				'null',
+			],
 			'EnableEditRecovery' => 'boolean',
 			'EditRecoveryExpiry' => 'integer',
 			'UseCodexSpecialBlock' => 'boolean',
@@ -3142,6 +3182,7 @@ return [
 			'EnableProtectionIndicators' => 'boolean',
 			'OutputPipelineStages' => 'object',
 			'FeatureShutdown' => 'array',
+			'UseLeximorph' => 'boolean',
 		],
 		'mergeStrategy' => [
 			'TiffThumbnailType' => 'replace',
@@ -3421,9 +3462,6 @@ return [
 				'type' => 'string',
 			],
 		],
-		'AllowRawHtmlCopyrightMessages' => [
-			'deprecated' => 'since 1.44',
-		],
 		'InterwikiLogoOverride' => [
 			'items' => [
 				'type' => 'string',
@@ -3431,15 +3469,6 @@ return [
 		],
 		'LegalTitleChars' => [
 			'deprecated' => 'since 1.41; use Extension:TitleBlacklist to customize',
-		],
-		'ParserEnableLegacyMediaDOM' => [
-			'deprecated' => 'since 1.41',
-		],
-		'ParserEnableLegacyHeadingDOM' => [
-			'deprecated' => 'since 1.44',
-		],
-		'UseContentMediaStyles' => [
-			'deprecated' => 'since 1.41',
 		],
 		'ReauthenticateTime' => [
 			'additionalProperties' => [
@@ -3502,6 +3531,9 @@ return [
 				'type' => 'string',
 			],
 		],
+		'SitemapNamespacesPriorities' => [
+			'deprecated' => 'since 1.45 and ignored',
+		],
 		'SoftwareTags' => [
 			'additionalProperties' => [
 				'type' => 'boolean',
@@ -3538,6 +3570,27 @@ return [
 		],
 		'APIRequestLog' => [
 			'deprecated' => 'since 1.43; use api or api-request $wgDebugLogGroups channel',
+		],
+		'RestSandboxSpecs' => [
+			'additionalProperties' => [
+				'type' => 'object',
+				'properties' => [
+					'url' => [
+						'type' => 'string',
+						'format' => 'url',
+					],
+					'name' => [
+						'type' => 'string',
+					],
+					'msg' => [
+						'type' => 'string',
+						'description' => 'a message key',
+					],
+				],
+				'required' => [
+					'url',
+				],
+			],
 		],
 		'ShellboxUrls' => [
 			'additionalProperties' => [

@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\Tests\OutputTransform;
 
@@ -6,7 +7,11 @@ use LogicException;
 use MediaWiki\Context\RequestContext;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Parser\ParserOutput;
+use MediaWiki\Parser\Parsoid\PageBundleParserOutputConverter;
+use MediaWiki\Parser\Parsoid\ParsoidParser;
 use MediaWikiLangTestCase;
+use Wikimedia\Bcp47Code\Bcp47CodeValue;
+use Wikimedia\Parsoid\Core\HtmlPageBundle;
 
 /**
  * @covers \MediaWiki\OutputTransform\DefaultOutputPipelineFactory
@@ -33,10 +38,19 @@ class DefaultOutputPipelineFactoryTest extends MediaWikiLangTestCase {
 		$this->overrideConfigValues( [
 			MainConfigNames::ScriptPath => '/w',
 			MainConfigNames::Script => '/w/index.php',
-			MainConfigNames::ParserEnableLegacyHeadingDOM => false,
 		] );
 
 		$po = new ParserOutput( $text );
+		if ( $options['isParsoidContent'] ?? false ) {
+			$po = PageBundleParserOutputConverter::parserOutputFromPageBundle( new HtmlPageBundle( $text ) );
+			$po->setExtensionData( ParsoidParser::PARSOID_TITLE_KEY, 'Test_page' );
+			$po->setLanguage( new Bcp47CodeValue( 'en' ) );
+				global $IP;
+				$msgDirs = [];
+				$msgDirs[] = "$IP/tests/phpunit/data/OutputTransform/i18n";
+				$this->overrideConfigValue( MainConfigNames::MessagesDirs, $msgDirs );
+		}
+
 		TestUtils::initSections( $po );
 		$actual = $this->getServiceContainer()->getDefaultOutputPipeline()
 			->run( $po, null, $options )->getContentHolderText();
@@ -127,6 +141,10 @@ EOF
 			'Style deduplication disabled' => [
 				[ 'deduplicateStyles' => false ], TestUtils::TEST_TO_DEDUP, TestUtils::TEST_TO_DEDUP
 			],
+			'Section edit links + localization' => [
+				[ 'isParsoidContent' => true, 'allowTOC' => false, 'wrapperDivClass' => 'mw-parser-output' ],
+				TestUtils::TEST_MULTI_STAGE, TestUtils::TEST_MULTI_STAGE_POST_PIPELINE
+			]
 		];
 		// phpcs:enable
 	}

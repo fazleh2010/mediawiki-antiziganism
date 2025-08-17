@@ -30,9 +30,13 @@ require_once __DIR__ . '/Maintenance.php';
 
 use MediaWiki\Deferred\DeferredUpdates;
 use MediaWiki\Deferred\LinksUpdate\LinksDeletionUpdate;
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Linker\LinkTarget;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Maintenance\Maintenance;
+use MediaWiki\Page\PageIdentity;
+use MediaWiki\Revision\SlotRecord;
+use MediaWiki\Status\Status;
 use MediaWiki\Title\Title;
 use MediaWiki\Title\TitleValue;
 use Wikimedia\Rdbms\IDBAccessObject;
@@ -251,6 +255,31 @@ class NamespaceDupes extends Maintenance {
 		return array_column( $result, 'iw_prefix' );
 	}
 
+	private function isSingleRevRedirectTo( Title $oldTitle, Title $newTitle ): bool {
+		if ( !$oldTitle->isSingleRevRedirect() ) {
+			return false;
+		}
+		$revStore = $this->getServiceContainer()->getRevisionStore();
+		$rev = $revStore->getRevisionByTitle( $oldTitle, 0, IDBAccessObject::READ_LATEST );
+		if ( !$rev ) {
+			return false;
+		}
+		$content = $rev->getContent( SlotRecord::MAIN );
+		if ( !$content ) {
+			return false;
+		}
+		$target = $content->getRedirectTarget();
+		return $target && $target->equals( $newTitle );
+	}
+
+	private function deletePage( Title $pageToDelete, string $reason ): Status {
+		$services = $this->getServiceContainer();
+		$page = $services->getWikiPageFactory()->newFromTitle( $pageToDelete );
+		$user = User::newSystemUser( "Maintenance script" );
+		$deletePage = $services->getDeletePageFactory()->newDeletePage( $page, $user );
+		return $deletePage->deleteUnsafe( $reason );
+	}
+
 	/**
 	 * Check a given prefix and try to move it into the given destination namespace
 	 *
@@ -276,6 +305,9 @@ class NamespaceDupes extends Maintenance {
 			$newTitle = $this->getDestinationTitle(
 				$ns, $name, $row->page_namespace, $row->page_title );
 			$logStatus = false;
+			// $oldTitle is not a valid title by definition but the methods I use here
+			// shouldn't care
+			$oldTitle = Title::makeTitle( $row->page_namespace, $row->page_title );
 			if ( !$newTitle ) {
 				if ( $options['add-prefix'] == '' && $options['add-suffix'] == '' ) {
 					$logStatus = 'invalid title and --add-prefix not specified';
@@ -284,7 +316,12 @@ class NamespaceDupes extends Maintenance {
 					$action = 'alternate';
 				}
 			} elseif ( $newTitle->exists( IDBAccessObject::READ_LATEST ) ) {
-				if ( $options['merge'] ) {
+				if ( $this->isSingleRevRedirectTo( $newTitle, $newTitle ) ) {
+					// Conceptually this is the new title redirecting to the old title
+					// except that the redirect target is parsed as wikitext so is actually
+					// appears to redirect to itself
+					$action = 'delete-new';
+				} elseif ( $options['merge'] ) {
 					if ( $this->canMerge( $row->page_id, $newTitle, $logStatus ) ) {
 						$action = 'merge';
 					} else {
@@ -303,16 +340,20 @@ class NamespaceDupes extends Maintenance {
 			if ( $action === 'alternate' ) {
 				[ $ns, $dbk ] = $this->getDestination( $ns, $name, $row->page_namespace,
 					$row->page_title );
-				$newTitle = $this->getAlternateTitle( $ns, $dbk, $options );
-				if ( !$newTitle ) {
+				$altTitle = $this->getAlternateTitle( $ns, $dbk, $options );
+				if ( !$altTitle ) {
 					$action = 'abort';
 					$logStatus = 'alternate title is invalid';
-				} elseif ( $newTitle->exists() ) {
+				} elseif ( $altTitle->exists() ) {
 					$action = 'abort';
 					$logStatus = 'alternate title conflicts';
+				} elseif ( $this->isSingleRevRedirectTo( $oldTitle, $newTitle ) ) {
+					$action = 'delete-old';
+					$newTitle = $altTitle;
 				} else {
 					$action = 'move';
 					$logStatus = 'alternate';
+					$newTitle = $altTitle;
 				}
 			}
 
@@ -322,6 +363,37 @@ class NamespaceDupes extends Maintenance {
 			$pageOK = true;
 
 			switch ( $action ) {
+				case 'delete-old':
+					$this->output( "$logTitle move to " . $newTitle->getPrefixedDBKey() .
+						" then delete as single-revision redirect to new home$dryRunNote\n" );
+					if ( $options['fix'] ) {
+						// First move the page so the delete command gets a valid title
+						$pageOK = $this->movePage( $row->page_id, $newTitle );
+						if ( $pageOK ) {
+							$status = $this->deletePage(
+								$newTitle,
+								"Non-normalized title already redirects to new form"
+							);
+							if ( !$status->isOK() ) {
+								$this->error( $status );
+								$pageOK = false;
+							}
+						}
+					}
+					break;
+				case "delete-new":
+					$this->output( "$logTitle -> " .
+					$newTitle->getPrefixedDBkey() . " delete existing page $dryRunNote\n" );
+					if ( $options['fix'] ) {
+						$status = $this->deletePage( $newTitle, "Delete circular redirect to make way for move" );
+						$pageOK = $status->isOK();
+						if ( $pageOK ) {
+							$pageOK = $this->movePage( $row->page_id, $newTitle );
+						} else {
+							$this->error( $status );
+						}
+					}
+					break;
 				case 'abort':
 					$this->output( "$logTitle *** $logStatus\n" );
 					$pageOK = false;
@@ -366,7 +438,13 @@ class NamespaceDupes extends Maintenance {
 	private function checkLinkTable( $table, $fieldPrefix, $ns, $name, $options,
 		$extraConds = []
 	) {
-		$dbw = $this->getPrimaryDB();
+		if ( $table === 'templatelinks' ) {
+			$dbw = $this->getServiceContainer()->getConnectionProvider()->getPrimaryDatabase(
+				TemplateLinksTable::VIRTUAL_DOMAIN
+			);
+		} else {
+			$dbw = $this->getPrimaryDB();
+		}
 
 		$batchConds = [];
 		$fromField = "{$fieldPrefix}_from";
@@ -644,13 +722,9 @@ class NamespaceDupes extends Maintenance {
 		// Update *_from_namespace in links tables
 		$fromNamespaceTables = [
 			[ 'templatelinks', 'tl', [ 'tl_target_id' ] ],
-			[ 'imagelinks', 'il', [ 'il_to' ] ]
+			[ 'imagelinks', 'il', [ 'il_to' ] ],
+			[ 'pagelinks', 'pl', [ 'pl_target_id' ] ],
 		];
-		if ( $this->getConfig()->get( MainConfigNames::PageLinksSchemaMigrationStage ) & SCHEMA_COMPAT_WRITE_OLD ) {
-			$fromNamespaceTables[] = [ 'pagelinks', 'pl', [ 'pl_namespace', 'pl_title' ] ];
-		} else {
-			$fromNamespaceTables[] = [ 'pagelinks', 'pl', [ 'pl_target_id' ] ];
-		}
 		$updateRowsPerQuery = $this->getConfig()->get( MainConfigNames::UpdateRowsPerQuery );
 		foreach ( $fromNamespaceTables as [ $table, $fieldPrefix, $additionalPrimaryKeyFields ] ) {
 			$fromField = "{$fieldPrefix}_from";
@@ -695,13 +769,13 @@ class NamespaceDupes extends Maintenance {
 	 * recentchanges review, etc.
 	 *
 	 * @param int $id The page_id
-	 * @param LinkTarget $linkTarget The new link target
+	 * @param PageIdentity $page
 	 * @param string &$logStatus This is set to the log status message on failure @phan-output-reference
 	 * @return bool
 	 */
-	private function canMerge( $id, LinkTarget $linkTarget, &$logStatus ) {
+	private function canMerge( $id, PageIdentity $page, &$logStatus ) {
 		$revisionLookup = $this->getServiceContainer()->getRevisionLookup();
-		$latestDest = $revisionLookup->getRevisionByTitle( $linkTarget, 0,
+		$latestDest = $revisionLookup->getRevisionByTitle( $page, 0,
 			IDBAccessObject::READ_LATEST );
 		$latestSource = $revisionLookup->getRevisionByPageId( $id, 0,
 			IDBAccessObject::READ_LATEST );

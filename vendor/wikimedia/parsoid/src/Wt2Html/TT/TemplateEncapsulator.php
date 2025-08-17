@@ -15,6 +15,7 @@ use Wikimedia\Parsoid\Tokens\NlTk;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\SourceRange;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\ContentUtils;
 use Wikimedia\Parsoid\Utils\DOMDataUtils;
 use Wikimedia\Parsoid\Utils\DOMUtils;
@@ -31,13 +32,13 @@ class TemplateEncapsulator {
 	private Frame $frame;
 	private string $wrapperType;
 	private string $aboutId;
-	public Token $token;
+	public XMLTagTk $token;
 	public ?string $variableName = null;
 	public ?string $parserFunctionName = null;
 	public ?string $resolvedTemplateTarget = null;
 	public bool $isV3ParserFunction = false;
 
-	public function __construct( Env $env, Frame $frame, Token $token, string $wrapperType ) {
+	public function __construct( Env $env, Frame $frame, XMLTagTk $token, string $wrapperType ) {
 		$this->env = $env;
 		$this->frame = $frame;
 		$this->token = $token;
@@ -60,7 +61,6 @@ class TemplateEncapsulator {
 		if ( $this->env->getSiteConfig()->addHTMLTemplateParameters() ) {
 			// Parse the parameters that need parsing
 			foreach ( $tplInfo->paramInfos as $paramInfo ) {
-				$paramTokens = null;
 				if ( $paramInfo->named ) {
 					$paramTokens = $this->token->getAttributeV( $paramInfo->k );
 				} else {
@@ -117,8 +117,6 @@ class TemplateEncapsulator {
 		for ( $i = 1, $n = count( $params );  $i < $n;  $i++ ) {
 			$param = $params[$i];
 			$srcOffsets = $param->srcOffsets;
-			$kSrc = null;
-			$vSrc = null;
 			if ( $srcOffsets !== null ) {
 				$kSrc = $srcOffsets->key->substr( $src );
 				$vSrc = $srcOffsets->value->substr( $src );
@@ -128,7 +126,7 @@ class TemplateEncapsulator {
 			}
 
 			$kWt = trim( $kSrc );
-			$k = TokenUtils::tokensToString( $param->k, true, [ 'stripEmptyLineMeta' => true ] );
+			$k = TokenUtils::tokensToString( $param->k, true, [ 'stripEmptyLines' => true ] );
 			if ( is_array( $k ) ) {
 				// The PHP parser only removes comments and whitespace to construct
 				// the real parameter name, so if there were other tokens, use the
@@ -288,7 +286,7 @@ class TemplateEncapsulator {
 	private function getParamHTML( ParamInfo $paramInfo ): void {
 		$srcStart = $paramInfo->srcOffsets->value->start;
 		$srcEnd = $paramInfo->srcOffsets->value->end;
-		if ( !empty( $paramInfo->spc ) ) {
+		if ( $paramInfo->spc !== null ) {
 			$srcStart += strlen( $paramInfo->spc[2] );
 			$srcEnd -= strlen( $paramInfo->spc[3] );
 		}

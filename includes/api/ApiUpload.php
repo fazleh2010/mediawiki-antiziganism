@@ -42,6 +42,7 @@ use MediaWiki\Message\Message;
 use MediaWiki\Status\Status;
 use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\User\User;
+use MediaWiki\Watchlist\WatchedItemStoreInterface;
 use MediaWiki\Watchlist\WatchlistManager;
 use Psr\Log\LoggerInterface;
 use StatusValue;
@@ -84,6 +85,7 @@ class ApiUpload extends ApiBase {
 		string $moduleName,
 		JobQueueGroup $jobQueueGroup,
 		WatchlistManager $watchlistManager,
+		WatchedItemStoreInterface $watchedItemStore,
 		UserOptionsLookup $userOptionsLookup
 	) {
 		parent::__construct( $mainModule, $moduleName );
@@ -94,6 +96,7 @@ class ApiUpload extends ApiBase {
 		$this->watchlistMaxDuration =
 			$this->getConfig()->get( MainConfigNames::WatchlistExpiryMaxDuration );
 		$this->watchlistManager = $watchlistManager;
+		$this->watchedItemStore = $watchedItemStore;
 		$this->userOptionsLookup = $userOptionsLookup;
 		$this->log = LoggerFactory::getInstance( 'upload' );
 	}
@@ -196,6 +199,7 @@ class ApiUpload extends ApiBase {
 			'upload',
 			$services->getJobQueueGroup(),
 			$services->getWatchlistManager(),
+			$services->getWatchedItemStore(),
 			$services->getUserOptionsLookup()
 		);
 
@@ -595,7 +599,7 @@ class ApiUpload extends ApiBase {
 	 * @throws ApiUsageException
 	 * @return never
 	 */
-	private function dieRecoverableError( $errors, $parameter = null ) {
+	private function dieRecoverableError( $errors, $parameter = null ): never {
 		$this->performStash( 'optional', $data );
 
 		if ( $parameter ) {
@@ -621,7 +625,7 @@ class ApiUpload extends ApiBase {
 	 * @throws ApiUsageException
 	 * @return never
 	 */
-	public function dieStatusWithCode( $status, $overrideCode, $moreExtraData = null ) {
+	public function dieStatusWithCode( $status, $overrideCode, $moreExtraData = null ): never {
 		$sv = StatusValue::newGood();
 		foreach ( $status->getMessages() as $error ) {
 			$msg = ApiMessage::create( $error, $overrideCode );
@@ -844,7 +848,7 @@ class ApiUpload extends ApiBase {
 	 * @param array $verification
 	 * @return never
 	 */
-	protected function checkVerification( array $verification ) {
+	protected function checkVerification( array $verification ): never {
 		$status = $this->mUpload->convertVerifyErrorToStatus( $verification );
 		if ( $status->isRecoverableError() ) {
 			$this->dieRecoverableError( [ $status->asApiMessage() ], $status->getInvalidParameter() );
@@ -869,7 +873,7 @@ class ApiUpload extends ApiBase {
 		return $this->transformWarnings( $warnings );
 	}
 
-	protected function transformWarnings( $warnings ) {
+	protected function transformWarnings( array $warnings ): array {
 		if ( $warnings ) {
 			// Add indices
 			ApiResult::setIndexedTagName( $warnings, 'warning' );
@@ -996,7 +1000,7 @@ class ApiUpload extends ApiBase {
 				$this->getWatchlistValue( 'preferences', $title, $user, 'watchcreations' )
 			);
 		}
-		$watchlistExpiry = $this->getExpiryFromParams( $this->mParams );
+		$watchlistExpiry = $this->getExpiryFromParams( $this->mParams, $title, $user );
 
 		// Deprecated parameters
 		if ( $this->mParams['watch'] ) {
@@ -1104,14 +1108,17 @@ class ApiUpload extends ApiBase {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$params = [
 			'filename' => [
@@ -1173,10 +1180,12 @@ class ApiUpload extends ApiBase {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=upload&filename=Wiki.png' .
@@ -1187,6 +1196,7 @@ class ApiUpload extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Upload';
 	}

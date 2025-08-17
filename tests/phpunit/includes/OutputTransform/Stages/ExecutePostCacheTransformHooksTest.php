@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\Tests\OutputTransform\Stages;
 
@@ -36,13 +37,12 @@ class ExecutePostCacheTransformHooksTest extends \MediaWikiIntegrationTestCase {
 		$this->overrideConfigValues( [
 			MainConfigNames::ScriptPath => '/w',
 			MainConfigNames::Script => '/w/index.php',
-			MainConfigNames::ParserEnableLegacyHeadingDOM => false,
 		] );
 
 		// This tests that the options are modified by the PostCacheTransformHookRunner (if it is not run, or if
 		// the options are not modified, the test fails)
 		$po = new ParserOutput( TestUtils::TEST_DOC );
-		$expected = new ParserOutput( TestUtils::TEST_DOC_WITH_LINKS_NEW_MARKUP );
+		$expected = new ParserOutput( TestUtils::TEST_DOC_WITH_LINKS );
 		$this->getServiceContainer()->getHookContainer()->register( 'ParserOutputPostCacheTransform',
 			static function ( ParserOutput $out, &$text, array &$options ) {
 				$options['enableSectionEditLinks'] = true;
@@ -90,7 +90,7 @@ class ExecutePostCacheTransformHooksTest extends \MediaWikiIntegrationTestCase {
 	 */
 	public function testShouldNotRun() {
 		$transform = $this->createStage();
-		$this->getServiceContainer()->getHookContainer()->clear( 'ParserOutputPostCacheTransform' );
+		$this->clearHook( 'ParserOutputPostCacheTransform' );
 		$options = [];
 		self::assertFalse( $transform->shouldRun( new ParserOutput(), null, $options ) );
 	}

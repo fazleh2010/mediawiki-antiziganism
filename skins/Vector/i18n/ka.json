@@ -4,11 +4,11 @@
 			"Alsandro",
 			"David1010",
 			"Mehman (WMF)",
+			"Mehman97",
 			"Tar Lócesilion",
 			"გიორგიმელა",
 			"Გიო ოქრო",
-			"Იო ოქრო",
-			"Mehman97"
+			"Იო ოქრო"
 		]
 	},
 	"skinname-vector": "ვექტორული (2010)",
@@ -59,8 +59,6 @@
 	"skin-theme-night-label": "ბნელი",
 	"skin-theme-os-label": "ავტომატური",
 	"skin-theme-exclusion-notice": "ეს გვერდი ყოველთვის ღია რეჟიმშია.",
-	"vector-search-loader": "იტვირთვება ძიების შეთავაზებები",
-	"vector-searchsuggest-containing": "გვერდების მოძებნა, რომლებიც შეიცავენ <strong class=\"cdx-typeahead-search__search-footer__query\">$1</strong>-ს",
 	"vector-intro-page": "ვიკიპედია:დახმარება",
 	"vector-toc-label": "სარჩევი",
 	"vector-toc-beginning": "შესავალი",

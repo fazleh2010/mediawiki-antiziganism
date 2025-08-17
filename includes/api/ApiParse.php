@@ -518,8 +518,6 @@ class ApiParse extends ApiBase {
 				// Based on OutputPage::output()
 				$outputPage->loadSkinModules( $skin );
 			}
-
-			$this->getHookRunner()->onApiParseMakeOutputPage( $this, $outputPage );
 		}
 
 		if ( $oldid !== null ) {
@@ -562,6 +560,8 @@ class ApiParse extends ApiBase {
 			// This needs to happen after running the OutputTransform pipeline so that the metadata inserted by
 			// the pipeline is also added to the OutputPage
 			$outputPage->addParserOutputMetadata( $p_result );
+
+			$this->getHookRunner()->onApiParseMakeOutputPage( $this, $outputPage );
 		}
 
 		if ( $params['summary'] !== null ||
@@ -629,15 +629,29 @@ class ApiParse extends ApiBase {
 			$result_array['sections'] = $p_result->getSections();
 			$result_array['showtoc'] = $p_result->getOutputFlag( ParserOutputFlags::SHOW_TOC );
 		}
-		if ( isset( $prop['parsewarnings'] ) ) {
-			$result_array['parsewarnings'] = $p_result->getWarnings();
-		}
-		if ( isset( $prop['parsewarningshtml'] ) ) {
-			$warnings = $p_result->getWarnings();
-			$warningsHtml = array_map( static function ( $warning ) {
-				return ( new RawMessage( '$1', [ $warning ] ) )->parse();
-			}, $warnings );
-			$result_array['parsewarningshtml'] = $warningsHtml;
+		if ( isset( $prop['parsewarnings'] ) || isset( $prop['parsewarningshtml'] ) ) {
+			$warnings = array_map(
+				static fn ( $mv ) => Message::newFromSpecifier( $mv )
+					->page( $titleObj )
+					// Note that we use ContentLanguage here
+					->inContentLanguage()
+					->text(),
+				$p_result->getWarningMsgs()
+			);
+			if ( $warnings === [] ) {
+				// Backward compatibilty with cached ParserOutput from
+				// MW <= 1.45 which didn't store the MessageValues (T343048)
+				$warnings = $p_result->getWarnings();
+			}
+			if ( isset( $prop['parsewarnings'] ) ) {
+				$result_array['parsewarnings'] = $warnings;
+			}
+			if ( isset( $prop['parsewarningshtml'] ) ) {
+				$warningsHtml = array_map( static function ( $warning ) {
+					return ( new RawMessage( '$1', [ $warning ] ) )->parse();
+				}, $warnings );
+				$result_array['parsewarningshtml'] = $warningsHtml;
+			}
 		}
 
 		if ( isset( $prop['displaytitle'] ) ) {
@@ -1099,6 +1113,7 @@ class ApiParse extends ApiBase {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'title' => null,
@@ -1202,6 +1217,7 @@ class ApiParse extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=parse&page=Project:Sandbox'
@@ -1215,6 +1231,7 @@ class ApiParse extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Parsing_wikitext';
 	}

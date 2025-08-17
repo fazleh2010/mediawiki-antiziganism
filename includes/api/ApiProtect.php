@@ -29,6 +29,7 @@ use MediaWiki\Permissions\RestrictionStore;
 use MediaWiki\Title\Title;
 use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\Utils\MWTimestamp;
+use MediaWiki\Watchlist\WatchedItemStoreInterface;
 use MediaWiki\Watchlist\WatchlistManager;
 use Wikimedia\ParamValidator\ParamValidator;
 use Wikimedia\ParamValidator\TypeDef\ExpiryDef;
@@ -46,6 +47,7 @@ class ApiProtect extends ApiBase {
 		ApiMain $mainModule,
 		string $moduleName,
 		WatchlistManager $watchlistManager,
+		WatchedItemStoreInterface $watchedItemStore,
 		UserOptionsLookup $userOptionsLookup,
 		RestrictionStore $restrictionStore
 	) {
@@ -57,6 +59,7 @@ class ApiProtect extends ApiBase {
 		$this->watchlistMaxDuration =
 			$this->getConfig()->get( MainConfigNames::WatchlistExpiryMaxDuration );
 		$this->watchlistManager = $watchlistManager;
+		$this->watchedItemStore = $watchedItemStore;
 		$this->userOptionsLookup = $userOptionsLookup;
 	}
 
@@ -122,7 +125,7 @@ class ApiProtect extends ApiBase {
 
 			try {
 				$expiries[$p[0]] = ExpiryDef::normalizeExpiry( $expiry[$i], TS_MW );
-			} catch ( InvalidArgumentException $e ) {
+			} catch ( InvalidArgumentException ) {
 				$this->dieWithError( [ 'apierror-invalidexpiry', wfEscapeWikiText( $expiry[$i] ) ] );
 			}
 			if ( $expiries[$p[0]] < MWTimestamp::now( TS_MW ) ) {
@@ -138,7 +141,7 @@ class ApiProtect extends ApiBase {
 		$cascade = $params['cascade'];
 
 		$watch = $params['watch'] ? 'watch' : $params['watchlist'];
-		$watchlistExpiry = $this->getExpiryFromParams( $params );
+		$watchlistExpiry = $this->getExpiryFromParams( $params, $titleObj, $user );
 		$this->setWatch( $watch, $titleObj, $user, 'watchdefault', $watchlistExpiry );
 
 		$status = $pageObj->doUpdateRestrictions(
@@ -166,14 +169,17 @@ class ApiProtect extends ApiBase {
 		$result->addValue( null, $this->getModuleName(), $res );
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'title' => [
@@ -204,10 +210,12 @@ class ApiProtect extends ApiBase {
 		] + $this->getWatchlistParams();
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		$title = Title::newMainPage()->getPrefixedText();
 		$mp = rawurlencode( $title );
@@ -225,6 +233,7 @@ class ApiProtect extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Protect';
 	}

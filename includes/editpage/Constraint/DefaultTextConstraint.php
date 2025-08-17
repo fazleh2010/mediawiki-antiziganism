@@ -22,6 +22,7 @@ namespace MediaWiki\EditPage\Constraint;
 
 use MediaWiki\Title\Title;
 use StatusValue;
+use Wikimedia\Message\MessageValue;
 
 /**
  * Don't save a new page if it's blank or if it's a MediaWiki:
@@ -34,24 +35,20 @@ use StatusValue;
  */
 class DefaultTextConstraint implements IEditConstraint {
 
-	private Title $title;
-	private bool $allowBlank;
-	private string $userProvidedText;
 	private string $result;
 
 	/**
 	 * @param Title $title
 	 * @param bool $allowBlank
 	 * @param string $userProvidedText
+	 * @param string $submitButtonLabel
 	 */
 	public function __construct(
-		Title $title,
-		bool $allowBlank,
-		string $userProvidedText
+		private readonly Title $title,
+		private readonly bool $allowBlank,
+		private readonly string $userProvidedText,
+		private readonly string $submitButtonLabel,
 	) {
-		$this->title = $title;
-		$this->allowBlank = $allowBlank;
-		$this->userProvidedText = $userProvidedText;
 	}
 
 	public function checkConstraint(): string {
@@ -73,8 +70,11 @@ class DefaultTextConstraint implements IEditConstraint {
 	public function getLegacyStatus(): StatusValue {
 		$statusValue = StatusValue::newGood();
 		if ( $this->result === self::CONSTRAINT_FAILED ) {
-			$statusValue->fatal( 'blankarticle' );
-			$statusValue->setResult( false, self::AS_BLANK_ARTICLE );
+			$statusValue->fatal(
+				'blankarticle',
+				MessageValue::new( $this->submitButtonLabel ),
+			);
+			$statusValue->value = self::AS_BLANK_ARTICLE;
 		}
 		return $statusValue;
 	}

@@ -21,10 +21,13 @@
 
 use MediaWiki\Cache\HTMLCacheUpdater;
 use MediaWiki\Context\IContextSource;
+use MediaWiki\DomainEvent\DomainEventDispatcher;
 use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\Page\Event\PageHistoryVisibilityChangedEvent;
 use MediaWiki\Page\PageIdentity;
+use MediaWiki\Page\ProperPageIdentity;
 use MediaWiki\Revision\RevisionRecord;
 use MediaWiki\Revision\RevisionStore;
 use MediaWiki\Status\Status;
@@ -58,16 +61,8 @@ class RevDelRevisionList extends RevDelList {
 
 	/** @var int */
 	public $currentRevId;
+	private DomainEventDispatcher $eventDispatcher;
 
-	/**
-	 * @param IContextSource $context
-	 * @param PageIdentity $page
-	 * @param array $ids
-	 * @param LBFactory $lbFactory
-	 * @param HookContainer $hookContainer
-	 * @param HTMLCacheUpdater $htmlCacheUpdater
-	 * @param RevisionStore $revisionStore
-	 */
 	public function __construct(
 		IContextSource $context,
 		PageIdentity $page,
@@ -75,31 +70,38 @@ class RevDelRevisionList extends RevDelList {
 		LBFactory $lbFactory,
 		HookContainer $hookContainer,
 		HTMLCacheUpdater $htmlCacheUpdater,
-		RevisionStore $revisionStore
+		RevisionStore $revisionStore,
+		DomainEventDispatcher $eventDispatcher
 	) {
 		parent::__construct( $context, $page, $ids, $lbFactory );
 		$this->lbFactory = $lbFactory;
 		$this->hookRunner = new HookRunner( $hookContainer );
 		$this->htmlCacheUpdater = $htmlCacheUpdater;
 		$this->revisionStore = $revisionStore;
+		$this->eventDispatcher = $eventDispatcher;
 	}
 
+	/** @inheritDoc */
 	public function getType() {
 		return 'revision';
 	}
 
+	/** @inheritDoc */
 	public static function getRelationType() {
 		return 'rev_id';
 	}
 
+	/** @inheritDoc */
 	public static function getRestriction() {
 		return 'deleterevision';
 	}
 
+	/** @inheritDoc */
 	public static function getRevdelConstant() {
 		return RevisionRecord::DELETED_TEXT;
 	}
 
+	/** @inheritDoc */
 	public static function suggestTarget( $target, array $ids ) {
 		$revisionRecord = MediaWikiServices::getInstance()
 			->getRevisionLookup()
@@ -162,6 +164,7 @@ class RevDelRevisionList extends RevDelList {
 		}
 	}
 
+	/** @inheritDoc */
 	public function newItem( $row ) {
 		if ( isset( $row->rev_id ) ) {
 			return new RevDelRevisionItem( $this, $row );
@@ -173,6 +176,7 @@ class RevDelRevisionList extends RevDelList {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getCurrent() {
 		if ( $this->currentRevId === null ) {
 			$dbw = $this->lbFactory->getPrimaryDatabase();
@@ -185,11 +189,65 @@ class RevDelRevisionList extends RevDelList {
 		return $this->currentRevId;
 	}
 
+	/**
+	 * @param array $bitPars See RevisionDeleter::extractBitfield
+	 * @param array $visibilityChangeMap [id => ['oldBits' => $oldBits, 'newBits' => $newBits], ... ]
+	 * @param array $tags
+	 * @param LogEntry $logEntry
+	 * @param bool $suppressed
+	 */
+	protected function emitEvents(
+		array $bitPars,
+		array $visibilityChangeMap,
+		array $tags,
+		LogEntry $logEntry,
+		bool $suppressed
+	) {
+		// Figure out which bits got set, and which got unset.
+		$bitsSet = RevisionDeleter::extractBitfield( $bitPars, 0 );
+		$bitsUnset = RevisionRecord::SUPPRESSED_ALL &
+			( ~ RevisionDeleter::extractBitfield( $bitPars, RevisionRecord::SUPPRESSED_ALL ) );
+
+		$page = $this->getPage();
+		$performer = $this->getUser();
+
+		// Hack: make sure we have a *proper* PageIdentity
+		if ( !$page instanceof ProperPageIdentity ) {
+			if ( !$page instanceof Title ) {
+				$page = Title::newFromPageIdentity( $page );
+			}
+
+			$page = $page->toPageIdentity();
+		}
+
+		$flags = [
+			PageHistoryVisibilityChangedEvent::FLAG_SUPPRESSED => $suppressed
+		];
+
+		$this->eventDispatcher->dispatch(
+			new PageHistoryVisibilityChangedEvent(
+				$page,
+				$performer,
+				$this->getCurrent(),
+				$bitsSet,
+				$bitsUnset,
+				$visibilityChangeMap,
+				$logEntry->getComment(),
+				$tags,
+				$flags,
+				$logEntry->getTimestamp()
+			),
+			$this->lbFactory
+		);
+	}
+
+	/** @inheritDoc */
 	public function doPreCommitUpdates() {
 		Title::newFromPageIdentity( $this->page )->invalidateCache();
 		return Status::newGood();
 	}
 
+	/** @inheritDoc */
 	public function doPostCommitUpdates( array $visibilityChangeMap ) {
 		$this->htmlCacheUpdater->purgeTitleUrls(
 			$this->page,

@@ -284,7 +284,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 	 * tags that the tokenizer generates, the TSR values applies to the entire
 	 * DOM subtree (opening tag + content + closing tag).
 	 *
-	 * Ex: So [[foo]] will get tokenized to a SelfClosingTagTk(...) with a TSR
+	 * Ex: So [[foo]] will get tokenized to a SelfclosingTagTk(...) with a TSR
 	 * value of [0,7].  The DSR algorithm will then use that info and assign
 	 * the a-tag rooted at the <a href='...'>foo</a> DOM subtree a DSR value of
 	 * [0,7,2,2], where 2 and 2 refer to the opening and closing tag widths.
@@ -298,7 +298,8 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 	 * @param ?int $e end position, exclusive
 	 * @param int $dsrCorrection
 	 * @param array $opts
-	 * @return array
+	 *
+	 * @return list{?int, ?int}
 	 */
 	private function computeNodeDSR(
 		Frame $frame, Node $node, ?int $s, ?int $e, int $dsrCorrection,
@@ -375,7 +376,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 			$env->trace( "dsr", static function () use ( $child, $cs, $ce ) {
 				// slow, for debugging only
 				$i = 0;
-				foreach ( $child->parentNode->childNodes as $x ) {
+				foreach ( DOMUtils::childNodes( $child->parentNode ) as $x ) {
 					if ( $x === $child ) {
 						break;
 					}
@@ -544,7 +545,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 						$newDsr = [ $ccs, $cce ];
 					} else {
 						$env->trace( "dsr", static function () use (
-							$env, $cs, $ce, $stWidth, $etWidth, $ccs, $cce
+							$cs, $ce, $stWidth, $etWidth, $ccs, $cce
 						) {
 							return "     before-recursing:" .
 								"[cs,ce]=" . PHPUtils::jsonEncode( [ $cs, $ce ] ) .
@@ -577,7 +578,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 				if ( $cs !== null || $ce !== null ) {
 					if ( $ce < 0 ) {
 						if ( !$fosteredNode ) {
-							$env->log( "info/dsr/negative",
+							$env->trace( "dsr/negative",
 								"Negative DSR for node: " . DOMCompat::nodeName( $node ) . "; resetting to zero" );
 						}
 						$ce = 0;
@@ -595,7 +596,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 						$dp->dsr = new DomSourceRange( $cs, $ce, $stWidth, $etWidth );
 					}
 
-					$env->trace( "dsr", static function () use ( $frame, $child, $cs, $ce, $dp ) {
+					$env->trace( "dsr", static function () use ( $child, $cs, $ce ) {
 						return "     UPDATING " . DOMCompat::nodeName( $child ) .
 							" with " . PHPUtils::jsonEncode( [ $cs, $ce ] ) .
 							"; typeof: " . ( DOMCompat::getAttribute( $child, "typeof" ) ?? '' );
@@ -636,7 +637,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 							}
 
 							// Update and move right
-							$env->trace( "dsr", static function () use ( $frame, $newCE, $sibling, $siblingDP ) {
+							$env->trace( "dsr", static function () use ( $newCE, $sibling, $siblingDP ) {
 								return "     CHANGING ce.start of " . DOMCompat::nodeName( $sibling ) .
 									" from " . $siblingDP->dsr->start . " to " . $newCE;
 							} );
@@ -684,7 +685,7 @@ class ComputeDSR implements Wt2HtmlDOMProcessor {
 
 		// Detect errors
 		if ( $s !== null && $cs !== $s && !$this->acceptableInconsistency( $opts, $node, $cs, $s ) ) {
-			$env->log( "info/dsr/inconsistent", "DSR inconsistency: cs/s mismatch for node:",
+			$env->trace( "dsr/inconsistent", "DSR inconsistency: cs/s mismatch for node:",
 				DOMCompat::nodeName( $node ), "s:", $s, "; cs:", $cs );
 		}
 

@@ -74,8 +74,6 @@ class LoadBalancer implements ILoadBalancerForOwner {
 
 	/** @var array[] $aliases Map of (table => (dbname, schema, prefix) map) */
 	private $tableAliases = [];
-	/** @var string[] Map of (index alias => index) */
-	private $indexAliases = [];
 	/** @var DatabaseDomain[]|string[] Map of (domain alias => DB domain) */
 	private $domainAliases = [];
 	/** @var callable[] Map of (name => callable) */
@@ -252,6 +250,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $this->localDomain->getId();
 	}
 
+	/** @inheritDoc */
 	public function resolveDomainID( $domain ): string {
 		return $this->resolveDomainInstance( $domain )->getId();
 	}
@@ -420,6 +419,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return ArrayUtils::pickRandom( $loads );
 	}
 
+	/** @inheritDoc */
 	public function getReaderIndex( $group = false ) {
 		$group = is_string( $group ) ? $group : self::GROUP_GENERIC;
 
@@ -559,6 +559,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $i;
 	}
 
+	/** @inheritDoc */
 	public function waitForAll( DBPrimaryPos $pos, $timeout = null ) {
 		$timeout = $timeout ?: self::MAX_WAIT_DEFAULT;
 
@@ -614,6 +615,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getAnyOpenConnection( $i, $flags = 0 ) {
 		$i = ( $i === self::DB_PRIMARY ) ? ServerInfo::WRITER_INDEX : $i;
 		$conn = false;
@@ -749,6 +751,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $ok;
 	}
 
+	/** @inheritDoc */
 	public function getConnection( $i, $groups = [], $domain = false, $flags = 0 ) {
 		if ( self::fieldHasBit( $flags, self::CONN_SILENCE_ERRORS ) ) {
 			throw new UnexpectedValueException(
@@ -764,6 +767,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return new DBConnRef( $this, [ $i, $groups, $domain, $flags ], $role, $this->modcount );
 	}
 
+	/** @inheritDoc */
 	public function getConnectionInternal( $i, $groups = [], $domain = false, $flags = 0 ): IDatabase {
 		$domain = $this->resolveDomainID( $domain );
 		$group = $this->resolveGroups( $groups, $i );
@@ -791,6 +795,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $this->getServerConnection( $serverIndex, $domain, $flags );
 	}
 
+	/** @inheritDoc */
 	public function getServerConnection( $i, $domain, $flags = 0 ) {
 		$domainInstance = DatabaseDomain::newFromId( $domain );
 		// Number of connections made before getting the server index and handle
@@ -838,6 +843,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $this->getConnection( $i, $groups, $domain, $flags );
 	}
 
+	/** @inheritDoc */
 	public function getMaintenanceConnectionRef(
 		$i,
 		$groups = [],
@@ -971,6 +977,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getServerAttributes( $i ) {
 		return $this->databaseFactory->attributesFromType(
 			$this->getServerType( $i ),
@@ -1044,9 +1051,8 @@ class LoadBalancer implements ILoadBalancerForOwner {
 			] ),
 			Database::NEW_UNCONNECTED
 		);
-		// Set alternative table/index names before any queries can be issued
+		// Set alternative table names before any queries can be issued
 		$conn->setTableAliases( $this->tableAliases );
-		$conn->setIndexAliases( $this->indexAliases );
 		// Account for any active transaction round and listeners
 		$this->syncConnectionRoundState( $conn );
 		if ( $i === ServerInfo::WRITER_INDEX ) {
@@ -1059,7 +1065,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		try {
 			$conn->initConnection();
 			++$this->connectionCounter;
-		} catch ( DBConnectionError $e ) {
+		} catch ( DBConnectionError ) {
 			$this->lastErrorConn = $conn;
 			// ignore; let the DB handle the logging
 		}
@@ -1126,7 +1132,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 	 * @throws DBConnectionError
 	 * @return never
 	 */
-	private function reportConnectionError( $extraLbError = '' ) {
+	private function reportConnectionError( $extraLbError = '' ): never {
 		if ( $this->lastErrorConn instanceof IDatabaseForOwner ) {
 			$srvName = $this->lastErrorConn->getServerName();
 			$lastDbError = $this->lastErrorConn->lastError() ?: 'unknown error';
@@ -1170,30 +1176,37 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		throw $exception;
 	}
 
+	/** @inheritDoc */
 	public function getServerCount() {
 		return $this->serverInfo->getServerCount();
 	}
 
+	/** @inheritDoc */
 	public function hasReplicaServers() {
 		return $this->serverInfo->hasReplicaServers();
 	}
 
+	/** @inheritDoc */
 	public function hasStreamingReplicaServers() {
 		return $this->serverInfo->hasStreamingReplicaServers();
 	}
 
+	/** @inheritDoc */
 	public function getServerName( $i ): string {
 		return $this->serverInfo->getServerName( $i );
 	}
 
+	/** @inheritDoc */
 	public function getServerInfo( $i ) {
 		return $this->serverInfo->getServerInfo( $i );
 	}
 
+	/** @inheritDoc */
 	public function getServerType( $i ) {
 		return $this->serverInfo->getServerType( $i );
 	}
 
+	/** @inheritDoc */
 	public function getPrimaryPos() {
 		$conn = $this->getAnyOpenConnection( ServerInfo::WRITER_INDEX );
 		if ( $conn ) {
@@ -1201,7 +1214,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 
 		/** @var IDatabaseForOwner|null $conn */
-		$conn = $this->getConnectionInternal( ServerInfo::WRITER_INDEX, self::CONN_SILENCE_ERRORS );
+		$conn = $this->getConnectionInternal( ServerInfo::WRITER_INDEX, [], false, self::CONN_SILENCE_ERRORS );
 		// @phan-suppress-next-line PhanRedundantCondition
 		if ( !$conn ) {
 			$this->reportConnectionError();
@@ -1285,11 +1298,13 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function disable( $fname = __METHOD__ ) {
 		$this->closeAll( $fname );
 		$this->disabled = true;
 	}
 
+	/** @inheritDoc */
 	public function closeAll( $fname = __METHOD__ ) {
 		/** @noinspection PhpUnusedLocalVariableInspection */
 		$scope = ScopedCallback::newScopedIgnoreUserAbort();
@@ -1344,6 +1359,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$conn->close( __METHOD__ );
 	}
 
+	/** @inheritDoc */
 	public function finalizePrimaryChanges( $fname = __METHOD__ ) {
 		$this->assertTransactionRoundStage( [ self::ROUND_CURSORY, self::ROUND_FINALIZED ] );
 		/** @noinspection PhpUnusedLocalVariableInspection */
@@ -1370,6 +1386,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $total;
 	}
 
+	/** @inheritDoc */
 	public function approvePrimaryChanges( int $maxWriteDuration, $fname = __METHOD__ ) {
 		$this->assertTransactionRoundStage( self::ROUND_FINALIZED );
 		/** @noinspection PhpUnusedLocalVariableInspection */
@@ -1424,6 +1441,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->trxRoundStage = self::ROUND_APPROVED;
 	}
 
+	/** @inheritDoc */
 	public function beginPrimaryChanges( $fname = __METHOD__ ) {
 		if ( $this->trxRoundFname !== null ) {
 			throw new DBTransactionError(
@@ -1450,6 +1468,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->trxRoundStage = self::ROUND_CURSORY;
 	}
 
+	/** @inheritDoc */
 	public function commitPrimaryChanges( $fname = __METHOD__ ) {
 		$this->assertTransactionRoundStage( self::ROUND_APPROVED );
 		/** @noinspection PhpUnusedLocalVariableInspection */
@@ -1482,6 +1501,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->trxRoundStage = self::ROUND_COMMIT_CALLBACKS;
 	}
 
+	/** @inheritDoc */
 	public function runPrimaryTransactionIdleCallbacks( $fname = __METHOD__ ) {
 		if ( $this->trxRoundStage === self::ROUND_COMMIT_CALLBACKS ) {
 			$type = IDatabase::TRIGGER_COMMIT;
@@ -1529,6 +1549,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 						)
 					);
 					$this->statsFactory->getCounter( 'rdbms_callback_writes_found_total' )
+						->setLabel( 'db_cluster', $this->getClusterName() )
 						->setLabel( 'db_server', $conn->getServerName() )
 						->increment();
 				} elseif ( $conn->trxLevel() ) {
@@ -1549,6 +1570,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $errors[0] ?? null;
 	}
 
+	/** @inheritDoc */
 	public function runPrimaryTransactionListenerCallbacks( $fname = __METHOD__ ) {
 		if ( $this->trxRoundStage === self::ROUND_COMMIT_CALLBACKS ) {
 			$type = IDatabase::TRIGGER_COMMIT;
@@ -1573,6 +1595,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $errors[0] ?? null;
 	}
 
+	/** @inheritDoc */
 	public function rollbackPrimaryChanges( $fname = __METHOD__ ) {
 		/** @noinspection PhpUnusedLocalVariableInspection */
 		$scope = ScopedCallback::newScopedIgnoreUserAbort();
@@ -1589,6 +1612,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->trxRoundStage = self::ROUND_ROLLBACK_CALLBACKS;
 	}
 
+	/** @inheritDoc */
 	public function flushPrimarySessions( $fname = __METHOD__ ) {
 		$this->assertTransactionRoundStage( [ self::ROUND_CURSORY ] );
 		if ( $this->hasPrimaryChanges() ) {
@@ -1672,6 +1696,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function flushReplicaSnapshots( $fname = __METHOD__ ) {
 		foreach ( $this->conns as $poolConnsByServer ) {
 			foreach ( $poolConnsByServer as $serverIndex => $serverConns ) {
@@ -1685,16 +1710,19 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function flushPrimarySnapshots( $fname = __METHOD__ ) {
 		foreach ( $this->getOpenPrimaryConnections() as $conn ) {
 			$conn->flushSnapshot( $fname );
 		}
 	}
 
+	/** @inheritDoc */
 	public function hasPrimaryConnection() {
 		return (bool)$this->getAnyOpenConnection( ServerInfo::WRITER_INDEX );
 	}
 
+	/** @inheritDoc */
 	public function hasPrimaryChanges() {
 		foreach ( $this->getOpenPrimaryConnections() as $conn ) {
 			if ( $conn->writesOrCallbacksPending() ) {
@@ -1705,6 +1733,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function lastPrimaryChangeTimestamp() {
 		$lastTime = null;
 		foreach ( $this->getOpenPrimaryConnections() as $conn ) {
@@ -1714,6 +1743,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $lastTime;
 	}
 
+	/** @inheritDoc */
 	public function hasOrMadeRecentPrimaryChanges( $age = null ) {
 		$age ??= self::MAX_WAIT_DEFAULT;
 
@@ -1721,6 +1751,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 			|| $this->lastPrimaryChangeTimestamp() > microtime( true ) - $age );
 	}
 
+	/** @inheritDoc */
 	public function pendingPrimaryChangeCallers() {
 		$fnames = [];
 		foreach ( $this->getOpenPrimaryConnections() as $conn ) {
@@ -1730,6 +1761,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $fnames;
 	}
 
+	/** @inheritDoc */
 	public function explicitTrxActive() {
 		foreach ( $this->getOpenPrimaryConnections() as $conn ) {
 			if ( $conn->explicitTrxActive() ) {
@@ -1744,10 +1776,12 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->logger->warning( __METHOD__ . ": setting lagged replica mode" );
 	}
 
+	/** @inheritDoc */
 	public function laggedReplicaUsed() {
 		return $this->laggedReplicaMode;
 	}
 
+	/** @inheritDoc */
 	public function getReadOnlyReason() {
 		if ( $this->readOnlyReason !== false ) {
 			return $this->readOnlyReason;
@@ -1782,7 +1816,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 				if ( $conn ) {
 					try {
 						$value = (int)$conn->serverIsReadOnly();
-					} catch ( DBError $e ) {
+					} catch ( DBError ) {
 						$value = is_int( $oldValue ) ? $oldValue : 0;
 					}
 				} else {
@@ -1799,6 +1833,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		);
 	}
 
+	/** @inheritDoc */
 	public function pingAll() {
 		$success = true;
 		foreach ( $this->getOpenConnections() as $conn ) {
@@ -1837,6 +1872,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getMaxLag() {
 		$host = '';
 		$maxLag = -1;
@@ -1858,6 +1894,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return [ $host, $maxLag, $maxIndex ];
 	}
 
+	/** @inheritDoc */
 	public function getLagTimes() {
 		if ( !$this->hasReplicaServers() ) {
 			return [ ServerInfo::WRITER_INDEX => 0 ]; // no replication = no lag
@@ -1888,6 +1925,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		);
 	}
 
+	/** @inheritDoc */
 	public function waitForPrimaryPos( IDatabase $conn ) {
 		if ( $conn->getLBInfo( self::INFO_SERVER_INDEX ) === ServerInfo::WRITER_INDEX ) {
 			return true; // not a replica DB server
@@ -1930,6 +1968,7 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		return $ok;
 	}
 
+	/** @inheritDoc */
 	public function setTransactionListener( $name, ?callable $callback = null ) {
 		if ( $callback ) {
 			$this->trxRecurringCallbacks[$name] = $callback;
@@ -1945,14 +1984,11 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		$this->tableAliases = $aliases;
 	}
 
-	public function setIndexAliases( array $aliases ) {
-		$this->indexAliases = $aliases;
-	}
-
 	public function setDomainAliases( array $aliases ) {
 		$this->domainAliases = $aliases;
 	}
 
+	/** @inheritDoc */
 	public function setLocalDomainPrefix( $prefix ) {
 		$oldLocalDomain = $this->localDomain;
 		$this->localDomain = new DatabaseDomain(
@@ -1970,11 +2006,13 @@ class LoadBalancer implements ILoadBalancerForOwner {
 		}
 	}
 
+	/** @inheritDoc */
 	public function redefineLocalDomain( $domain ) {
 		$this->closeAll( __METHOD__ );
 		$this->localDomain = DatabaseDomain::newFromId( $domain );
 	}
 
+	/** @inheritDoc */
 	public function setTempTablesOnlyMode( $value, $domain ) {
 		$old = $this->tempTablesOnlyMode[$domain] ?? false;
 		if ( $value ) {
@@ -2012,13 +2050,10 @@ class LoadBalancer implements ILoadBalancerForOwner {
 	 * @return array
 	 */
 	protected function getConnLogContext( IDatabase $conn, array $extras = [] ) {
-		return array_merge(
-			[
-				'db_server' => $conn->getServerName(),
-				'db_domain' => $conn->getDomainID()
-			],
-			$extras
-		);
+		return $extras + [
+			'db_server' => $conn->getServerName(),
+			'db_domain' => $conn->getDomainID(),
+		];
 	}
 
 	/**

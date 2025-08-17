@@ -193,6 +193,7 @@ class SpecialUndelete extends SpecialPage {
 		$this->watchlistManager = $watchlistManager;
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -296,6 +297,7 @@ class SpecialUndelete extends SpecialPage {
 		}
 	}
 
+	/** @inheritDoc */
 	public function userCanExecute( User $user ) {
 		return $this->isAllowed( $this->mRestriction, $user );
 	}
@@ -326,6 +328,7 @@ class SpecialUndelete extends SpecialPage {
 		}
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->useTransactionalTimeLimit();
 
@@ -648,7 +651,7 @@ class SpecialUndelete extends SpecialPage {
 				RevisionRecord::FOR_THIS_USER,
 				$user
 			);
-		} catch ( RevisionAccessException $e ) {
+		} catch ( RevisionAccessException ) {
 			$content = null;
 		}
 
@@ -714,7 +717,7 @@ class SpecialUndelete extends SpecialPage {
 				$out->addParserOutput( $pout, $popts, [
 					'enableSectionEditLinks' => false,
 				] );
-			} catch ( RevisionAccessException $e ) {
+			} catch ( RevisionAccessException ) {
 			}
 		}
 
@@ -864,7 +867,7 @@ class SpecialUndelete extends SpecialPage {
 		foreach ( $tagIds as $tagId ) {
 			try {
 				$tags[] = $this->changeTagDefStore->getName( (int)$tagId );
-			} catch ( NameTableAccessException $exception ) {
+			} catch ( NameTableAccessException ) {
 				continue;
 			}
 		}
@@ -1316,10 +1319,14 @@ class SpecialUndelete extends SpecialPage {
 		} else {
 			$out->addHTML( $history );
 		}
-
-		return true;
 	}
 
+	/**
+	 * @param \stdClass $row
+	 * @param string $earliestLiveTime
+	 * @param int $remaining
+	 * @return string
+	 */
 	protected function formatRevisionRow( $row, $earliestLiveTime, $remaining ) {
 		$revRecord = $this->revisionStore->newRevisionFromArchiveRow(
 				$row,
@@ -1673,6 +1680,7 @@ class SpecialUndelete extends SpecialPage {
 		return $this->prefixSearchString( $search, $limit, $offset, $this->searchEngineFactory );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pagetools';
 	}

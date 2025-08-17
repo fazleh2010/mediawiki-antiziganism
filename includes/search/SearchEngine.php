@@ -406,7 +406,7 @@ abstract class SearchEngine {
 		$withPrefixSearchExtractNamespaceHook = false
 	) {
 		$parsed = $query;
-		if ( strpos( $query, ':' ) === false ) { // nothing to do
+		if ( !str_contains( $query, ':' ) ) { // nothing to do
 			return false;
 		}
 		$extractedNamespace = null;
@@ -430,7 +430,7 @@ abstract class SearchEngine {
 			}
 		}
 
-		if ( !$allQuery && strpos( $query, ':' ) !== false ) {
+		if ( !$allQuery && str_contains( $query, ':' ) ) {
 			$prefix = str_replace( ' ', '_', substr( $query, 0, strpos( $query, ':' ) ) );
 			$services = MediaWikiServices::getInstance();
 			$index = $services->getContentLanguage()->getNsIndex( $prefix );
@@ -686,8 +686,9 @@ abstract class SearchEngine {
 			return $sugg->getSuggestedTitle()->isKnown();
 		} );
 		if ( $diff > 0 ) {
-			MediaWikiServices::getInstance()->getStatsdDataFactory()
-				->updateCount( 'search.completion.missing', $diff );
+			$statsFactory = MediaWikiServices::getInstance()->getStatsFactory();
+			$statsFactory->getCounter( 'search_completion_missing_total' )
+				->incrementBy( $diff );
 		}
 
 		// SearchExactMatchRescorer should probably be refactored to work directly on top of a SearchSuggestionSet
@@ -813,7 +814,7 @@ abstract class SearchEngine {
 				$handler = MediaWikiServices::getInstance()
 					->getContentHandlerFactory()
 					->getContentHandler( $model );
-			} catch ( MWUnknownContentModelException $e ) {
+			} catch ( MWUnknownContentModelException ) {
 				// If we can find no handler, ignore it
 				continue;
 			}

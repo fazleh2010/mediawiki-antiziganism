@@ -46,16 +46,18 @@ class MergeLogFormatter extends LogFormatter {
 		$this->titleParser = $titleParser;
 	}
 
+	/** @inheritDoc */
 	public function getPreloadTitles() {
 		$params = $this->extractParameters();
 
 		try {
 			return [ $this->titleParser->parseTitle( $params[3] ) ];
-		} catch ( MalformedTitleException $_ ) {
+		} catch ( MalformedTitleException ) {
 		}
 		return [];
 	}
 
+	/** @inheritDoc */
 	protected function getMessageParameters() {
 		$params = parent::getMessageParameters();
 		$oldname = $this->makePageLink( $this->entry->getTarget(), [ 'redirect' => 'no' ] );
@@ -67,6 +69,7 @@ class MergeLogFormatter extends LogFormatter {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function getActionLinks() {
 		if ( $this->entry->isDeleted( LogPage::DELETED_ACTION ) // Action is hidden
 			|| !$this->context->getAuthority()->isAllowed( 'mergehistory' )
@@ -76,6 +79,17 @@ class MergeLogFormatter extends LogFormatter {
 
 		// Show unmerge link
 		$params = $this->extractParameters();
+
+		if ( $this->entry->getSubtype() === 'merge-into' ) {
+			// merge-into entry lives at the destination page
+			$target = $this->entry->getTarget()->getPrefixedDBkey(); // dest
+			$dest   = $params[3];                                   // src
+		} else {
+			// regular merge entry lives at the source page
+			$target = $params[3];                                   // dest
+			$dest   = $this->entry->getTarget()->getPrefixedDBkey(); // src
+		}
+
 		if ( isset( $params[5] ) ) {
 			$mergePoint = $params[4] . "|" . $params[5];
 		} else {
@@ -87,8 +101,8 @@ class MergeLogFormatter extends LogFormatter {
 			$this->msg( 'revertmerge' )->text(),
 			[],
 			[
-				'target' => $params[3],
-				'dest' => $this->entry->getTarget()->getPrefixedDBkey(),
+				'target' => $target,
+				'dest' => $dest,
 				'mergepoint' => $mergePoint,
 				'submitted' => 1 // show the revisions immediately
 			]
@@ -97,17 +111,29 @@ class MergeLogFormatter extends LogFormatter {
 		return $this->msg( 'parentheses' )->rawParams( $revert )->escaped();
 	}
 
+	/** @inheritDoc */
 	protected function getParametersForApi() {
 		$entry = $this->entry;
 		$params = $entry->getParameters();
 
-		static $map = [
+		// Use a different label when the subtype is "merge-into"
+		static $mapMerge = [
 			'4:title:dest',
 			'5:timestamp:mergepoint',
-			'4::dest' => '4:title:dest',
-			'5::mergepoint' => '5:timestamp:mergepoint',
-			'6::mergerevid'
+			'4::dest'				=> '4:title:dest',
+			'5::mergepoint'  => '5:timestamp:mergepoint',
+			'6::mergerevid',
 		];
+		static $mapMergeInto = [
+			'4:title:src',
+			'5:timestamp:mergepoint',
+			'4::src'				 => '4:title:src',
+			'5::mergepoint'  => '5:timestamp:mergepoint',
+			'6::mergerevid',
+		];
+
+		$map = $entry->getSubtype() === 'merge-into' ? $mapMergeInto : $mapMerge;
+
 		foreach ( $map as $index => $key ) {
 			if ( isset( $params[$index] ) ) {
 				$params[$key] = $params[$index];

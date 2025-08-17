@@ -17,7 +17,7 @@ namespace Wikimedia\Parsoid\Core;
  * In core this is implemented by ParserOutput.  Core uses
  * ParserOutput to record the rendered HTML (and rendered table of
  * contents HTML), but on the Parsoid side we're going to keep
- * rendered HTML DOM out of this interface (we use PageBundle for
+ * rendered HTML DOM out of this interface (we use HtmlPageBundle for
  * this).
  */
 interface ContentMetadataCollector {
@@ -444,10 +444,10 @@ interface ContentMetadataCollector {
 
 	/**
 	 * @see OutputPage::addModuleStyles
-	 * @param string[] $modules
+	 * @param string[] $moduleStyles
 	 * @deprecated use ::appendOutputStrings(::MODULE_STYLE, ...)
 	 */
-	public function addModuleStyles( array $modules ): void;
+	public function addModuleStyles( array $moduleStyles ): void;
 
 	/**
 	 * Sets parser limit report data for a key

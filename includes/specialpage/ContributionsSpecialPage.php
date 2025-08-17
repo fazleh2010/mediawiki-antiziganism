@@ -34,6 +34,7 @@ use MediaWiki\Pager\ContribsPager;
 use MediaWiki\Pager\ContributionsPager;
 use MediaWiki\Permissions\PermissionManager;
 use MediaWiki\PoolCounter\PoolCounterWorkViaCallback;
+use MediaWiki\Specials\Contribute\ContributeFactory;
 use MediaWiki\Specials\SpecialUserRights;
 use MediaWiki\Status\Status;
 use MediaWiki\Title\NamespaceInfo;
@@ -47,6 +48,7 @@ use MediaWiki\User\UserIdentityLookup;
 use MediaWiki\User\UserNamePrefixSearch;
 use MediaWiki\User\UserNameUtils;
 use MediaWiki\User\UserRigorOptions;
+use OOUI\ButtonWidget;
 use Wikimedia\IPUtils;
 use Wikimedia\Rdbms\IConnectionProvider;
 
@@ -244,6 +246,24 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 				->params( $target )
 		);
 
+		// "+ New contribution" button
+		$contributeEnabled = ContributeFactory::isEnabledOnCurrentSkin(
+			$this->getSkin(),
+			$this->getConfig()->get( MainConfigNames::SpecialContributeSkinsEnabled )
+		);
+		$isOwnContributionPage = $user->getName() === $target;
+		if ( $contributeEnabled && $isOwnContributionPage ) {
+			$out->enableOOUI();
+			$out->addHTML( new ButtonWidget( [
+				'id' => 'mw-specialcontributions-newcontribution',
+				'href' => SpecialPage::getTitleFor( 'Contribute' )->getLinkURL(),
+				'label' => $this->msg( 'sp-contributions-newcontribution' )->text(),
+				'icon' => 'add',
+				'framed' => true,
+				'flags' => 'progressive',
+			] ) );
+		}
+
 		# For IP ranges, we want the contributionsSub, but not the skin-dependent
 		# links under 'Tools', which may include irrelevant links like 'Logs'.
 		if ( $notExternal && !IPUtils::isValidRange( $target ) &&
@@ -349,7 +369,7 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 					$poolKey .= 'u:' . $this->getUser()->getId();
 				}
 				$work = new PoolCounterWorkViaCallback( 'Special' . $this->mName, $poolKey, [
-					'doWork' => function () use ( $pager, $out, $target ) {
+					'doWork' => function () use ( $pager, $out ) {
 						# Show a message about replica DB lag, if applicable
 						$lag = $pager->getDatabase()->getSessionLagStatus()['lag'];
 						if ( $lag > 0 ) {
@@ -387,6 +407,13 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 				$message = 'sp-contributions-footer-anon-range';
 			} elseif ( IPUtils::isIPAddress( $target ) ) {
 				$message = 'sp-contributions-footer-anon';
+			} elseif ( $userObj->isTemp() ) {
+				$message = 'sp-contributions-footer-temp';
+				if ( $this->msg( $message )->isDisabled() ) {
+					// As temp accounts and named accounts have similar properties,
+					// fall back to the "registered" version of the footer
+					$message = 'sp-contributions-footer';
+				}
 			} elseif ( $userObj->isAnon() ) {
 				// No message for non-existing users
 				$message = '';
@@ -449,12 +476,12 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 				}
 
 				$sitewide = false;
-				$logTargetPage = '';
+				$logTargetPages = [];
 				foreach ( $blocks as $block ) {
 					if ( $block->isSitewide() ) {
 						$sitewide = true;
 					}
-					$logTargetPage = $this->namespaceInfo->getCanonicalName( NS_USER ) .
+					$logTargetPages[] = $this->namespaceInfo->getCanonicalName( NS_USER ) .
 						':' . $block->getTargetName();
 				}
 
@@ -483,7 +510,7 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 					LogEventsList::showLogExtract(
 						$out,
 						'block',
-						$logTargetPage,
+						$logTargetPages,
 						'',
 						[
 							'lim' => 1,
@@ -876,7 +903,7 @@ class ContributionsSpecialPage extends IncludableSpecialPage {
 		$fields['tagInvert'] = [
 			'type' => 'check',
 			'id' => 'tagInvert',
-			'label' => $this->msg( 'invert' ),
+			'label-message' => 'invert',
 			'name' => 'tagInvert',
 			'hide-if' => [ '===', 'tagfilter', '' ],
 			'section' => 'contribs-top',

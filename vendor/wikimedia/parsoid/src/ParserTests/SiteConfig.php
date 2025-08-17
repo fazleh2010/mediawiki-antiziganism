@@ -73,7 +73,7 @@ class SiteConfig extends ApiSiteConfig {
 		return ParserHook::getParserTestConfigFileName();
 	}
 
-	public function reset() {
+	public function reset(): void {
 		parent::reset();
 
 		// adjust config to match that used for PHP tests
@@ -266,11 +266,11 @@ class SiteConfig extends ApiSiteConfig {
 	/**
 	 * Register an extension for use in parser tests
 	 * @param class-string<ExtensionModule> $extClass
-	 * @return callable a cleanup function to unregister this extension
+	 * @return callable():void a cleanup function to unregister this extension
 	 */
 	public function registerParserTestExtension( string $extClass ): callable {
 		$extId = $this->registerExtensionModule( $extClass );
-		return function () use ( $extId ) {
+		return function () use ( $extId ): void {
 			$this->unregisterExtensionModule( $extId );
 		};
 	}

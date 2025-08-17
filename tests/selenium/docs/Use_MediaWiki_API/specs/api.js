@@ -1,10 +1,8 @@
 // Example code for Selenium/How-to/Use MediaWiki API
 // https://www.mediawiki.org/wiki/Selenium/How-to/Use_MediaWiki_API
 
-'use strict';
-
-const assert = require( 'assert' );
-const MWBot = require( 'mwbot' );
+import assert from 'assert';
+import MWBot from 'mwbot';
 
 // apiUrl is required for our continuous integration.
 // If you don't have MW_SERVER and MW_SCRIPT_PATH environment variables set
@@ -27,12 +25,12 @@ describe( 'API', () => {
 		const response = await bot.read( 'Main Page' );
 
 		// console.log( response );
-		// { batchcomplete: '' (...) query: { pages: { '1': [Object] } } }
+		// { batchcomplete: '' (...) query: { pages: { '3': [Object] } } }
 
 		// console.log( response.query );
-		// { pages: { '1': { pageid: 1, ns: 0, title: 'Main Page', revisions: [Array] } } }
+		// { pages: { '3': { pageid: 3, ns: 0, title: 'Main Page', revisions: [Array] } } }
 
-		assert.strictEqual( response.query.pages[ '1' ].pageid, 1 );
+		assert.strictEqual( Object.values( response.query.pages )[ 0 ].pageid > 0, true );
 
 	} );
 

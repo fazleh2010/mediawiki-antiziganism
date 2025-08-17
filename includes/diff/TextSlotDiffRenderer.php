@@ -248,6 +248,7 @@ class TextSlotDiffRenderer extends SlotDiffRenderer {
 		return $this->getTextDiff( $oldText, $newText );
 	}
 
+	/** @inheritDoc */
 	public function localizeDiff( $diff, $options = [] ) {
 		return $this->textDiffer->localize( $this->format, $diff, $options );
 	}
@@ -323,7 +324,7 @@ class TextSlotDiffRenderer extends SlotDiffRenderer {
 		 * @throws FatalError
 		 * @return never
 		 */
-		$error = static function ( $status ) {
+		$error = static function ( $status ): never {
 			throw new FatalError( $status->getWikiText() );
 		};
 

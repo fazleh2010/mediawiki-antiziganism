@@ -18,7 +18,7 @@
  * @file
  */
 
-use MediaWiki\Language\ReplacementArray;
+use Wikimedia\ReplacementArray;
 
 /**
  * Serbian (Српски / Srpski) specific code.
@@ -115,6 +115,7 @@ class SrConverter extends LanguageConverterSpecific {
 		return $this->translateWithoutRomanNumbers( $text, $variant );
 	}
 
+	/** @inheritDoc */
 	public function guessVariant( $text, $variant ) {
 		$numCyrillic = preg_match_all( "/[шђчћжШЂЧЋЖ]/u", $text, $dummy );
 		$numLatin = preg_match_all( "/[šđčćžŠĐČĆŽ]/u", $text, $dummy );

@@ -55,11 +55,12 @@ class BlockLogFormatter extends LogFormatter {
 		$this->namespaceInfo = $namespaceInfo;
 	}
 
+	/** @inheritDoc */
 	protected function getMessageParameters() {
 		$params = parent::getMessageParameters();
 
 		$title = $this->entry->getTarget();
-		if ( substr( $title->getText(), 0, 1 ) === '#' ) {
+		if ( str_starts_with( $title->getText(), '#' ) ) {
 			// autoblock - no user link possible
 			$params[2] = $title->getText();
 			$params[3] = ''; // no user name for gender use
@@ -165,6 +166,7 @@ class BlockLogFormatter extends LogFormatter {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	protected function extractParameters() {
 		$params = parent::extractParameters();
 		// Legacy log params returning the params in index 3 and 4, moved to 4 and 5
@@ -178,6 +180,7 @@ class BlockLogFormatter extends LogFormatter {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function getPreloadTitles() {
 		$title = $this->entry->getTarget();
 		$preload = [];
@@ -191,13 +194,14 @@ class BlockLogFormatter extends LogFormatter {
 			foreach ( $params[6]['pages'] as $page ) {
 				try {
 					$preload[] = $this->titleParser->parseTitle( $page );
-				} catch ( MalformedTitleException $_ ) {
+				} catch ( MalformedTitleException ) {
 				}
 			}
 		}
 		return $preload;
 	}
 
+	/** @inheritDoc */
 	public function getActionLinks() {
 		$subtype = $this->entry->getSubtype();
 		$linkRenderer = $this->getLinkRenderer();
@@ -313,6 +317,7 @@ class BlockLogFormatter extends LogFormatter {
 		return $messages[$flag];
 	}
 
+	/** @inheritDoc */
 	protected function getParametersForApi() {
 		$entry = $this->entry;
 		$params = $entry->getParameters();
@@ -343,7 +348,6 @@ class BlockLogFormatter extends LogFormatter {
 			];
 
 			if ( !is_array( $params['6:array:flags'] ) ) {
-				// @phan-suppress-next-line PhanSuspiciousValueComparison
 				$params['6:array:flags'] = $params['6:array:flags'] === ''
 					? []
 					: explode( ',', $params['6:array:flags'] );
@@ -392,6 +396,7 @@ class BlockLogFormatter extends LogFormatter {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getMessageKey() {
 		$type = $this->entry->getType();
 		$subtype = $this->entry->getSubtype();

@@ -163,9 +163,10 @@ class UploadFromUrl extends UploadBase {
 	}
 
 	/**
+	 * @since 1.45 public
 	 * @return string[]
 	 */
-	private static function getAllowedHosts(): array {
+	public static function getAllowedHosts(): array {
 		$config = MediaWikiServices::getInstance()->getMainConfig();
 		$domains = $config->get( MainConfigNames::CopyUploadsDomains );
 
@@ -381,7 +382,7 @@ class UploadFromUrl extends UploadBase {
 		$requestFactory = MediaWikiServices::getInstance()->getHttpRequestFactory();
 		while ( $attemptsLeft > 0 ) {
 			$req = $requestFactory->create( $targetUrl, $options, __METHOD__ );
-			$req->setCallback( [ $this, 'saveTempFileChunk' ] );
+			$req->setCallback( $this->saveTempFileChunk( ... ) );
 			$status = $req->execute();
 			if ( !$req->isRedirect() ) {
 				break;

@@ -36,7 +36,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 	private ?string $obsoleteTagsRE = null;
 	private array $seenIds = [];
 
-	/** @var array<string,bool>|null */
+	/** @var ?array<string,true> */
 	private ?array $tagsWithChangedMisnestingBehavior = null;
 
 	/**
@@ -77,8 +77,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 	 * https://phabricator.wikimedia.org/T176363#3628173 verifies that this list of
 	 * tags all demonstrate this behavior.
 	 *
-	 * @return array
-	 * @phan-return array<string,bool>
+	 * @return array<string,true>
 	 */
 	private function getTagsWithChangedMisnestingBehavior(): array {
 		if ( $this->tagsWithChangedMisnestingBehavior === null ) {
@@ -101,7 +100,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 				'map', 'object', 'pre', 'progress', 'video',
 			] );
 			$this->tagsWithChangedMisnestingBehavior = [];
-			foreach ( Consts::$HTML['HTML5Tags'] as $tag => $dummy ) {
+			foreach ( Consts::$HTML['HTML5Tags'] as $tag => $_ignore ) {
 				if ( isset( Consts::$Sanitizer['AllowedLiteralTags'][$tag] ) &&
 					!isset( $HTML4TidyBlockTags[$tag] ) &&
 					!isset( Consts::$HTML['FormattingTags'][$tag] ) &&
@@ -175,6 +174,8 @@ class Linter implements Wt2HtmlDOMProcessor {
 	 * FIXME: We might potentially be computing this information redundantly
 	 * for every lint we find within this template's content. It could probably
 	 * be cached in tplInfo after it is computed once.
+	 *
+	 * @return ?array{multiPartTemplateBlock?: true, name?: string}
 	 */
 	public static function findEnclosingTemplateName( Env $env, ?stdClass $tplInfo ): ?array {
 		if ( !$tplInfo ) {
@@ -201,8 +202,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 					"a single part will always be a TemplateInfo not a string"
 				);
 			}
-			$name = null;
-			if ( !empty( $p0->href ) ) { // Could be "function"
+			if ( $p0->href !== null ) { // Could be "function"
 				// PORT-FIXME: Should that be SiteConfig::relativeLinkPrefix() rather than './'?
 				$name = PHPUtils::stripPrefix( $p0->href, './' );
 			} else {
@@ -273,7 +273,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 			return $this->hasMisnestableContent( $node->parentNode, $name );
 		}
 
-		$contentNode = null;
 		if ( DOMCompat::nodeName( $next ) === 'p' && !WTUtils::isLiteralHTMLNode( $next ) ) {
 			$contentNode = DiffDOMUtils::firstNonSepChild( $next );
 		} else {
@@ -385,7 +384,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 		// We record the original DSR in the tmp attribute
 		// for that reason.
 		$dsr = self::findLintDSR( $tplLintInfo, $tplInfo, $dp->tmp->origDSR ?? $dp->dsr ?? null );
-		$lintObj = null;
 		if ( DOMUtils::isMarkerMeta( $c, 'mw:Placeholder/StrippedTag' ) ) {
 			$lintObj = [
 				'dsr' => $dsr,
@@ -406,7 +404,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 		//
 		// 4. c doesn't have DSR info and doesn't come from a template either
 		$cNodeName = DOMCompat::nodeName( $c );
-		$ancestor = null;
 		$isHtmlElement = WTUtils::hasLiteralHTMLMarker( $dp );
 		if ( !Utils::isVoidElement( $cNodeName ) &&
 			$cNodeName !== 'tbody' &&
@@ -583,7 +580,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 	): void {
 		if ( !$this->obsoleteTagsRE ) {
 			$elts = [];
-			foreach ( Consts::$HTML['OlderHTMLTags'] as $tag => $dummy ) {
+			foreach ( Consts::$HTML['OlderHTMLTags'] as $tag => $_ignore ) {
 				// Looks like all existing editors let editors add the <big> tag.
 				// VE has a button to add <big>, it seems so does the WikiEditor
 				// and JS wikitext editor. So, don't flag BIG as an obsolete tag.
@@ -594,7 +591,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 			$this->obsoleteTagsRE = '/^(?:' . implode( '|', $elts ) . ')$/D';
 		}
 
-		$tplLintInfo = null;
 		if ( ( empty( $dp->autoInsertedStart ) || empty( $dp->autoInsertedEnd ) ) &&
 			preg_match( $this->obsoleteTagsRE, DOMCompat::nodeName( $c ) )
 		) {
@@ -737,7 +733,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 						// Identify the dsr-span of the opening tag
 						// of the table that needs to be deleted
 						$x = $nodeDSR === null ? null : ( clone $nodeDSR );
-						if ( !empty( $x->openWidth ) ) {
+						if ( $x->openWidth ?? 0 ) {
 							$x->end = $x->innerStart();
 							$x->openWidth = 0;
 							$x->closeWidth = 0;
@@ -874,7 +870,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 		// If so, editors would need to edit this run of nodes to introduce
 		// whitespace breaks as necessary so that HTML5 browsers get that
 		// same opportunity when Tidy is removed.
-		$s = null;
 		$nowrapNodes = [];
 		'@phan-var array<array{node:Node,tidybug:bool,hasLeadingWS:bool}> $nowrapNodes';
 		$startNode = $node;
@@ -941,7 +936,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 			}
 		}
 
-		$markProcessedNodes = static function () use ( &$nowrapNodes ) { // Helper
+		$markProcessedNodes = static function () use ( &$nowrapNodes ): void { // Helper
 			foreach ( $nowrapNodes as $o ) {
 				// Phan fails at applying the instanceof type restriction to the array member when analyzing the
 				// following call, but is fine when it's copied to a local variable.
@@ -1035,7 +1030,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 			if ( $item['type'] === 'missing-end-tag' && !$item['params']['inTable'] ) {
 				if ( $item['params']['name'] === 'small' || $item['params']['name'] === 'big' ) {
 					$tagName = $item['params']['name'];
-					// @phan-suppress-next-line PhanPossiblyUndeclaredVariable
 					if ( !$firstUnclosedTag[$tagName] ) {
 						$firstUnclosedTag[$tagName] = $item;
 					} else {
@@ -1096,7 +1090,6 @@ class Linter implements Wt2HtmlDOMProcessor {
 	private function lintMultilineHtmlTableInList(
 		Env $env, Element $node, DataParsoid $dp, ?stdClass $tplInfo
 	): void {
-		$li = null;
 		if ( !WTUtils::isLiteralHTMLNode( $node ) ||
 			DOMCompat::nodeName( $node ) !== 'table' ||
 			// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.Found
@@ -1296,7 +1289,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 	 */
 	private function lintIds(
 		Env $env, Element $node, DataParsoid $dp, ?stdClass $tplInfo
-	) {
+	): void {
 		$id = DOMCompat::getAttribute( $node, 'id' );
 
 		if ( DOMUtils::isHeading( $node ) ) {
@@ -1314,6 +1307,11 @@ class Linter implements Wt2HtmlDOMProcessor {
 			}
 
 			// Heading ids are deduplicated, don't bother linting them
+			return;
+		}
+
+		if ( WTUtils::isFallbackIdSpan( $node ) ) {
+			// Fallback ids are deduplicated, don't bother linting them
 			return;
 		}
 
@@ -1404,7 +1402,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 					function ( $extRootNode ) use ( $env, $tplInfo ) {
 						$this->findLints(
 							$extRootNode, $env,
-							empty( $tplInfo->isTemplated ) ? null : $tplInfo
+							( $tplInfo->isTemplated ?? false ) ? $tplInfo : null
 						);
 					}
 				);
@@ -1414,7 +1412,7 @@ class Linter implements Wt2HtmlDOMProcessor {
 			}
 
 			// Default node handler
-			if ( $handled === false ) {
+			if ( !$handled ) {
 				// Lint this node
 				$this->logWikitextFixups( $node, $env, $tplInfo );
 
@@ -1447,7 +1445,8 @@ class Linter implements Wt2HtmlDOMProcessor {
 		$siteConfig = $env->getSiteConfig();
 		$timer = Timing::start( $siteConfig );
 
-		$this->findLints( $root, $env );
+		// Pass in pipeline tplInfo for when we're linting embedded docs
+		$this->findLints( $root, $env, $options['tplInfo'] );
 		$this->postProcessLints( $env->getLints(), $env );
 
 		$timer->end( "linting", "linting", [] );

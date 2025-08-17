@@ -47,6 +47,7 @@ class SpecialApiHelp extends UnlistedSpecialPage {
 		$this->urlUtils = $urlUtils;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->getOutput()->addModuleStyles( 'mediawiki.codex.messagebox.styles' );
 		if ( !$par ) {
@@ -96,7 +97,7 @@ class SpecialApiHelp extends UnlistedSpecialPage {
 		$main = new ApiMain( $this->getContext(), false );
 		try {
 			$module = $main->getModuleFromPath( $moduleName );
-		} catch ( ApiUsageException $ex ) {
+		} catch ( ApiUsageException ) {
 			$this->getOutput()->addHTML( Html::errorBox(
 				$this->msg( 'apihelp-no-such-module', $moduleName )->inContentLanguage()->parse()
 			) );
@@ -106,6 +107,7 @@ class SpecialApiHelp extends UnlistedSpecialPage {
 		ApiHelp::getHelp( $this->getContext(), $module, $options );
 	}
 
+	/** @inheritDoc */
 	public function isIncludable() {
 		return true;
 	}

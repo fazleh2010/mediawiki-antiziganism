@@ -44,10 +44,11 @@ class LCStoreDB implements LCStore {
 	/** @var bool Whether the DB is read-only or otherwise unavailable for writing */
 	private $readOnly = false;
 
-	public function __construct( $params ) {
+	public function __construct( array $params ) {
 		$this->server = $params['server'] ?? [];
 	}
 
+	/** @inheritDoc */
 	public function get( $code, $key ) {
 		if ( $this->server || $this->writesDone ) {
 			// If a server configuration map is specified, always used that connection
@@ -67,6 +68,7 @@ class LCStoreDB implements LCStore {
 		return ( $value !== false ) ? unserialize( $db->decodeBlob( $value ) ) : null;
 	}
 
+	/** @inheritDoc */
 	public function startWrite( $code ) {
 		if ( $this->readOnly ) {
 			return;
@@ -117,6 +119,7 @@ class LCStoreDB implements LCStore {
 		$this->batch = [];
 	}
 
+	/** @inheritDoc */
 	public function set( $key, $value ) {
 		if ( $this->readOnly ) {
 			return;

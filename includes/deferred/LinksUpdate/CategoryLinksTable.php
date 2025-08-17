@@ -5,7 +5,6 @@ namespace MediaWiki\Deferred\LinksUpdate;
 use Collation;
 use MediaWiki\Config\Config;
 use MediaWiki\Config\ServiceOptions;
-use MediaWiki\DAO\WikiAwareEntity;
 use MediaWiki\JobQueue\Utils\PurgeJobUtils;
 use MediaWiki\Language\ILanguageConverter;
 use MediaWiki\Languages\LanguageConverterFactory;
@@ -182,14 +181,17 @@ class CategoryLinksTable extends TitleLinksTable {
 		}
 	}
 
+	/** @inheritDoc */
 	protected function getTableName() {
 		return $this->tableName;
 	}
 
+	/** @inheritDoc */
 	protected function getFromField() {
 		return 'cl_from';
 	}
 
+	/** @inheritDoc */
 	protected function getExistingFields() {
 		if ( $this->linksTargetNormalizationStage() & SCHEMA_COMPAT_WRITE_OLD ) {
 			$fields = [ 'cl_to', 'cl_sortkey_prefix' ];
@@ -263,18 +265,21 @@ class CategoryLinksTable extends TitleLinksTable {
 		}
 	}
 
+	/** @inheritDoc */
 	protected function isExisting( $linkId ) {
 		$links = $this->getExistingLinks();
 		[ $name, $prefix ] = $linkId;
 		return \array_key_exists( $name, $links ) && $links[$name] === $prefix;
 	}
 
+	/** @inheritDoc */
 	protected function isInNewSet( $linkId ) {
 		[ $name, $prefix ] = $linkId;
 		return \array_key_exists( $name, $this->newLinks )
 			&& $this->newLinks[$name][0] === $prefix;
 	}
 
+	/** @inheritDoc */
 	protected function insertLink( $linkId ) {
 		[ $name, $prefix ] = $linkId;
 		$sortKey = $this->newLinks[$name][1];
@@ -296,14 +301,15 @@ class CategoryLinksTable extends TitleLinksTable {
 			$targetFields['cl_collation'] = $this->collationName;
 		}
 
-		$this->insertRow( array_merge( [
+		$this->insertRow( $targetFields + [
 			'cl_sortkey' => $sortKey,
 			'cl_timestamp' => $timestamp,
 			'cl_sortkey_prefix' => $prefix,
 			'cl_type' => $this->categoryType,
-		], $targetFields ) );
+		] );
 	}
 
+	/** @inheritDoc */
 	protected function deleteLink( $linkId ) {
 		if ( $this->linksTargetNormalizationStage() & SCHEMA_COMPAT_WRITE_OLD ) {
 			$this->deleteRow( [ 'cl_to' => $linkId[0] ] );
@@ -317,19 +323,23 @@ class CategoryLinksTable extends TitleLinksTable {
 		}
 	}
 
+	/** @inheritDoc */
 	protected function needForcedLinkRefresh() {
 		// cl_sortkey and possibly cl_type will change if it is a page move
 		return $this->isMove();
 	}
 
+	/** @inheritDoc */
 	protected function makePageReferenceValue( $linkId ): PageReferenceValue {
-		return new PageReferenceValue( NS_CATEGORY, $linkId[0], WikiAwareEntity::LOCAL );
+		return PageReferenceValue::localReference( NS_CATEGORY, $linkId[0] );
 	}
 
+	/** @inheritDoc */
 	protected function makeTitle( $linkId ): Title {
 		return Title::makeTitle( NS_CATEGORY, $linkId[0] );
 	}
 
+	/** @inheritDoc */
 	protected function deduplicateLinkIds( $linkIds ) {
 		$seen = [];
 		foreach ( $linkIds as $linkId ) {

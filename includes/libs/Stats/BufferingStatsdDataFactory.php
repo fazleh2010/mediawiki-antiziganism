@@ -35,8 +35,8 @@ use Liuggio\StatsdClient\Factory\StatsdDataFactory;
  * over a single connection.
  *
  * These buffers are sent from MediaWikiEntryPoint::emitBufferedStats. For web requests,
- * this happens post-send. For command-line scripts, this happens periodically from a database
- * callback (see MWLBFactory::applyGlobalState).
+ * this happens post-send. For command-line scripts, this happens periodically from calls
+ * to Maintenance::commitTransaction() and Maintenance::commitTransactionRound().
  *
  * @todo Evaluate upstream's StatsdService class, which implements similar buffering logic
  * and was released in statsd-php-client 1.0.13, shortly after we implemented this here
@@ -54,7 +54,7 @@ class BufferingStatsdDataFactory extends StatsdDataFactory implements IBuffering
 	/** @var string */
 	private $prefix;
 
-	public function __construct( $prefix ) {
+	public function __construct( string $prefix ) {
 		parent::__construct();
 		$this->prefix = $prefix;
 	}
@@ -158,6 +158,7 @@ class BufferingStatsdDataFactory extends StatsdDataFactory implements IBuffering
 		return strtr( $key, [ '..' => '.' ] );
 	}
 
+	/** @inheritDoc */
 	public function produceStatsdData(
 		$key, $value = 1, $metric = StatsdDataInterface::STATSD_METRIC_COUNT
 	) {
@@ -179,6 +180,7 @@ class BufferingStatsdDataFactory extends StatsdDataFactory implements IBuffering
 	// Methods for IBufferingStatsdDataFactory
 	//
 
+	/** @inheritDoc */
 	public function hasData() {
 		return (bool)$this->buffer;
 	}
@@ -203,14 +205,17 @@ class BufferingStatsdDataFactory extends StatsdDataFactory implements IBuffering
 		return $data;
 	}
 
+	/** @inheritDoc */
 	public function clearData() {
 		$this->buffer = [];
 	}
 
+	/** @inheritDoc */
 	public function getDataCount() {
 		return count( $this->buffer );
 	}
 
+	/** @inheritDoc */
 	public function setEnabled( $enabled ) {
 		$this->enabled = $enabled;
 	}

@@ -505,4 +505,19 @@ class MockSiteConfig extends SiteConfig {
 		// We don't use the labels for now, using MockMetrics instead
 		$this->metrics->timing( $name, $value );
 	}
+
+	public function observeHistogram( string $name, float $value, array $buckets, array $labels ) {
+		$this->metrics->histogram( $name, $value, $buckets, $labels );
+	}
+
+	/**
+	 * Generate mock histogram buckets
+	 *
+	 * @param float $mean
+	 * @param int $skip
+	 * @return list<float>
+	 */
+	public function getHistogramBuckets( float $mean, int $skip ) {
+		return [ 0., $mean, 2 * $mean ];
+	}
 }

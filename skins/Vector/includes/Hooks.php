@@ -10,10 +10,10 @@ use MediaWiki\Preferences\Hook\GetPreferencesHook;
 use MediaWiki\ResourceLoader as RL;
 use MediaWiki\Skin\SkinTemplate;
 use MediaWiki\Skins\Hook\SkinPageReadyConfigHook;
+use MediaWiki\Skins\Vector\FeatureManagement\FeatureManagerFactory;
 use MediaWiki\Skins\Vector\Hooks\HookRunner;
 use MediaWiki\User\Options\UserOptionsManager;
 use MediaWiki\User\User;
-use RuntimeException;
 
 /**
  * Presentation hook handlers for Vector skin.
@@ -30,13 +30,16 @@ class Hooks implements
 {
 	private Config $config;
 	private UserOptionsManager $userOptionsManager;
+	private FeatureManagerFactory $featureManagerFactory;
 
 	public function __construct(
 		Config $config,
-		UserOptionsManager $userOptionsManager
+		UserOptionsManager $userOptionsManager,
+		FeatureManagerFactory $featureManagerFactory
 	) {
 		$this->config = $config;
 		$this->userOptionsManager = $userOptionsManager;
+		$this->featureManagerFactory = $featureManagerFactory;
 	}
 
 	/**
@@ -50,45 +53,6 @@ class Hooks implements
 			$skinName === Constants::SKIN_NAME_LEGACY ||
 			$skinName === Constants::SKIN_NAME_MODERN
 		);
-	}
-
-	/**
-	 * @param RL\Context $context
-	 * @param Config $config
-	 * @return array
-	 */
-	public static function getActiveABTest(
-		RL\Context $context,
-		Config $config
-	) {
-		$ab = $config->get(
-			Constants::CONFIG_WEB_AB_TEST_ENROLLMENT
-		);
-		if ( count( $ab ) === 0 ) {
-			// If array is empty then no experiment and need to validate.
-			return $ab;
-		}
-		if ( !array_key_exists( 'buckets', $ab ) ) {
-			throw new RuntimeException( 'Invalid VectorWebABTestEnrollment value: Must contain buckets key.' );
-		}
-		if ( !array_key_exists( 'unsampled', $ab['buckets'] ) ) {
-			throw new RuntimeException( 'Invalid VectorWebABTestEnrollment value: Must define an `unsampled` bucket.' );
-		} else {
-			// check bucket values.
-			foreach ( $ab['buckets'] as $bucketName => $bucketDefinition ) {
-				if ( !is_array( $bucketDefinition ) ) {
-					throw new RuntimeException( 'Invalid VectorWebABTestEnrollment value: Buckets should be arrays' );
-				}
-				$samplingRate = $bucketDefinition['samplingRate'];
-				if ( is_string( $samplingRate ) ) {
-					throw new RuntimeException(
-						'Invalid VectorWebABTestEnrollment value: Sampling rate should be number between 0 and 1.'
-					);
-				}
-			}
-		}
-
-		return $ab;
 	}
 
 	/**
@@ -122,12 +86,12 @@ class Hooks implements
 	 * @since 1.35
 	 * @param RL\Context $context
 	 * @param mixed[] &$config Associative array of configurable options
-	 * @return void This hook must not abort, it must return no value
+	 * @return bool|void True or no return value to continue or false to abort
 	 */
 	public function onSkinPageReadyConfig(
 		RL\Context $context,
 		array &$config
-	): void {
+	) {
 		// It's better to exit before any additional check
 		if ( !self::isVectorSkin( $context->getSkin() ) ) {
 			return;
@@ -139,7 +103,7 @@ class Hooks implements
 		// and from its point of view they are the same thing.
 		// Please see the modules `skins.vector.js` and `skins.vector.legacy.js`
 		// for the wire up of search.
-		$config['search'] = false;
+		$config['searchModule'] = 'skins.vector.search';
 	}
 
 	/**
@@ -314,10 +278,9 @@ class Hooks implements
 	 * Echo has styles that control icons rendering in places we don't want them.
 	 * This code works around T343838.
 	 *
-	 * @param SkinTemplate $sk
 	 * @param array &$content_navigation
 	 */
-	private static function fixEcho( $sk, &$content_navigation ) {
+	private static function fixEcho( &$content_navigation ) {
 		if ( isset( $content_navigation['notifications'] ) ) {
 			foreach ( $content_navigation['notifications'] as &$item ) {
 				$icon = $item['icon'] ?? null;
@@ -352,7 +315,7 @@ class Hooks implements
 			// users in legacy Vector.
 			unset( $content_navigation['user-page'] );
 		} else {
-			self::fixEcho( $sk, $content_navigation );
+			self::fixEcho( $content_navigation );
 			self::updateUserLinksDropdownItems( $sk, $content_navigation );
 		}
 	}
@@ -523,9 +486,7 @@ class Hooks implements
 	 * @param array[] &$prefs Preferences description array, to be fed to a HTMLForm object.
 	 */
 	public function onGetPreferences( $user, &$prefs ): void {
-		$services = MediaWikiServices::getInstance();
-		$featureManagerFactory = $services->getService( 'Vector.FeatureManagerFactory' );
-		$featureManager = $featureManagerFactory->createFeatureManager( RequestContext::getMain() );
+		$featureManager = $this->featureManagerFactory->createFeatureManager( RequestContext::getMain() );
 		$isNightModeEnabled = $featureManager->isFeatureEnabled( Constants::FEATURE_NIGHT_MODE );
 
 		$vectorPrefs = [

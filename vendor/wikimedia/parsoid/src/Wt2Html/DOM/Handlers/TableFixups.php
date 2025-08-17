@@ -77,7 +77,7 @@ class TableFixups {
 		$frame = $dtState->options['frame'];
 
 		$index = 0;
-		foreach ( $transclusions as $i => $tpl ) {
+		foreach ( $transclusions as $tpl ) {
 			$tplDp = DOMDataUtils::getDataParsoid( $tpl );
 			Assert::invariant( Utils::isValidDSR( $tplDp->dsr ?? null ), 'Expected valid DSR' );
 
@@ -183,7 +183,7 @@ class TableFixups {
 	 * @param Env $env
 	 * @param Element $cell known to be <td> / <th>
 	 * @param ?Element $templateWrapper
-	 * @return ?array
+	 * @return ?array{txt: string, frags: list<?string>, transclusions: list<Element>}
 	 */
 	public static function collectAttributishContent(
 		Env $env, Element $cell, ?Element $templateWrapper
@@ -198,7 +198,7 @@ class TableFixups {
 		// same logic uniformly.
 
 		$traverse = static function ( ?Node $child ) use (
-			&$traverse, &$buf, &$frags, &$transclusions, $env
+			&$traverse, &$buf, &$frags, &$transclusions
 		): bool {
 			while ( $child ) {
 				if ( $child instanceof Comment ) {
@@ -222,7 +222,7 @@ class TableFixups {
 						// "&#10;" is "\n" which breaks attribute parsing!
 						$buf[] = DOMDataUtils::getDataParsoid( $child )->src ?? $child->textContent;
 					} elseif ( DOMUtils::hasTypeOf( $child, 'mw:DOMFragment' ) ) {
-						$fragDOM = $env->getDOMFragment( DOMDataUtils::getDataParsoid( $child )->html );
+						$fragDOM = DOMDataUtils::getDataParsoid( $child )->html;
 						// FIXME: This is correct only for nowikis.
 						// For everything else, we need to figure out what needs to happen
 						// here wrt the extension opening & closing tags.
@@ -284,7 +284,6 @@ class TableFixups {
 		DTState $dtState, Element $cell, ?Element $templateWrapper
 	): void {
 		$env = $dtState->env;
-		$frame = $dtState->options['frame'];
 		// Collect attribute content and examine it
 		$attributishContent = self::collectAttributishContent( $env, $cell, $templateWrapper );
 		if ( !$attributishContent ) {
@@ -374,7 +373,6 @@ class TableFixups {
 	 */
 	private static function stripTrailingPipe( Element $cell ): ?string {
 		$lc = $cell->lastChild;
-		$txt = '';
 		while ( $lc && !( $lc instanceof Text ) ) {
 			$lc = $lc->lastChild;
 		}
@@ -549,7 +547,7 @@ class TableFixups {
 					$frag->appendChild( $doc->createTextNode( '|' ) );
 				}
 			}
-			$children = iterator_to_array( $frag->childNodes );
+			$children = DOMUtils::childNodes( $frag );
 		}
 
 		// Append new children
@@ -599,7 +597,7 @@ class TableFixups {
 		$frame = $dtState->options['frame'];
 
 		$prev = $cell->previousSibling;
-		DOMUtils::assertElt( $prev );
+		'@phan-var Element $prev'; // @var Element $prev
 
 		$prevIsTd = DOMCompat::nodeName( $prev ) === 'td';
 		$prevDp = DOMDataUtils::getDataParsoid( $prev );
@@ -803,6 +801,8 @@ class TableFixups {
 
 	/**
 	 * $cell is known to be <td>/<th>
+	 *
+	 * @return int One of self::NO_REPARSING, ::COMBINE_WITH_PREV_CELL, ::OTHER_REPARSE
 	 */
 	private static function getReparseType( Element $cell, DTState $dtState ): int {
 		$dp = DOMDataUtils::getDataParsoid( $cell );
@@ -915,7 +915,6 @@ class TableFixups {
 
 		// If the cell didn't have attrs, extract and reparse templated attrs
 		if ( $cellDp->getTempFlag( TempData::NO_ATTRS ) ) {
-			$frame = $dtState->options['frame'];
 			$templateWrapper = DOMUtils::hasTypeOf( $cell, 'mw:Transclusion' ) ? $cell : null;
 			self::reparseTemplatedAttributes( $dtState, $cell, $templateWrapper );
 		}
@@ -940,7 +939,7 @@ class TableFixups {
 				// FIXME: This skips over scenarios like <div>foo||bar</div>.
 				$cellName = DOMCompat::nodeName( $cell );
 				$hasSpanWrapper = !( $child instanceof Text );
-				$match = $match1 = $match2 = null;
+				$match1 = $match2 = null;
 
 				// Find the first match of ||
 				preg_match( '/^((?:[^|]*(?:\|[^|])?)*)\|\|([^|].*)?$/D', $child->textContent, $match1 );

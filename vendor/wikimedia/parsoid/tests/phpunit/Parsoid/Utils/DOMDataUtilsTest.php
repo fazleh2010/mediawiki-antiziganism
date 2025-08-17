@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 // phpcs:disable Generic.Files.LineLength.TooLong
 
 namespace Test\Parsoid\Utils;
@@ -11,7 +12,7 @@ use Wikimedia\Parsoid\Utils\ContentUtils;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 use Wikimedia\Parsoid\Utils\DOMDataUtils;
 use Wikimedia\Parsoid\Utils\DOMUtils;
-use Wikimedia\Parsoid\Wt2Html\XMLSerializer;
+use Wikimedia\Parsoid\Wt2Html\XHtmlSerializer;
 
 /**
  * @coversDefaultClass  \Wikimedia\Parsoid\Utils\DOMDataUtils
@@ -79,7 +80,7 @@ class DOMDataUtilsTest extends \PHPUnit\Framework\TestCase {
 
 		// Reserialize
 		DOMDataUtils::visitAndStoreDataAttribs( $p, [ 'discardDataParsoid' => true ] );
-		$html = XMLSerializer::serialize( $p )['html'];
+		$html = XHtmlSerializer::serialize( $p )['html'];
 		$this->assertSame(
 			'<p>Hello, world</p>',
 			$html
@@ -107,7 +108,7 @@ class DOMDataUtilsTest extends \PHPUnit\Framework\TestCase {
 
 		// Reserialize
 		DOMDataUtils::visitAndStoreDataAttribs( $p, [ 'discardDataParsoid' => true ] );
-		$html = XMLSerializer::serialize( $p )['html'];
+		$html = XHtmlSerializer::serialize( $p )['html'];
 		$this->assertSame(
 			'<p' .
 			' data-mw=\'{"attribs":[[{"txt":"bar","html":"&lt;b>bar&lt;/b>"},{"html":"xyz"}]]}\'' .
@@ -147,7 +148,7 @@ class DOMDataUtilsTest extends \PHPUnit\Framework\TestCase {
 
 		// Serialize and deserialize
 		DOMDataUtils::visitAndStoreDataAttribs( $p, [ 'discardDataParsoid' => true ] );
-		$html = XMLSerializer::serialize( $p )['html'];
+		$html = XHtmlSerializer::serialize( $p )['html'];
 		$this->assertSame(
 			'<p' .
 			' foo="flattened!"' .
@@ -202,7 +203,7 @@ class DOMDataUtilsTest extends \PHPUnit\Framework\TestCase {
 
 		// Serialize and deserialize
 		DOMDataUtils::visitAndStoreDataAttribs( $p, [ 'discardDataParsoid' => true ] );
-		$html = XMLSerializer::serialize( $p )['html'];
+		$html = XHtmlSerializer::serialize( $p )['html'];
 		$this->assertSame(
 			'<p data-mw-foo=\'{"rich":{"bar":"nested!"}}\' data-mw-bar=\'{"html":{"_h":"Nested and &lt;b>bold&lt;/b>!"}}\'>Hello, world</p>',
 			$html

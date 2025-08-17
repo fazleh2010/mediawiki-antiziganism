@@ -172,11 +172,11 @@ class WikiImporter {
 		$this->openReader();
 
 		// Default callbacks
-		$this->setPageCallback( [ $this, 'beforeImportPage' ] );
-		$this->setRevisionCallback( [ $this, "importRevision" ] );
-		$this->setUploadCallback( [ $this, 'importUpload' ] );
-		$this->setLogItemCallback( [ $this, 'importLogItem' ] );
-		$this->setPageOutCallback( [ $this, 'finishImportPage' ] );
+		$this->setPageCallback( $this->beforeImportPage( ... ) );
+		$this->setRevisionCallback( $this->importRevision( ... ) );
+		$this->setUploadCallback( $this->importUpload( ... ) );
+		$this->setLogItemCallback( $this->importLogItem( ... ) );
+		$this->setPageOutCallback( $this->finishImportPage( ... ) );
 
 		$this->importTitleFactory = new NaiveImportTitleFactory(
 			$this->contentLanguage,
@@ -488,7 +488,7 @@ class WikiImporter {
 
 		try {
 			return $revision->importOldRevision();
-		} catch ( MWContentSerializationException $ex ) {
+		} catch ( MWContentSerializationException ) {
 			$this->notice( 'import-error-unserialize',
 				$revision->getTitle()->getPrefixedText(),
 				$revision->getID(),
@@ -1296,21 +1296,14 @@ class WikiImporter {
 		// phpcs:ignore Generic.PHP.NoSilencedErrors -- suppress deprecation per T268847
 		$oldDisable = @libxml_disable_entity_loader( false );
 
-		if ( PHP_VERSION_ID >= 80000 ) {
-			// A static call is now preferred, and avoids https://github.com/php/php-src/issues/11548
-			$reader = XMLReader::open(
-				'uploadsource://' . $this->sourceAdapterId, null, LIBXML_PARSEHUGE );
-			if ( $reader instanceof XMLReader ) {
-				$this->reader = $reader;
-				$status = true;
-			} else {
-				$status = false;
-			}
+		// A static call, to avoid https://github.com/php/php-src/issues/11548
+		$reader = XMLReader::open(
+			'uploadsource://' . $this->sourceAdapterId, null, LIBXML_PARSEHUGE );
+		if ( $reader instanceof XMLReader ) {
+			$this->reader = $reader;
+			$status = true;
 		} else {
-			// A static call generated a deprecation warning prior to PHP 8.0
-			$this->reader = new XMLReader;
-			$status = $this->reader->open(
-				'uploadsource://' . $this->sourceAdapterId, null, LIBXML_PARSEHUGE );
+			$status = false;
 		}
 		if ( !$status ) {
 			$error = libxml_get_last_error();

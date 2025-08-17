@@ -112,10 +112,12 @@ class ActiveUsersPager extends UsersPager {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getIndexField() {
 		return 'qcc_title';
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo( $data = null ) {
 		$dbr = $this->getDatabase();
 
@@ -185,10 +187,11 @@ class ActiveUsersPager extends UsersPager {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function buildQueryInfo( $offset, $limit, $order ) {
 		$fname = __METHOD__ . ' (' . $this->getSqlComment() . ')';
 
-		$sortColumns = array_merge( [ $this->mIndexField ], $this->mExtraSortFields );
+		$sortColumns = [ $this->mIndexField, ...$this->mExtraSortFields ];
 		if ( $order === self::QUERY_ASCENDING ) {
 			$dir = 'ASC';
 			$orderBy = $sortColumns;
@@ -250,6 +253,7 @@ class ActiveUsersPager extends UsersPager {
 		$this->mResult->seek( 0 );
 	}
 
+	/** @inheritDoc */
 	public function formatRow( $row ) {
 		$userName = $row->user_name;
 

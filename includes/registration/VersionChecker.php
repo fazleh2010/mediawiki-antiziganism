@@ -112,7 +112,7 @@ class VersionChecker {
 				$this->versionParser->normalize( $coreVersion )
 			);
 			$this->coreVersion->setPrettyString( $coreVersion );
-		} catch ( UnexpectedValueException $e ) {
+		} catch ( UnexpectedValueException ) {
 			// Non-parsable version, don't fatal.
 		}
 	}
@@ -194,7 +194,7 @@ class VersionChecker {
 										'type' => 'incompatible-php',
 									];
 								}
-							} elseif ( substr( $dependency, 0, 4 ) === 'ext-' ) {
+							} elseif ( str_starts_with( $dependency, 'ext-' ) ) {
 								// PHP extensions
 								$phpExtension = substr( $dependency, 4 );
 								if ( $constraint !== '*' ) {
@@ -210,7 +210,7 @@ class VersionChecker {
 										'missing' => $phpExtension,
 									];
 								}
-							} elseif ( substr( $dependency, 0, 8 ) === 'ability-' ) {
+							} elseif ( str_starts_with( $dependency, 'ability-' ) ) {
 								// Other abilities the environment might provide.
 								$ability = substr( $dependency, 8 );
 								if ( !isset( $this->abilities[$ability] ) ) {
@@ -333,7 +333,7 @@ class VersionChecker {
 					'==',
 					$this->versionParser->normalize( $this->loaded[$dependencyName]['version'] )
 				);
-			} catch ( UnexpectedValueException $e ) {
+			} catch ( UnexpectedValueException ) {
 				// Non-parsable version, output an error message that the version
 				// string is invalid
 				return [

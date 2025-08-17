@@ -4,8 +4,11 @@ declare( strict_types = 1 );
 namespace Wikimedia\Parsoid\Wt2Html;
 
 use Generator;
+use stdClass;
 use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\Core\SelectiveUpdateData;
+use Wikimedia\Parsoid\DOM\DocumentFragment;
+use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
 use Wikimedia\Parsoid\Ext\ParsoidExtensionAPI;
 use Wikimedia\Parsoid\Tokens\SourceRange;
@@ -22,6 +25,7 @@ class DOMProcessorPipeline extends PipelineStage {
 	private ParsoidExtensionAPI $extApi; // Provides post-processing support to extensions
 	private string $timeProfile = '';
 	private ?SelectiveUpdateData $selparData = null;
+	private ?stdClass $tplInfo = null;
 
 	public function __construct(
 		Env $env, array $options = [], string $stageId = "",
@@ -74,7 +78,6 @@ class DOMProcessorPipeline extends PipelineStage {
 		}
 
 		$prefix = null;
-		$traceLevel = null;
 		$resourceCategory = null;
 
 		$profile = null;
@@ -136,6 +139,8 @@ class DOMProcessorPipeline extends PipelineStage {
 					'extApi' => $this->extApi,
 					'frame' => $this->frame,
 					'selparData' => $this->selparData,
+					// For linting embedded docs
+					'tplInfo' => $this->tplInfo,
 				] + $this->options,
 				$this->atTopLevel
 			);
@@ -163,20 +168,26 @@ class DOMProcessorPipeline extends PipelineStage {
 	/**
 	 * @inheritDoc
 	 */
-	public function process( $node, array $opts ) {
-		if ( isset( $opts['selparData'] ) ) {
-			$this->selparData = $opts['selparData'];
+	public function process(
+		string|array|DocumentFragment|Element $input,
+		array $options
+	): array|Element|DocumentFragment {
+		if ( isset( $options['selparData'] ) ) {
+			$this->selparData = $options['selparData'];
 		}
-		'@phan-var Node $node'; // @var Node $node
-		$this->doPostProcess( $node );
+		'@phan-var Node $input'; // @var Node $input
+		$this->doPostProcess( $input );
 		// @phan-suppress-next-line PhanTypeMismatchReturnSuperType
-		return $node;
+		return $input;
 	}
 
 	/**
 	 * @inheritDoc
 	 */
-	public function processChunkily( $input, array $options ): Generator {
+	public function processChunkily(
+		string|array|DocumentFragment|Element $input,
+		array $options
+	): Generator {
 		if ( $this->prevStage ) {
 			// The previous stage will yield a DOM.
 			// FIXME: Should we change the signature of that to return a DOM
@@ -189,4 +200,13 @@ class DOMProcessorPipeline extends PipelineStage {
 		$this->process( $node, $options );
 		yield $node;
 	}
+
+	/**
+	 * @inheritDoc
+	 */
+	public function resetState( array $options ): void {
+		parent::resetState( $options );
+		$this->tplInfo = $options['tplInfo'] ?? null;
+	}
+
 }

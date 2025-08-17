@@ -3,14 +3,15 @@ declare( strict_types = 1 );
 
 namespace Wikimedia\Parsoid\Wt2Html\TT;
 
-use Wikimedia\Parsoid\NodeData\DataParsoid;
+use Wikimedia\Parsoid\Tokens\CommentTk;
+use Wikimedia\Parsoid\Tokens\EmptyLineTk;
 use Wikimedia\Parsoid\Tokens\EndTagTk;
 use Wikimedia\Parsoid\Tokens\EOFTk;
-use Wikimedia\Parsoid\Tokens\KV;
 use Wikimedia\Parsoid\Tokens\NlTk;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\PHPUtils;
 use Wikimedia\Parsoid\Utils\PipelineUtils;
 use Wikimedia\Parsoid\Utils\TokenUtils;
@@ -27,24 +28,15 @@ use Wikimedia\Parsoid\Wt2Html\TokenHandlerPipeline;
  * given that we dont have a preprocessor.  This will be a grab-bag of
  * heuristics and tricks to handle different scenarios.
  */
-class TokenStreamPatcher extends TokenHandler {
+class TokenStreamPatcher extends LineBasedHandler {
 	private PegTokenizer $tokenizer;
-
-	/** @var int|null */
-	private $srcOffset;
-
+	private ?int $srcOffset;
 	private bool $sol;
-
 	private array $tokenBuf;
 	private int $wikiTableNesting;
 	/** True only for top-level & attribute value pipelines */
 	private bool $inIndependentParse;
-
-	/** @var Token|null */
-	private $lastConvertedTableCellToken;
-
-	/** @var SelfclosingTagTk|null */
-	private $tplStartToken = null;
+	private ?SelfclosingTagTk $tplStartToken = null;
 
 	public function __construct( TokenHandlerPipeline $manager, array $options ) {
 		$newOptions = [ 'tsp' => true ] + $options;
@@ -56,40 +48,32 @@ class TokenStreamPatcher extends TokenHandler {
 	/**
 	 * Resets any internal state for this token handler.
 	 *
-	 * @param array $parseOpts
+	 * @param array $options
 	 */
-	public function resetState( array $parseOpts ): void {
-		parent::resetState( $parseOpts );
-		$this->inIndependentParse = $this->atTopLevel || isset( $this->options['attrExpansion'] );
+	public function resetState( array $options ): void {
+		parent::resetState( $options );
+		$this->inIndependentParse = $this->atTopLevel
+			// Attribute expansion is effectively its own document context
+			|| isset( $this->options['attrExpansion'] )
+			// Ext-tag processing is effectively its own document context
+			|| isset( $this->options['extTag'] );
 	}
 
-	private function reset() {
+	private function reset(): void {
 		$this->srcOffset = 0;
 		$this->sol = true;
 		$this->tokenBuf = [];
 		$this->wikiTableNesting = 0;
-		// This marker tries to track the most recent table-cell token (td/th)
-		// that was converted to string. For those, we want to get rid
-		// of their corresponding mw:TSRMarker meta tag.
-		//
-		// This marker is set when we convert a td/th token to string
-		//
-		// This marker is cleared in one of the following scenarios:
-		// 1. When we clear a mw:TSRMarker corresponding to the token set earlier
-		// 2. When we change table nesting
-		// 3. When we hit a tr/td/th/caption token that wasn't converted to string
-		$this->lastConvertedTableCellToken = null;
 	}
 
 	/**
 	 * @inheritDoc
 	 */
 	public function onNewline( NlTk $token ): ?array {
-		$self = $this;
 		$this->env->trace( 'tsp', $this->pipelineId,
-			static function () use ( $self, $token ) {
-				return "(indep=" . ( $self->inIndependentParse ? "yes" : "no " ) .
-					";sol=" . ( $self->sol ? "yes" : "no " ) . ') ' .
+			function () use ( $token ) {
+				return "(indep=" . ( $this->inIndependentParse ? "yes" : "no " ) .
+					";sol=" . ( $this->sol ? "yes" : "no " ) . ') ' .
 					PHPUtils::jsonEncode( $token );
 			}
 		);
@@ -111,7 +95,7 @@ class TokenStreamPatcher extends TokenHandler {
 	/**
 	 * Clear start of line info
 	 */
-	private function clearSOL() {
+	private function clearSOL(): void {
 		// clear tsr and sol flag
 		$this->srcOffset = null;
 		$this->sol = false;
@@ -121,12 +105,12 @@ class TokenStreamPatcher extends TokenHandler {
 	 * Fully reprocess the output tokens from the tokenizer through
 	 * all the other handlers in stage 2.
 	 *
-	 * @param int|false $srcOffset See TokenUtils::shiftTokenTSR, which has b/c for null
+	 * @param ?int $srcOffset
 	 * @param array $toks
 	 * @param bool $popEOF
 	 * @return array<string|Token>
 	 */
-	private function reprocessTokens( $srcOffset, array $toks, bool $popEOF = false ): array {
+	private function reprocessTokens( ?int $srcOffset, array $toks, bool $popEOF = false ): array {
 		// Update tsr
 		TokenUtils::shiftTokenTSR( $toks, $srcOffset );
 
@@ -151,9 +135,9 @@ class TokenStreamPatcher extends TokenHandler {
 	/**
 	 * @return array<string|Token>
 	 */
-	private function convertTokenToString( Token $token ): array {
-		$da = $token->dataParsoid;
-		$tsr = $da->tsr ?? null;
+	private function convertNonHTMLTokenToString( Token $token ): array {
+		$dp = $token->dataParsoid;
+		$tsr = $dp->tsr ?? null;
 
 		if ( $tsr && $tsr->end > $tsr->start ) {
 			// > will only hold if these are valid numbers
@@ -161,25 +145,66 @@ class TokenStreamPatcher extends TokenHandler {
 			// sol === false ensures that the pipe will not be parsed as a <td>/listItem again
 			$toks = $this->tokenizer->tokenizeSync( $str, [ 'sol' => false ] );
 			return $this->reprocessTokens( $tsr->start, $toks, true );
-		} elseif ( !empty( $da->autoInsertedStart ) && !empty( $da->autoInsertedEnd ) ) {
+		} elseif ( !empty( $dp->autoInsertedStart ) && !empty( $dp->autoInsertedEnd ) ) {
 			return [ '' ];
 		} else {
-			switch ( $token->getName() ) {
-				case 'td':
-					return [ ( $token->dataParsoid->stx ?? '' ) === 'row' ? '||' : '|' ];
-				case 'th':
-					return [ ( $token->dataParsoid->stx ?? '' ) === 'row' ? '!!' : '!' ];
-				case 'tr':
-					return [ '|-' ];
-				case 'caption':
-					return [ $token instanceof TagTk ? '|+' : '' ];
-				case 'table':
-					return [ $token instanceof EndTagTk ? '|}' : $token ];
-				case 'listItem':
-					return [ implode( '', $token->getAttributeV( 'bullets' ) ) ];
+			$tokenName = ( $token instanceof XMLTagTk ) ? $token->getName() : '';
+			if ( $tokenName === 'listItem' ) {
+				return [ implode( '', $token->getAttributeV( 'bullets' ) ) ];
+			} elseif ( !in_array( $tokenName, [ 'table', 'caption', 'tr', 'td', 'th' ], true ) ) {
+				return [ $token ];
 			}
 
-			return [ $token ];
+			// Only table tags from here on
+			$buf = $dp->startTagSrc ?? null;
+			if ( !$buf ) {
+				switch ( $tokenName ) {
+					case 'td':
+						$buf = ( $dp->stx ?? '' ) === 'row' ? '||' : '|';
+						break;
+					case 'th':
+						$buf = ( $dp->stx ?? '' ) === 'row' ? '!!' : '!';
+						break;
+					case 'tr':
+						$buf = '|-';
+						break;
+					case 'caption':
+						$buf = $token instanceof TagTk ? '|+' : '';
+						break;
+					case 'table':
+						if ( $token instanceof EndTagTk ) {
+							// Won't have attributes. Bail early!
+							return [ '|}' ];
+						}
+						$buf = '{|';
+						break;
+				}
+			}
+
+			// Extract attributes
+			$needsRetokenization = false;
+			$cellAttrSrc = $dp->getTemp()->attrSrc ?? null;
+			if ( $cellAttrSrc ) {
+				// Copied from TableFixups::convertAttribsToContent
+				if ( preg_match( "#['[{<]#", $cellAttrSrc ) ) {
+					$needsRetokenization = true;
+				}
+				$buf .= $cellAttrSrc;
+				if ( in_array( $tokenName, [ 'caption', 'td', 'th' ], true ) ) {
+					$buf .= '|';
+				}
+			}
+
+			if ( $needsRetokenization ) {
+				// sol === false ensures that the pipe will not be parsed as a <td>/listItem again
+				$toks = $this->tokenizer->tokenizeSync( $buf, [ 'sol' => false ] );
+				// FIXME: Passing null here will drop token tsr before expansion.
+				// If any templates are present, we'll likely get a crasher in
+				// template handling.
+				return $this->reprocessTokens( null /* tsr->start not available */, $toks, true );
+			} else {
+				return [ $buf ];
+			}
 		}
 	}
 
@@ -203,19 +228,18 @@ class TokenStreamPatcher extends TokenHandler {
 	 * @return ?array<string|Token>
 	 */
 	public function onAnyInternal( $token ): ?array {
-		$self = $this;
 		$this->env->trace( 'tsp', $this->pipelineId,
-			static function () use ( $self, $token ) {
-				return "(indep=" . ( $self->inIndependentParse ? "yes" : "no " ) .
-					";sol=" . ( $self->sol ? "yes" : "no " ) . ') ' .
+			function () use ( $token ) {
+				return "(indep=" . ( $this->inIndependentParse ? "yes" : "no " ) .
+					";sol=" . ( $this->sol ? "yes" : "no " ) . ') ' .
 					PHPUtils::jsonEncode( $token );
 			}
 		);
 
 		$tokens = [ $token ];
-		$tc = TokenUtils::getTokenType( $token );
-		switch ( $tc ) {
-			case 'string':
+
+		switch ( true ) {
+			case is_string( $token ):
 				// While we are buffering newlines to suppress them
 				// in case we see a category, buffer all intervening
 				// white-space as well.
@@ -262,7 +286,6 @@ class TokenStreamPatcher extends TokenHandler {
 						} else {
 							$tokens = $this->reprocessTokens( $this->srcOffset, $retoks );
 							$this->wikiTableNesting++;
-							$this->lastConvertedTableCellToken = null;
 						}
 					} elseif ( $this->inIndependentParse && $T2529hack ) { // {| has been handled above
 						$retoks = $this->tokenizer->tokenizeAs( $token, 'list_item', /* sol */true );
@@ -284,13 +307,14 @@ class TokenStreamPatcher extends TokenHandler {
 				}
 				break;
 
-			case 'CommentTk':
-				// Comments don't change SOL state
+			case $token instanceof CommentTk:
+			case $token instanceof EmptyLineTk:
+				// Comments / EmptyLines don't change SOL state
 				// Update srcOffset
 				$this->srcOffset = $token->dataParsoid->tsr->end ?? null;
 				break;
 
-			case 'SelfclosingTagTk':
+			case $token instanceof SelfclosingTagTk:
 				if ( $token->getName() === 'meta' && ( $token->dataParsoid->stx ?? '' ) !== 'html' ) {
 					if ( TokenUtils::hasTypeOf( $token, 'mw:Transclusion' ) ) {
 						$this->tplStartToken = $token;
@@ -305,8 +329,8 @@ class TokenStreamPatcher extends TokenHandler {
 						return [];
 					}
 				} elseif ( TokenUtils::isSolTransparentLinkTag( $token ) ) {
-					// Replace buffered newline & whitespace tokens with mw:EmptyLine
-					// meta-tokens. This tunnels them through the rest of the transformations
+					// Replace buffered newline & whitespace tokens with EmptyLineTk tokens.
+					// This tunnels them through the rest of the transformations
 					// without affecting them. During HTML building, they are expanded
 					// back to newlines / whitespace.
 					$n = count( $this->tokenBuf );
@@ -318,23 +342,13 @@ class TokenStreamPatcher extends TokenHandler {
 							$i++;
 						}
 
-						$dp = new DataParsoid;
-						$dp->tokens = array_slice( $this->tokenBuf, 0, $i );
 						$toks = [
-							new SelfclosingTagTk( 'meta',
-								[ new KV( 'typeof', 'mw:EmptyLine' ) ],
-								$dp
-							)
+							new EmptyLineTk( array_slice( $this->tokenBuf, 0, $i ) )
 						];
 						if ( $i < $n ) {
 							$toks[] = $this->tokenBuf[$i];
 							if ( $i + 1 < $n ) {
-								$dp = new DataParsoid;
-								$dp->tokens = array_slice( $this->tokenBuf, $i + 1 );
-								$toks[] = new SelfclosingTagTk( 'meta',
-									[ new KV( 'typeof', 'mw:EmptyLine' ) ],
-									$dp
-								);
+								$toks[] = new EmptyLineTk( array_slice( $this->tokenBuf, $i + 1 ) );
 							}
 						}
 						$tokens = array_merge( $toks, $tokens );
@@ -346,39 +360,32 @@ class TokenStreamPatcher extends TokenHandler {
 				}
 				break;
 
-			case 'TagTk':
+			case $token instanceof TagTk:
 				if ( $this->inIndependentParse && !TokenUtils::isHTMLTag( $token ) ) {
 					$tokenName = $token->getName();
 					if ( $tokenName === 'listItem' && isset( $this->options['attrExpansion'] ) ) {
 						// Convert list items back to bullet wikitext in attribute context
-						$tokens = $this->convertTokenToString( $token );
+						$tokens = $this->convertNonHTMLTokenToString( $token );
 					} elseif ( $tokenName === 'table' ) {
-						$this->lastConvertedTableCellToken = null;
 						$this->wikiTableNesting++;
 					} elseif ( in_array( $tokenName, [ 'td', 'th', 'tr', 'caption' ], true ) ) {
 						if ( $this->wikiTableNesting === 0 ) {
-							if ( $token->getName() === 'td' || $token->getName() === 'th' ) {
-								$this->lastConvertedTableCellToken = $token;
-							}
-							$tokens = $this->convertTokenToString( $token );
-						} else {
-							$this->lastConvertedTableCellToken = null;
+							$tokens = $this->convertNonHTMLTokenToString( $token );
 						}
 					}
 				}
 				$this->clearSOL();
 				break;
 
-			case 'EndTagTk':
+			case $token instanceof EndTagTk:
 				if ( $this->inIndependentParse && !TokenUtils::isHTMLTag( $token ) ) {
 					if ( $this->wikiTableNesting > 0 ) {
 						if ( $token->getName() === 'table' ) {
-							$this->lastConvertedTableCellToken = null;
 							$this->wikiTableNesting--;
 						}
 					} elseif ( $token->getName() === 'table' || $token->getName() === 'caption' ) {
 						// Convert this to "|}"
-						$tokens = $this->convertTokenToString( $token );
+						$tokens = $this->convertNonHTMLTokenToString( $token );
 					}
 				}
 				$this->clearSOL();
@@ -392,9 +399,6 @@ class TokenStreamPatcher extends TokenHandler {
 		if ( count( $this->tokenBuf ) > 0 ) {
 			$tokens = array_merge( $this->tokenBuf, $tokens );
 			$this->tokenBuf = [];
-		} elseif ( $tokens === [ $token ] ) {
-			// Adhere to convention: if input is unmodified, return null.
-			$tokens = null;
 		}
 
 		return $tokens;

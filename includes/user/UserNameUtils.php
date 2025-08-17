@@ -129,7 +129,7 @@ class UserNameUtils implements UserRigorOptions {
 		// such as with extra namespace keys at the start.
 		try {
 			$title = $this->titleParser->parseTitle( $name );
-		} catch ( MalformedTitleException $_ ) {
+		} catch ( MalformedTitleException ) {
 			$title = null;
 		}
 
@@ -271,7 +271,7 @@ class UserNameUtils implements UserRigorOptions {
 		// Reject names containing '#'; these will be cleaned up
 		// with title normalisation, but then it's too late to
 		// check elsewhere
-		if ( strpos( $name, '#' ) !== false ) {
+		if ( str_contains( $name, '#' ) ) {
 			return false;
 		}
 
@@ -292,7 +292,7 @@ class UserNameUtils implements UserRigorOptions {
 		// but only when validation is requested (T14654)
 		try {
 			$title = $this->titleParser->parseTitle( $name, NS_USER );
-		} catch ( MalformedTitleException $_ ) {
+		} catch ( MalformedTitleException ) {
 			$title = null;
 		}
 
@@ -399,10 +399,16 @@ class UserNameUtils implements UserRigorOptions {
 	/**
 	 * Get a placeholder name for a temporary user before serial acquisition
 	 *
+	 * This method throws if temporary users are not enabled, and you can't check whether they are or
+	 * not from this class, so you have to check from the TempUserConfig class first, and then you
+	 * might as well use TempUserConfig::getPlaceholderName() directly.
+	 *
 	 * @since 1.39
+	 * @deprecated since 1.45 Use TempUserConfig::getPlaceholderName() instead
 	 * @return string
 	 */
 	public function getTempPlaceholder() {
+		wfDeprecated( __METHOD__, '1.45' );
 		return $this->tempUserConfig->getPlaceholderName();
 	}
 }

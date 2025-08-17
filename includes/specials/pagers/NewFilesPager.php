@@ -79,6 +79,7 @@ class NewFilesPager extends RangeChronologicalPager {
 		);
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$opts = $this->opts;
 		$conds = [];
@@ -170,17 +171,19 @@ class NewFilesPager extends RangeChronologicalPager {
 		return $query;
 	}
 
+	/** @inheritDoc */
 	public function getIndexField() {
 		return [ [ 'img_timestamp', 'img_name' ] ];
 	}
 
+	/** @inheritDoc */
 	protected function getStartBody() {
 		if ( !$this->gallery ) {
 			// Note that null for mode is taken to mean use default.
 			$mode = $this->getRequest()->getVal( 'gallerymode', null );
 			try {
 				$this->gallery = ImageGalleryBase::factory( $mode, $this->getContext() );
-			} catch ( ImageGalleryClassNotFoundException $e ) {
+			} catch ( ImageGalleryClassNotFoundException ) {
 				// User specified something invalid, fallback to default.
 				$this->gallery = ImageGalleryBase::factory( false, $this->getContext() );
 			}
@@ -189,10 +192,12 @@ class NewFilesPager extends RangeChronologicalPager {
 		return '';
 	}
 
+	/** @inheritDoc */
 	protected function getEndBody() {
 		return $this->gallery->toHTML();
 	}
 
+	/** @inheritDoc */
 	protected function doBatchLookups() {
 		$this->mResult->seek( 0 );
 		$lb = $this->linkBatchFactory->newLinkBatch()->setCaller( __METHOD__ );
@@ -204,6 +209,7 @@ class NewFilesPager extends RangeChronologicalPager {
 		$lb->execute();
 	}
 
+	/** @inheritDoc */
 	public function formatRow( $row ) {
 		$username = $row->actor_name;
 

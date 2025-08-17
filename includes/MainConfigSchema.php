@@ -13,8 +13,6 @@ namespace MediaWiki;
 
 use DateTime;
 use DateTimeZone;
-use EmaillingJob;
-use EnotifNotifyJob;
 use Generator;
 use InvalidArgumentException;
 use LocalisationCache;
@@ -32,6 +30,7 @@ use MediaWiki\Content\FallbackContentHandler;
 use MediaWiki\Content\JavaScriptContentHandler;
 use MediaWiki\Content\JsonContentHandler;
 use MediaWiki\Content\TextContentHandler;
+use MediaWiki\Content\VueContentHandler;
 use MediaWiki\Content\WikitextContentHandler;
 use MediaWiki\Deferred\SiteStatsUpdate;
 use MediaWiki\FileRepo\LocalRepo;
@@ -39,8 +38,6 @@ use MediaWiki\JobQueue\JobQueueDB;
 use MediaWiki\JobQueue\Jobs\AssembleUploadChunksJob;
 use MediaWiki\JobQueue\Jobs\CategoryMembershipChangeJob;
 use MediaWiki\JobQueue\Jobs\CdnPurgeJob;
-use MediaWiki\JobQueue\Jobs\DeleteLinksJob;
-use MediaWiki\JobQueue\Jobs\DeletePageJob;
 use MediaWiki\JobQueue\Jobs\DoubleRedirectJob;
 use MediaWiki\JobQueue\Jobs\HTMLCacheUpdateJob;
 use MediaWiki\JobQueue\Jobs\NullJob;
@@ -64,6 +61,9 @@ use MediaWiki\Logging\RenameuserLogFormatter;
 use MediaWiki\Logging\RightsLogFormatter;
 use MediaWiki\Logging\TagLogFormatter;
 use MediaWiki\Logging\UploadLogFormatter;
+use MediaWiki\Mail\EmaillingJob;
+use MediaWiki\Page\DeleteLinksJob;
+use MediaWiki\Page\DeletePageJob;
 use MediaWiki\Password\Argon2Password;
 use MediaWiki\Password\BcryptPassword;
 use MediaWiki\Password\LayeredParameterizedPassword;
@@ -74,6 +74,7 @@ use MediaWiki\Password\Pbkdf2PasswordUsingOpenSSL;
 use MediaWiki\Permissions\GrantsInfo;
 use MediaWiki\RCFeed\RedisPubSubFeedEngine;
 use MediaWiki\RCFeed\UDPRCFeedEngine;
+use MediaWiki\RecentChanges\RecentChangeNotifyJob;
 use MediaWiki\RecentChanges\RecentChangesUpdateJob;
 use MediaWiki\RenameUser\Job\RenameUserDerivedJob;
 use MediaWiki\RenameUser\Job\RenameUserTableJob;
@@ -95,7 +96,6 @@ use UserGroupExpiryJob;
 use UserOptionsUpdateJob;
 use Wikimedia\EventRelayer\EventRelayerNull;
 use Wikimedia\ObjectCache\APCUBagOStuff;
-use Wikimedia\ObjectCache\BagOStuff;
 use Wikimedia\ObjectCache\EmptyBagOStuff;
 use Wikimedia\ObjectCache\HashBagOStuff;
 use Wikimedia\ObjectCache\MemcachedPeclBagOStuff;
@@ -216,7 +216,7 @@ class MainConfigSchema {
 	 */
 	public const ConfigRegistry = [
 		'default' => [
-			'main' => 'GlobalVarConfig::newInstance',
+			'main' => 'MediaWiki\\Config\\GlobalVarConfig::newInstance',
 		],
 		'type' => 'map',
 	];
@@ -1065,10 +1065,10 @@ class MainConfigSchema {
 	];
 
 	public static function getDefaultLocalFileRepo(
-		$uploadDirectory, $scriptPath, $favicon, $uploadBaseUrl, $uploadPath,
-		$hashedUploadDirectory, $thumbnailScriptPath, $generateThumbnailOnParse, $deletedDirectory,
-		$updateCompatibleMetadata
-	) {
+		string $uploadDirectory, string $scriptPath, string $favicon, string $uploadBaseUrl, string $uploadPath,
+		bool $hashedUploadDirectory, string|false $thumbnailScriptPath, bool $generateThumbnailOnParse, string $deletedDirectory,
+		bool $updateCompatibleMetadata
+	): array {
 		return [
 			'class' => LocalRepo::class,
 			'name' => 'local',
@@ -1351,6 +1351,18 @@ class MainConfigSchema {
 	 * See LockManager::__construct() for more details.
 	 * Additional parameters are specific to the lock manager class used.
 	 * These settings should be global to all wikis.
+	 *
+	 * Minimal example:
+	 *
+	 * ```
+	 * $wgLockManagers[] = [
+	 *   'name' => 'locky-mc-lock-face',
+	 *   'class' => 'MemcLockManager',
+	 *   'lockServers' => [
+	 *     '127.0.0.1:11211',
+	 *   ],
+	 * ];
+	 * ```
 	 */
 	public const LockManagers = [
 		'default' => [],
@@ -1549,6 +1561,20 @@ class MainConfigSchema {
 	 * @note Only used if $wgLocalFileRepo is not set.
 	 */
 	public const HashedUploadDirectory = [
+		'default' => true,
+		'type' => 'boolean',
+	];
+
+	/**
+	 * Controls whether thumb.php and img_auth.php send CSP headers
+	 *
+	 * Note: This does not control general uploads. There is a .htaccess
+	 * in the images directory which will add a CSP header in some web server
+	 * configurations
+	 *
+	 * @since 1.45
+	 */
+	public const CSPUploadEntryPoint = [
 		'default' => true,
 		'type' => 'boolean',
 	];
@@ -2773,29 +2799,6 @@ class MainConfigSchema {
 	];
 
 	/**
-	 * Send a generic mail instead of a personalised mail for each user.  This
-	 * always uses UTC as the time zone, and doesn't include the username.
-	 *
-	 * For pages with many users watching, this can significantly reduce mail load.
-	 * Has no effect when using sendmail rather than SMTP.
-	 *
-	 * @deprecated since 1.44
-	 */
-	public const EnotifImpersonal = [
-		'default' => false,
-	];
-
-	/**
-	 * Maximum number of users to mail at once when using impersonal mail. Should
-	 * match the limit on your mail server.
-	 *
-	 * @deprecated since 1.44
-	 */
-	public const EnotifMaxRecips = [
-		'default' => 500,
-	];
-
-	/**
 	 * Use real name instead of username in e-mail "from" field.
 	 */
 	public const EnotifUseRealName = [
@@ -3209,7 +3212,7 @@ class MainConfigSchema {
 		'dynamicDefault' => [ 'use' => [ 'Localtimezone' ] ]
 	];
 
-	public static function getDefaultDBerrorLogTZ( $localtimezone ) {
+	public static function getDefaultDBerrorLogTZ( ?string $localtimezone ): string {
 		// NOTE: Extra fallback, in case $localtimezone is ''.
 		//       Many extsing LocalSettings files have $wgLocaltimezone = ''
 		//       in them, erroneously generated by the installer.
@@ -3307,22 +3310,6 @@ class MainConfigSchema {
 	];
 
 	/**
-	 * Pagelinks table schema migration stage, for normalizing pl_namespace and pl_title fields.
-	 *
-	 * Use the SCHEMA_COMPAT_XXX flags. Supported values:
-	 *
-	 *   - SCHEMA_COMPAT_WRITE_NEW | SCHEMA_COMPAT_READ_NEW (SCHEMA_COMPAT_NEW)
-	 *
-	 * History:
-	 *   - 1.41: Added
-	 *   - 1.43: Default has changed to SCHEMA_COMPAT_NEW.
-	 */
-	public const PageLinksSchemaMigrationStage = [
-		'default' => SCHEMA_COMPAT_NEW,
-		'type' => 'integer',
-	];
-
-	/**
 	 * Migration stage for file tables
 	 *
 	 * Use the SCHEMA_COMPAT_XXX flags. Supported values:
@@ -3345,12 +3332,16 @@ class MainConfigSchema {
 	 *
 	 *   - SCHEMA_COMPAT_WRITE_OLD | SCHEMA_COMPAT_READ_OLD (SCHEMA_COMPAT_OLD)
 	 *   - SCHEMA_COMPAT_WRITE_BOTH | SCHEMA_COMPAT_READ_OLD
+	 *   - SCHEMA_COMPAT_WRITE_BOTH | SCHEMA_COMPAT_READ_NEW
+	 *   - SCHEMA_COMPAT_WRITE_NEW | SCHEMA_COMPAT_READ_NEW (SCHEMA_COMPAT_NEW)
 	 *
 	 * History:
 	 *   - 1.44: Added
+	 *   - 1.45: Added support for _READ_NEW,
+	 *      changed default to SCHEMA_COMPAT_WRITE_BOTH | SCHEMA_COMPAT_READ_NEW.
 	 */
 	public const CategoryLinksSchemaMigrationStage = [
-		'default' => SCHEMA_COMPAT_OLD,
+		'default' => SCHEMA_COMPAT_WRITE_BOTH | SCHEMA_COMPAT_READ_NEW,
 		'type' => 'integer',
 	];
 
@@ -3408,11 +3399,38 @@ class MainConfigSchema {
 					],
 				],
 				// dumb version, no syntax highlighting
-				CONTENT_MODEL_JAVASCRIPT => JavaScriptContentHandler::class,
+				CONTENT_MODEL_JAVASCRIPT => [
+					'class' => JavaScriptContentHandler::class,
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
 				// simple implementation, for use by extensions, etc.
-				CONTENT_MODEL_JSON => JsonContentHandler::class,
+				CONTENT_MODEL_JSON => [
+					'class' => JsonContentHandler::class,
+					'services' => [
+						'ParsoidParserFactory',
+						'TitleFactory',
+					],
+				],
 				// dumb version, no syntax highlighting
-				CONTENT_MODEL_CSS => CssContentHandler::class,
+				CONTENT_MODEL_CSS => [
+					'class' => CssContentHandler::class,
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
+				CONTENT_MODEL_VUE => [
+					'class' => VueContentHandler::class,
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+					]
+				],
 				// plain text, for use by extensions, etc.
 				CONTENT_MODEL_TEXT => TextContentHandler::class,
 				// fallback for unknown models, from imports or extensions that were removed
@@ -3535,20 +3553,6 @@ class MainConfigSchema {
 	public const RevisionCacheExpiry = [
 		'default' => SqlBlobStore::DEFAULT_TTL,
 		'type' => 'integer',
-	];
-
-	/**
-	 * Revision slots may be cached in the main WAN cache and/or the local server cache
-	 * to reduce load on the database.
-	 *
-	 * Set to 0 to disable, or number of seconds before cache expiry.
-	 */
-	public const RevisionSlotsCacheExpiry = [
-		'default' => [
-			'local' => BagOStuff::TTL_HOUR,
-			'WAN' => BagOStuff::TTL_DAY,
-		],
-		'type' => 'map',
 	];
 
 	/**
@@ -3734,6 +3738,16 @@ class MainConfigSchema {
 	 * defined key in the associative array is "class", which gives the class name.
 	 * The remaining elements are passed through to the class as constructor
 	 * parameters.
+	 *
+	 * **Processing pools used in MediaWiki core:**
+	 * - ArticleView: parsing caused by users viewing a wiki page (per page and revision)
+	 * - HtmlRestApi: parsing caused by requests to the REST API (per page and revision)
+	 * - ApiParser: parsing caused by action=parse (per requesting user)
+	 * - FileRender: thumbnail generation (per file name)
+	 * - FileRenderExpensive: expensive thumbnail generation (per file name)
+	 * - GetLocalFileCopy: expensive thumbnail generation (per file name)
+	 * - diff: revision diff (per content hash)
+	 * - SpecialContributions: list user contributions (per requesting user)
 	 *
 	 * **Example using local redis instance:**
 	 *
@@ -5123,25 +5137,9 @@ class MainConfigSchema {
 	 * @since 1.32
 	 */
 	public const RawHtmlMessages = [
-		'default' => [
-			'copyright',
-			'history_copyright',
-		],
+		'default' => [],
 		'type' => 'list',
 		'items' => [ 'type' => 'string', ],
-	];
-
-	/**
-	 * Whether on-wiki overrides for the 'copyright' and 'history_copyright' messages, which allow raw
-	 * HTML, will be used.
-	 *
-	 * @since 1.43
-	 * @deprecated since 1.44
-	 */
-	public const AllowRawHtmlCopyrightMessages = [
-		'default' => false,
-		'type' => 'boolean',
-		'deprecated' => 'since 1.44',
 	];
 
 	/**
@@ -5198,7 +5196,7 @@ class MainConfigSchema {
 		'dynamicDefault' => [ 'use' => [ 'Localtimezone' ] ]
 	];
 
-	public static function getDefaultLocalTZoffset( $localtimezone ): int {
+	public static function getDefaultLocalTZoffset( ?string $localtimezone ): int {
 		// NOTE: Extra fallback, in case $localtimezone is ''.
 		//       Many extsing LocalSettings files have $wgLocaltimezone = ''
 		//       in them, erroneously generated by the installer.
@@ -6581,8 +6579,8 @@ class MainConfigSchema {
 			'bitcoin:', 'ftp://', 'ftps://', 'geo:', 'git://', 'gopher://', 'http://',
 			'https://', 'irc://', 'ircs://', 'magnet:', 'mailto:', 'matrix:', 'mms://',
 			'news:', 'nntp://', 'redis://', 'sftp://', 'sip:', 'sips:', 'sms:',
-			'ssh://', 'svn://', 'tel:', 'telnet://', 'urn:', 'worldwind://', 'xmpp:',
-			'//',
+			'ssh://', 'svn://', 'tel:', 'telnet://', 'urn:', 'wikipedia://', 'worldwind://',
+			'xmpp:', '//',
 		],
 		'type' => 'list',
 	];
@@ -6691,54 +6689,9 @@ class MainConfigSchema {
 	];
 
 	/**
-	 * Enable legacy media HTML structure in the output from the Parser.  The
-	 * alternative modern HTML structure that replaces it is described at
-	 * https://www.mediawiki.org/wiki/Parsing/Media_structure
-	 *
-	 * @deprecated since 1.41
-	 * @since 1.36
-	 */
-	public const ParserEnableLegacyMediaDOM = [
-		'default' => false,
-		'deprecated' => 'since 1.41',
-	];
-
-	/**
-	 * Enable legacy HTML structure for headings in the output from the Parser.
-	 * The legacy structure includes section edit links (and other markup added
-	 * by some extensions) inside the headings rather than outside them, leading
-	 * to poor accessibility. This doesn't affect headings on special pages.
-	 * Note that each skin also has to indicate support for the new structure.
-	 * More information: https://www.mediawiki.org/wiki/Heading_HTML_changes
-	 *
-	 * @deprecated since 1.44
-	 * @since 1.43
-	 */
-	public const ParserEnableLegacyHeadingDOM = [
-		'default' => false,
-		'deprecated' => 'since 1.44',
-	];
-
-	/**
-	 * Enable shipping the styles for the media HTML structure that replaces
-	 * legacy, when $wgParserEnableLegacyMediaDOM is `false`.  This is configured
-	 * separately so that it can continue to be served after the latter is disabled
-	 * but still in the cache.
-	 *
-	 * @deprecated since 1.41
-	 * @internal Temporary flag, T51097.
-	 * @since 1.38
-	 */
-	public const UseContentMediaStyles = [
-		'default' => false,
-		'deprecated' => 'since 1.41',
-	];
-
-	/**
-	 * Disable shipping the styles for the legacy media HTML structure
-	 * that has been replaced when $wgParserEnableLegacyMediaDOM is `false`.  This is
-	 * configured separately to give time for templates and extensions that mimic the
-	 * parser output to be migrated away.
+	 * Disable shipping the styles for the legacy media HTML structure.
+	 * This is to give time for templates and extensions that mimic the
+	 * legacy output to be migrated away.
 	 *
 	 * @internal Temporary feature flag for T318433.
 	 * @since 1.41
@@ -7640,7 +7593,9 @@ class MainConfigSchema {
 				'uselivepreview' => 0,
 				'usenewrc' => 1,
 				'watchcreations' => 1,
+				'watchcreations-expiry' => 'infinite',
 				'watchdefault' => 1,
+				'watchdefault-expiry' => 'infinite',
 				'watchdeletion' => 0,
 				'watchlistdays' => 7,
 				'watchlisthideanons' => 0,
@@ -7655,6 +7610,8 @@ class MainConfigSchema {
 				'watchmoves' => 0,
 				'watchrollback' => 0,
 				'watchuploads' => 1,
+				'watchrollback-expiry' => 'infinite',
+				'watchstar-expiry' => 'infinite',
 				'wlenhancedfilters-disable' => 0,
 				'wllimit' => 250,
 			],
@@ -9606,7 +9563,7 @@ class MainConfigSchema {
 		'dynamicDefault' => [ 'use' => [ 'ForceHTTPS' ] ]
 	];
 
-	public static function getDefaultCookieSecure( $forceHTTPS ): bool {
+	public static function getDefaultCookieSecure( bool $forceHTTPS ): bool {
 		return $forceHTTPS || ( WebRequest::detectProtocol() === 'https' );
 	}
 
@@ -9623,7 +9580,7 @@ class MainConfigSchema {
 	];
 
 	public static function getDefaultCookiePrefix(
-		$sharedDB, $sharedPrefix, $sharedTables, $dbName, $dbPrefix
+		?string $sharedDB, ?string $sharedPrefix, array $sharedTables, string $dbName, string $dbPrefix
 	): string {
 		if ( $sharedDB && in_array( 'user', $sharedTables ) ) {
 			return $sharedDB . ( $sharedPrefix ? "_$sharedPrefix" : '' );
@@ -9931,7 +9888,7 @@ class MainConfigSchema {
 
 	/**
 	 * If true, the MediaWiki error handler passes errors/warnings to the default error handler
-	 * after logging them. The setting is ignored when the track_errors php.ini flag is true.
+	 * after logging them.
 	 */
 	public const PropagateErrors = [
 		'default' => true,
@@ -10007,9 +9964,8 @@ class MainConfigSchema {
 	 *   a comment.  You can make the profiling data in HTML render visibly
 	 *   instead by setting the 'visible' configuration flag.
 	 *
-	 * - ProfilerOutputStats: outputs profiling data as StatsD metrics.
-	 *   It expects that $wgStatsdServer is set to the host (or host:port)
-	 *   of a statsd server.
+	 * - ProfilerOutputStats: outputs profiling data in a format as configured
+	 *   by $wgStatsFormat. It expects that $wgStatsTarget is set.
 	 *
 	 * - ProfilerOutputDump: outputs dump files that are compatible
 	 *   with the XHProf gui. It expects that `$wgProfiler['outputDir']`
@@ -10307,8 +10263,9 @@ class MainConfigSchema {
 
 	/**
 	 * Array of namespaces to generate a Google sitemap for when the
-	 * maintenance/generateSitemap.php script is run, or false if one is to be
-	 * generated for all namespaces.
+	 * maintenance/generateSitemap.php script is run. If this is false, the API
+	 * will consult NamespaceRobotPolicies, whereas the maintenance script will
+	 * produce a sitemap for all namespaces.
 	 */
 	public const SitemapNamespaces = [
 		'default' => false,
@@ -10316,24 +10273,49 @@ class MainConfigSchema {
 	];
 
 	/**
-	 * Custom namespace priorities for sitemaps. Setting this will allow you to
-	 * set custom priorities to namespaces when sitemaps are generated using the
-	 * maintenance/generateSitemap.php script.
-	 *
-	 * This should be a map of namespace IDs to priority
-	 *
-	 * **Example:**
-	 *
-	 * ```
-	 * $wgSitemapNamespacesPriorities = [
-	 *     NS_USER => '0.9',
-	 *     NS_HELP => '0.0',
-	 * ];
-	 * ```
+	 * @deprecated since 1.45 and ignored
 	 */
 	public const SitemapNamespacesPriorities = [
+		'deprecated' => 'since 1.45 and ignored',
 		'default' => false,
 		'type' => 'false|map',
+	];
+
+	/**
+	 * Configuration for the sitemaps REST API endpoint /rest.php/site/v1/sitemap/0
+	 *
+	 * To use this API, set $wgSitemapApiConfig['enabled'] = true and then add
+	 * to robots.txt something like:
+	 *
+	 *   Sitemap: http://www.example.com/w/rest.php/site/v1/sitemap/0
+	 *
+	 * Search engines like Google will then use the sitemap to efficiently
+	 * discover pages on your site.
+	 *
+	 * If you have more than 500M pages (sitemapsPerIndex × pagesPerSitemap)
+	 * you can list multiple sitemaps in robots.txt, incrementing the number in
+	 * the index URL.
+	 *
+	 * An associative array with the following keys:
+	 *  - enabled: Whether to deliver sitemaps.
+	 *  - sitemapsPerIndex: The maximum number of sitemap files to link to from
+	 *    each index file. This must be 50,000 or less to comply with the
+	 *    protocol.
+	 *  - pagesPerSitemap: The maximum number of URLs to link to from each
+	 *    sitemap file. This must be 50,000 or less to comply with the protocol.
+	 *    It might take a few seconds to render a sitemap with 50,000 URLs.
+	 *  - expiry: The cache expiry time in seconds.
+	 *
+	 * @since 1.45
+	 */
+	public const SitemapApiConfig = [
+		'type' => 'object',
+		'properties' => [
+			'enabled' => [ 'type' => 'bool', 'default' => false ],
+			'sitemapsPerIndex' => [ 'type' => 'float|int', 'default' => 50_000 ],
+			'pagesPerSitemap' => [ 'type' => 'float|int', 'default' => 10_000 ],
+			'expiry' => [ 'type' => 'float|int', 'default' => 3600 ],
+		]
 	];
 
 	/**
@@ -11604,7 +11586,7 @@ class MainConfigSchema {
 					0 => 'Emailer'
 				]
 			],
-			'enotifNotify' => EnotifNotifyJob::class,
+			'enotifNotify' => RecentChangeNotifyJob::class,
 			'fixDoubleRedirect' => [
 				'class' => DoubleRedirectJob::class,
 				'services' => [
@@ -12060,6 +12042,12 @@ class MainConfigSchema {
 			'managetags/deactivate' => LogFormatter::class,
 			'managetags/delete' => LogFormatter::class,
 			'merge/merge' => [
+				'class' => MergeLogFormatter::class,
+				'services' => [
+					'TitleParser',
+				]
+			],
+			'merge/merge-into' => [
 				'class' => MergeLogFormatter::class,
 				'services' => [
 					'TitleParser',
@@ -12640,6 +12628,36 @@ class MainConfigSchema {
 		'type' => 'list',
 	];
 
+	/**
+	 * A list of OpenAPI specs to be made available for exploration on
+	 * Special:RestSandbox. If none are given, Special:RestSandbox is disabled.
+	 *
+	 * This is an associative array, arbitrary spec IDs to spec descriptions.
+	 * Each spec description is an array with the following keys:
+	 * - url: the URL that will return the OpenAPI spec.
+	 * - name: the name of the API, to be shown on Special:RestSandbox.
+	 *   Ignored if msg is given.
+	 * - msg: a message key for the name of the API, to be shown on
+	 *   Special:RestSandbox.
+	 *
+	 * @unstable Introduced in 1.43. We may want to rename or change this to
+	 * accommodate the need to list external APIs in a central discovery
+	 * document.
+	 */
+	public const RestSandboxSpecs = [
+		'default' => [],
+		'type' => 'map',
+		'additionalProperties' => [
+			'type' => 'object',
+			'properties' => [
+				'url' => [ 'type' => 'string', 'format' => 'url' ],
+				'name' => [ 'type' => 'string' ],
+				'msg' => [ 'type' => 'string', 'description' => 'a message key' ]
+			],
+			'required' => [ 'url' ]
+		]
+	];
+
 	// endregion -- End AJAX and API
 
 	/***************************************************************************/
@@ -13120,6 +13138,15 @@ class MainConfigSchema {
 	];
 
 	/**
+	 * Allow redirection to another page when a user selects New Page on Special:Contribute page
+	 *
+	 */
+	public const SpecialContributeNewPageTarget = [
+		'default' => null,
+		'type' => '?string',
+	];
+
+	/**
 	 * Whether to enable the client-side edit recovery feature.
 	 *
 	 * @unstable Temporary feature flag, T341844
@@ -13214,4 +13241,14 @@ class MainConfigSchema {
 	];
 	// endregion -- End Miscellaneous
 
+	/**
+	 * Whether parser functions should use Leximorph handlers instead of Language methods.
+	 *
+	 * @unstable Temporary feature flag, T389281
+	 * @since 1.45
+	 */
+	public const UseLeximorph = [
+		'default' => false,
+		'type' => 'boolean',
+	];
 }

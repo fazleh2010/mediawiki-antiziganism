@@ -16,7 +16,6 @@ use MediaWiki\Languages\LanguageNameUtils;
 use MediaWiki\Linker\LinkRenderer;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Page\Hook\OpportunisticLinksUpdateHook;
-use MediaWiki\Page\PageIdentity;
 use MediaWiki\Page\PageIdentityValue;
 use MediaWiki\Page\WikiPage;
 use MediaWiki\Parser\MagicWordFactory;
@@ -61,9 +60,29 @@ class ContentHandlerTest extends MediaWikiIntegrationTestCase {
 						'ParsoidParserFactory',
 					],
 				],
-				CONTENT_MODEL_JAVASCRIPT => JavaScriptContentHandler::class,
-				CONTENT_MODEL_JSON => JsonContentHandler::class,
-				CONTENT_MODEL_CSS => CssContentHandler::class,
+				CONTENT_MODEL_JAVASCRIPT => [
+					'class' => JavaScriptContentHandler::class,
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
+				CONTENT_MODEL_JSON => [
+					'class' => JsonContentHandler::class,
+					'services' => [
+						'ParsoidParserFactory',
+						'TitleFactory',
+					],
+				],
+				CONTENT_MODEL_CSS => [
+					'class' => CssContentHandler::class,
+					'services' => [
+						'MainConfig',
+						'ParserFactory',
+						'UserOptionsLookup',
+					],
+				],
 				CONTENT_MODEL_TEXT => TextContentHandler::class,
 				'testing' => DummyContentHandlerForTesting::class,
 				'testing-callbacks' => static function ( $modelId ) {
@@ -589,7 +608,7 @@ class ContentHandlerTest extends MediaWikiIntegrationTestCase {
 	 * @dataProvider provideValidateSave
 	 */
 	public function testValidateSave( $content, $expectedResult ) {
-		$page = new PageIdentityValue( 0, 1, 'Foo', PageIdentity::LOCAL );
+		$page = PageIdentityValue::localIdentity( 0, 1, 'Foo' );
 		$contentHandlerFactory = $this->getServiceContainer()->getContentHandlerFactory();
 		$contentHandler = $contentHandlerFactory->getContentHandler( $content->getModel() );
 		$validateParams = new ValidationParams( $page, 0 );

@@ -22,12 +22,14 @@
  * @author Luke Welling lwelling@wikimedia.org
  */
 
-use MediaWiki\Mail\UserEmailContact;
+namespace MediaWiki\Mail;
+
+use Stringable;
 
 /**
  * Represent and format a single name and email address pair for SMTP.
  *
- * Used by Emailer, e.g. via EmailUser or EmailNotification.
+ * Used by Emailer, e.g. via EmailUser.
  *
  * @newable
  * @since 1.6.0
@@ -105,3 +107,6 @@ class MailAddress implements Stringable {
 		return $this->toString();
 	}
 }
+
+/** @deprecated class alias since 1.45 */
+class_alias( MailAddress::class, 'MailAddress' );

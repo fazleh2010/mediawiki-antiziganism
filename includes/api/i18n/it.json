@@ -6,6 +6,7 @@
 			"Beta16",
 			"Daimona Eaytoy",
 			"Einreiher",
+			"Emabarto01",
 			"Finizio",
 			"Gianfranco",
 			"GpieroMW",
@@ -27,8 +28,7 @@
 			"Toadino2",
 			"Urielejh",
 			"Valepert",
-			"Valerio Bozzolan",
-			"Emabarto01"
+			"Valerio Bozzolan"
 		]
 	},
 	"apihelp-main-extended-description": "<div class=\"hlist plainlinks api-main-links\">\n* [[mw:Special:MyLanguage/API:Main_page|Documentazione]]\n* [[mw:Special:MyLanguage/API:Etiquette|Etiquette & linee guida sull'utilizzo]]\n* [[mw:Special:MyLanguage/API:FAQ|Domande frequenti]]\n* [https://lists.wikimedia.org/postorius/lists/mediawiki-api.lists.wikimedia.org/ Mailing list]\n* [https://lists.wikimedia.org/postorius/lists/mediawiki-api-announce.lists.wikimedia.org/ Annunci sull'API]\n* [https://phabricator.wikimedia.org/maniphest/query/GebfyV4uCaLd/#R Bug & richieste]\n</div>\n<strong>Stato:</strong> l'API MediaWiki è un'interfaccia matura e stabile che è attivamente supportata e migliorata. Anche se cerchiamo di evitarlo, potremmo dover fare delle modifiche che causano malfunzionamenti; iscriviti alla [https://lists.wikimedia.org/hyperkitty/list/mediawiki-api-announce@lists.wikimedia.org/ mailing list sugli annunci delle API MediaWiki] per essere informato sugli aggiornamenti.\n\n<strong>Istruzioni sbagliate:</strong> quando vengono impartite alle API delle istruzioni sbagliate, un'intestazione HTTP verrà inviata col messaggio \"MediaWiki-API-Error\" e, sia il valore dell'intestazione, sia il codice d'errore, verranno impostati con lo stesso valore. Per maggiori informazioni leggi [[mw:Special:MyLanguage/API:Errors_and_warnings|API:Errori ed avvertimenti]] (in inglese).\n\n<p class=\"mw-apisandbox-link\"><strong>Test:</strong> per testare facilmente le richieste API, vedi [[Special:ApiSandbox]].</p>",
@@ -578,6 +578,9 @@
 	"apihelp-query+templates-param-dir": "La direzione in cui elencare.",
 	"apihelp-query+tokens-param-type": "Tipi di token da richiedere.",
 	"apihelp-query+tokens-example-simple": "Recupera un token csrf (il predefinito).",
+	"apihelp-query+trackingcategories-param-limit": "Quante categorie di monitoraggio restituire.",
+	"apihelp-query+trackingcategories-paramvalue-prop-size": "Aggiungi il numero di pagine nella categoria di monitoraggio.",
+	"apihelp-query+trackingcategories-example-size": "Elenca categorie di monitoraggio con informazioni sul numero di pagine in ognuna.",
 	"apihelp-query+transcludedin-summary": "Trova tutte le pagine che incorporano quella specificata.",
 	"apihelp-query+transcludedin-param-prop": "Quali proprietà ottenere:",
 	"apihelp-query+transcludedin-paramvalue-prop-pageid": "ID pagina di ogni pagina.",

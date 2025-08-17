@@ -20,7 +20,6 @@ use MediaWiki\Session\Session;
 use MediaWiki\Session\SessionManager;
 use MediaWiki\Tests\Unit\Permissions\MockAuthorityTrait;
 use MediaWikiLangTestCase;
-use PHPUnit\Framework\AssertionFailedError;
 use PHPUnit\Framework\Constraint\Constraint;
 use ReturnTypeWillChange;
 
@@ -183,7 +182,21 @@ abstract class ApiTestCase extends MediaWikiLangTestCase {
 		$module = new ApiMain( $context, true );
 
 		// run it!
-		$module->execute();
+		try {
+			$module->execute();
+		} catch ( ApiUsageException $exception ) {
+			if ( !isset( $this->expectedApiErrorCode ) ) {
+				throw $exception;
+			}
+
+			$this->assertApiErrorCode( $this->expectedApiErrorCode, $exception );
+			// Exception used, no failure in post assertion needed
+			$this->expectedApiErrorCode = null;
+
+			// rethrow, no further code in the test class can be executed
+			$this->expectException( ApiUsageException::class );
+			throw $exception;
+		}
 
 		// construct result
 		$results = [
@@ -266,17 +279,48 @@ abstract class ApiTestCase extends MediaWikiLangTestCase {
 
 	private ?string $expectedApiErrorCode;
 
+	/** @postCondition */
+	public function expectedApiErrorThrownPostConditions(): void {
+		if ( isset( $this->expectedApiErrorCode ) ) {
+			self::fail( sprintf(
+				'Failed asserting that exception with API error code "%s" is thrown',
+				$this->expectedApiErrorCode
+			) );
+		}
+	}
+
 	/**
-	 * Expect an ApiUsageException that results in the given API error code to be thrown.
-	 *
-	 * Note that you can't mix this method with standard PHPUnit expectException() methods,
-	 * as PHPUnit will catch the exception and prevent us from testing it.
+	 * Expect an ApiUsageException that results in the given API error code to be thrown
+	 * on the next doApiRequest() or doApiRequestWithToken() call.
 	 *
 	 * @since 1.41
 	 * @param string $expectedCode
 	 */
 	protected function expectApiErrorCode( string $expectedCode ) {
 		$this->expectedApiErrorCode = $expectedCode;
+	}
+
+	/**
+	 * Expect an ApiUsageException that results in the given API error code to be thrown
+	 * from provided callback.
+	 *
+	 * @since 1.45
+	 * @param string $expectedCode
+	 */
+	protected function expectApiErrorCodeFromCallback( string $expectedCode, callable $callback ) {
+		try {
+			$callback();
+		} catch ( ApiUsageException $exception ) {
+			$this->assertApiErrorCode( $expectedCode, $exception );
+
+			// rethrow, no further code in the test class can be executed
+			$this->expectException( ApiUsageException::class );
+			throw $exception;
+		}
+		self::fail( sprintf(
+			'Failed asserting that exception with API error code "%s" is thrown',
+			$this->expectedApiErrorCode
+		) );
 	}
 
 	/**
@@ -326,37 +370,6 @@ abstract class ApiTestCase extends MediaWikiLangTestCase {
 		};
 
 		$this->assertThat( $exception, $constraint, $message );
-	}
-
-	/**
-	 * @inheritDoc
-	 *
-	 * Adds support for expectApiErrorCode().
-	 */
-	protected function runTest() {
-		try {
-			$testResult = parent::runTest();
-
-		} catch ( ApiUsageException $exception ) {
-			if ( !isset( $this->expectedApiErrorCode ) ) {
-				throw $exception;
-			}
-
-			$this->assertApiErrorCode( $this->expectedApiErrorCode, $exception );
-
-			return null;
-		}
-
-		if ( !isset( $this->expectedApiErrorCode ) ) {
-			return $testResult;
-		}
-
-		throw new AssertionFailedError(
-			sprintf(
-				'Failed asserting that exception with API error code "%s" is thrown',
-				$this->expectedApiErrorCode
-			)
-		);
 	}
 }
 

@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\Tests\OutputTransform\Stages;
 
@@ -22,20 +23,20 @@ class DeduplicateStylesTest extends OutputTransformStageTestBase {
 		);
 	}
 
-	public function provideShouldRun(): array {
+	public static function provideShouldRun(): array {
 		return( [
 			[ new ParserOutput(), null, [ 'deduplicateStyles' => true ] ],
 			[ new ParserOutput(), null, [] ],
 		] );
 	}
 
-	public function provideShouldNotRun(): array {
+	public static function provideShouldNotRun(): array {
 		return( [
 			[ new ParserOutput(), null, [ 'deduplicateStyles' => false ] ],
 		] );
 	}
 
-	public function provideTransform(): iterable {
+	public static function provideTransform(): iterable {
 		$testCases = [
 			'legacy parser output' => [
 				TestUtils::TEST_TO_DEDUP,

@@ -38,6 +38,7 @@ use MediaWiki\Parser\Parser;
 use MediaWiki\Parser\ParserOptions;
 use MediaWiki\Permissions\PermissionManager;
 use MediaWiki\Permissions\RestrictionStore;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\Revision\RevisionLookup;
 use MediaWiki\Revision\SlotRecord;
 use MediaWiki\Session\SessionManager;
@@ -89,10 +90,12 @@ class RawAction extends FormlessAction {
 		return 'raw';
 	}
 
+	/** @inheritDoc */
 	public function requiresWrite() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function requiresUnblock() {
 		return false;
 	}
@@ -103,6 +106,7 @@ class RawAction extends FormlessAction {
 	 */
 	public function onView() {
 		$this->getOutput()->disable();
+		ContentSecurityPolicy::sendRestrictiveHeader();
 		$request = $this->getRequest();
 		$response = $request->response();
 		$config = $this->context->getConfig();

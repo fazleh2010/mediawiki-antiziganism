@@ -56,13 +56,14 @@ class WikitextContentHandlerIntegrationTest extends TextContentHandlerIntegratio
 			'maxIncludeSize',
 			'suppressSectionEditLinks',
 			'useParsoid',
+			'isMessage',
 			'wrapclass',
 			'expensiveParserFunctionLimit',
 			'maxPPExpandDepth',
 			'maxPPNodeCount',
 		];
 		$commonParsoidOptions = array_merge( $commonOptions, [
-			// Currently no options specific to parsoid parses
+			'currentRevisionRecordCallback',
 		] );
 		$commonLegacyOptions = array_merge( $commonOptions, [
 			'disableTitleConversion',

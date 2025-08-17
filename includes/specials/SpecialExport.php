@@ -22,6 +22,7 @@
 
 namespace MediaWiki\Specials;
 
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Export\WikiExporterFactory;
 use MediaWiki\HTMLForm\Field\HTMLTextAreaField;
 use MediaWiki\HTMLForm\HTMLForm;
@@ -29,6 +30,7 @@ use MediaWiki\Linker\LinksMigration;
 use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Page\PageIdentity;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Title\Title;
 use MediaWiki\Title\TitleFormatter;
@@ -66,6 +68,7 @@ class SpecialExport extends SpecialPage {
 		$this->linksMigration = $linksMigration;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->setHeaders();
 		$this->outputHeader();
@@ -208,6 +211,7 @@ class SpecialExport extends SpecialPage {
 			wfResetOutputBuffers();
 			$request->response()->header( 'Content-type: application/xml; charset=utf-8' );
 			$request->response()->header( 'X-Robots-Tag: noindex,nofollow' );
+			ContentSecurityPolicy::sendRestrictiveHeader();
 
 			if ( $request->getCheck( 'wpDownload' ) ) {
 				// Provide a sensible filename suggestion
@@ -505,7 +509,7 @@ class SpecialExport extends SpecialPage {
 	protected function getTemplates( $inputPages, $pageSet ) {
 		[ $nsField, $titleField ] = $this->linksMigration->getTitleFields( 'templatelinks' );
 		$queryInfo = $this->linksMigration->getQueryInfo( 'templatelinks' );
-		$dbr = $this->dbProvider->getReplicaDatabase();
+		$dbr = $this->dbProvider->getReplicaDatabase( TemplateLinksTable::VIRTUAL_DOMAIN );
 		$queryBuilder = $dbr->newSelectQueryBuilder()
 			->caller( __METHOD__ )
 			->select( [ 'namespace' => $nsField, 'title' => $titleField ] )
@@ -614,6 +618,7 @@ class SpecialExport extends SpecialPage {
 		return $pageSet;
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pagetools';
 	}

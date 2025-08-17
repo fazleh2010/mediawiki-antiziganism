@@ -29,6 +29,7 @@ use MediaWiki\Page\MovePageFactory;
 use MediaWiki\Status\Status;
 use MediaWiki\Title\Title;
 use MediaWiki\User\Options\UserOptionsLookup;
+use MediaWiki\Watchlist\WatchedItemStoreInterface;
 use MediaWiki\Watchlist\WatchlistManager;
 use Wikimedia\ParamValidator\ParamValidator;
 
@@ -49,6 +50,7 @@ class ApiMove extends ApiBase {
 		MovePageFactory $movePageFactory,
 		RepoGroup $repoGroup,
 		WatchlistManager $watchlistManager,
+		WatchedItemStoreInterface $watchedItemStore,
 		UserOptionsLookup $userOptionsLookup
 	) {
 		parent::__construct( $mainModule, $moduleName );
@@ -61,6 +63,7 @@ class ApiMove extends ApiBase {
 		$this->watchlistMaxDuration =
 			$this->getConfig()->get( MainConfigNames::WatchlistExpiryMaxDuration );
 		$this->watchlistManager = $watchlistManager;
+		$this->watchedItemStore = $watchedItemStore;
 		$this->userOptionsLookup = $userOptionsLookup;
 	}
 
@@ -182,11 +185,12 @@ class ApiMove extends ApiBase {
 		}
 
 		$watch = $params['watchlist'] ?? 'preferences';
-		$watchlistExpiry = $this->getExpiryFromParams( $params );
+		$watchlistExpiryFrom = $this->getExpiryFromParams( $params, $fromTitle, $user );
+		$watchlistExpiryTo = $this->getExpiryFromParams( $params, $toTitle, $user );
 
 		// Watch pages
-		$this->setWatch( $watch, $fromTitle, $user, 'watchmoves', $watchlistExpiry );
-		$this->setWatch( $watch, $toTitle, $user, 'watchmoves', $watchlistExpiry );
+		$this->setWatch( $watch, $fromTitle, $user, 'watchmoves', $watchlistExpiryFrom );
+		$this->setWatch( $watch, $toTitle, $user, 'watchmoves', $watchlistExpiryTo );
 
 		$result->addValue( null, $this->getModuleName(), $r );
 	}
@@ -226,14 +230,17 @@ class ApiMove extends ApiBase {
 		return $retval;
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$params = [
 			'from' => null,
@@ -263,10 +270,12 @@ class ApiMove extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=move&from=Badtitle&to=Goodtitle&token=123ABC&' .
@@ -275,6 +284,7 @@ class ApiMove extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Move';
 	}

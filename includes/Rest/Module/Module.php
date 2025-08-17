@@ -176,8 +176,10 @@ abstract class Module {
 		$config = $match['config'] ?? [];
 		$config['path'] ??= $match['path'];
 
+		$openApiSpec = $match['openApiSpec'] ?? [];
+
 		// Provide context about the module
-		$handler->initContext( $this, $match['path'], $config );
+		$handler->initContext( $this, $match['path'], $config, $openApiSpec );
 
 		// Inject services and state from the router
 		$this->getRouter()->prepareHandler( $handler );
@@ -236,7 +238,7 @@ abstract class Module {
 	 * @return never
 	 * @throws HttpException
 	 */
-	protected function throwNoMatch( string $path, string $method, array $allowed ): void {
+	protected function throwNoMatch( string $path, string $method, array $allowed ): never {
 		// Check for CORS Preflight. This response will *not* allow the request unless
 		// an Access-Control-Allow-Origin header is added to this response.
 		if ( $this->cors && $method === 'OPTIONS' && $allowed ) {
@@ -505,7 +507,7 @@ abstract class Module {
 		// even if the spec allows multiple.
 		$moduleId = $this->getPathPrefix();
 
-		// Fields from OAS Info to include.
+		// Fields from openApiSpec info to include.
 		// Note that mwapi-1.0 is based on OAS 3.0, so it doesn't support the
 		// "summary" property introduced in 3.1.
 		$infoFields = [ 'version', 'title', 'description' ];

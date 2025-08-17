@@ -1,12 +1,11 @@
-'use strict';
+import MWBot from 'mwbot';
+import Page from './Page.js';
 
-const MWBot = require( 'mwbot' );
-const Page = require( './Page' );
 const MAINPAGE_REQUESTS_MAX_RUNS = 10; // (arbitrary) safe-guard against endless execution
 
 function getJobCount() {
 	const bot = new MWBot( {
-		apiUrl: `${ browser.config.baseUrl }/api.php`
+		apiUrl: `${ browser.options.baseUrl }/api.php`
 	} );
 	return bot.request( {
 		action: 'query',
@@ -65,4 +64,4 @@ class RunJobs {
 	}
 }
 
-module.exports = RunJobs;
+export default RunJobs;

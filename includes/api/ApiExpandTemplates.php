@@ -118,7 +118,6 @@ class ApiExpandTemplates extends ApiBase {
 			$parser = $this->parserFactory->getInstance();
 			$parser->startExternalParse( $titleObj, $options, Parser::OT_PREPROCESS );
 			$dom = $parser->preprocessToDom( $params['text'] );
-			// @phan-suppress-next-line PhanUndeclaredMethodInCallable
 			if ( is_callable( [ $dom, 'saveXML' ] ) ) {
 				// @phan-suppress-next-line PhanUndeclaredMethod
 				$xml = $dom->saveXML();
@@ -211,6 +210,7 @@ class ApiExpandTemplates extends ApiBase {
 		$result->addValue( null, $this->getModuleName(), $retval );
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'title' => null,
@@ -245,6 +245,7 @@ class ApiExpandTemplates extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=expandtemplates&text={{Project:Sandbox}}'
@@ -252,6 +253,7 @@ class ApiExpandTemplates extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Expandtemplates';
 	}

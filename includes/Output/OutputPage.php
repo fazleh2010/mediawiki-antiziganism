@@ -61,6 +61,7 @@ use MediaWiki\Request\WebRequest;
 use MediaWiki\ResourceLoader as RL;
 use MediaWiki\ResourceLoader\ResourceLoader;
 use MediaWiki\Session\SessionManager;
+use MediaWiki\Session\SessionManagerInterface;
 use MediaWiki\Skin\QuickTemplate;
 use MediaWiki\Skin\Skin;
 use MediaWiki\SpecialPage\SpecialPage;
@@ -355,7 +356,7 @@ class OutputPage extends ContextSource {
 	private $mRobotsOptions = [ 'max-image-preview' => 'standard' ];
 
 	/**
-	 * @var array Headers that cause the cache to vary.  Key is header name,
+	 * @var array<string,null> Headers that cause the cache to vary. Key is header name,
 	 * value should always be null.  (Value was an array of options for
 	 * the `Key` header, which was deprecated in 1.32 and removed in 1.34.)
 	 */
@@ -388,7 +389,7 @@ class OutputPage extends ContextSource {
 	private $mEnableTOC = false;
 
 	/**
-	 * @var array<string,bool> Flags set in the ParserOutput
+	 * @var array<string,true> Flags set in the ParserOutput
 	 */
 	private $mOutputFlags = [];
 
@@ -1164,19 +1165,15 @@ class OutputPage extends ContextSource {
 	 * tags that were escaped in \<h1\> will still be escaped in \<title\>, and
 	 * good tags like \<i\> will be dropped entirely.
 	 *
-	 * @param string|Message $name The page title, either as HTML string or
-	 *   as a message which will be formatted with FORMAT_TEXT to yield HTML.
-	 *   Passing a Message is deprecated, since 1.41; please use
-	 *   ::setPageTitleMsg() for that case instead.
-	 * @param-taint $name tainted
-	 * Phan-taint-check gets very confused by $name being either a string or a Message
+	 * Since 1.45, passing a Message to this method is no longer allowed.
+	 *
+	 * @param string $name The page title, as HTML string.
+	 *   To set the page title from a localisation message, use ::setPageTitleMsg().
 	 */
 	public function setPageTitle( $name ) {
-		if ( $name instanceof Message ) {
-			// T343994: use ::setPageTitleMsg() instead (which uses ::escaped())
-			wfDeprecated( __METHOD__ . ' with Message argument', '1.41' );
-			$name = $name->setContext( $this->getContext() )->text();
-		}
+		// This is a stronger check than a `string $name` type hint, which automatically stringifies
+		// stringable objects such as Message when not using strict_types, and we don't want that.
+		Assert::parameterType( 'string', $name, '$name' );
 		$this->setPageTitleInternal( $name );
 	}
 
@@ -1605,7 +1602,11 @@ class OutputPage extends ContextSource {
 	 * or replace language links from the output page.
 	 */
 	public function setLanguageLinks( array $newLinkArray ) {
-		$this->metadata->setLanguageLinks( $newLinkArray );
+		wfDeprecated( __METHOD__, '1.43' );
+		$this->metadata->clearLanguageLinks();
+		foreach ( $newLinkArray as $l ) {
+			$this->metadata->addLanguageLink( $l );
+		}
 	}
 
 	/**
@@ -2035,6 +2036,9 @@ class OutputPage extends ContextSource {
 
 	/**
 	 * Get/set the ParserOptions object to use for wikitext parsing
+	 * @param bool $interface Use interface language (instead of content language) while parsing
+	 *   language sensitive magic words like GRAMMAR and PLURAL.  This also disables
+	 *   LanguageConverter.
 	 */
 	private function internalParserOptions( bool $interface ): ParserOptions {
 		if ( !$this->getUser()->isSafeToLoad() ) {
@@ -2184,7 +2188,8 @@ class OutputPage extends ContextSource {
 		if ( $title === null ) {
 			throw new RuntimeException( 'No title in ' . __METHOD__ );
 		}
-		$this->addWikiTextTitleInternal( $text, $title, $linestart, true );
+		$this->addWikiTextTitleInternal( $text, $title, $linestart,
+			$this->internalParserOptions( true ) );
 	}
 
 	/**
@@ -2199,11 +2204,13 @@ class OutputPage extends ContextSource {
 	 *   the <div> wrapper in the output HTML, should not be empty
 	 * @param string $text Wikitext in the user interface language
 	 * @since 1.32
+	 * @deprecated since 1.45 Use wrapWikiMsg() or addWikiTextAsInterface() instead
 	 * @phan-param non-empty-string $wrapperClass
 	 */
 	public function wrapWikiTextAsInterface(
 		$wrapperClass, $text
 	) {
+		wfDeprecated( __METHOD__, '1.45' );
 		if ( $wrapperClass === '' ) {
 			// I don't think anyone actually uses this corner case,
 			// but if you call wrapWikiTextAsInterface with
@@ -2223,7 +2230,7 @@ class OutputPage extends ContextSource {
 			$text,
 			$title,
 			true,
-			true,
+			$this->internalParserOptions( true ),
 			$wrapperClass
 		);
 	}
@@ -2248,7 +2255,8 @@ class OutputPage extends ContextSource {
 		if ( !$title ) {
 			throw new RuntimeException( 'No title in ' . __METHOD__ );
 		}
-		$this->addWikiTextTitleInternal( $text, $title, $linestart, false );
+		$this->addWikiTextTitleInternal( $text, $title, $linestart,
+			$this->internalParserOptions( false ) );
 	}
 
 	/**
@@ -2257,19 +2265,18 @@ class OutputPage extends ContextSource {
 	 *
 	 * @param string $text Wikitext
 	 * @param PageReference $title
-	 * @param bool $linestart Is this the start of a line?@param
-	 * @param bool $interface Whether it is an interface message
-	 *   (for example disables conversion)
+	 * @param bool $linestart Is this the start of a line?
+	 * @param ParserOptions $popts
 	 * @param string|null $wrapperClass if not null, wraps the output in
 	 *   a `<div class="$wrapperClass">`
 	 */
 	private function addWikiTextTitleInternal(
-		string $text, PageReference $title, bool $linestart, bool $interface,
+		string $text, PageReference $title, bool $linestart, ParserOptions $popts,
 		?string $wrapperClass = null
 	) {
 		[ $parserOutput, $parserOptions ] = $this->parseInternal(
-			$text, $title, $linestart, $interface, true, /*allowTOC*/
-			$wrapperClass, false/*postprocess*/
+			$text, $title, $linestart, $popts,
+			/*allowTOC*/ true, $wrapperClass, /*postprocess*/ false
 		);
 
 		$this->addParserOutput( $parserOutput, $parserOptions, [
@@ -2297,11 +2304,14 @@ class OutputPage extends ContextSource {
 	/**
 	 * @internal Will be replaced by direct access to
 	 *  ParserOutput::getOutputFlag()
-	 * @param string $name A flag name from ParserOutputFlags
+	 * @param ParserOutputFlags|string $name A flag name from ParserOutputFlags
 	 * @return bool
 	 */
-	public function getOutputFlag( string $name ): bool {
-		return isset( $this->mOutputFlags[$name] );
+	public function getOutputFlag( ParserOutputFlags|string $name ): bool {
+		if ( $name instanceof ParserOutputFlags ) {
+			$name = $name->value;
+		}
+		return $this->mOutputFlags[$name] ?? false;
 	}
 
 	/**
@@ -2517,7 +2527,10 @@ class OutputPage extends ContextSource {
 		$languageLinks = $this->metadata->getLanguageLinks();
 		// This hook can be used to remove/replace language links
 		$this->getHookRunner()->onLanguageLinks( $this->getTitle(), $languageLinks, $linkFlags );
-		$this->metadata->setLanguageLinks( $languageLinks );
+		$this->metadata->clearLanguageLinks();
+		foreach ( ( $languageLinks ?? [] ) as $l ) {
+			$this->metadata->addLanguageLink( $l );
+		}
 
 		$this->getHookRunner()->onOutputPageParserOutput( $this, $parserOutput );
 
@@ -2534,7 +2547,7 @@ class OutputPage extends ContextSource {
 		// (See ParserOutput::collectMetadata())
 		$flags =
 			array_flip( $parserOutput->getAllFlags() ) +
-			array_flip( ParserOutputFlags::cases() );
+			array_flip( ParserOutputFlags::values() );
 		foreach ( $flags as $name => $ignore ) {
 			if ( $parserOutput->getOutputFlag( $name ) ) {
 				$this->mOutputFlags[$name] = true;
@@ -2675,8 +2688,8 @@ class OutputPage extends ContextSource {
 		}
 		[ $po, ] = $this->parseInternal(
 			$text, $title, $linestart,
-			/*interface*/false, /*allowTOC*/false, /*wrapperDivClass*/null,
-			/*postprocess*/true
+			$this->internalParserOptions( false ),
+			/*allowTOC*/ false, /*wrapperDivClass*/ null, /*postprocess*/ true
 		);
 		return $po->getContentHolderText();
 	}
@@ -2699,8 +2712,8 @@ class OutputPage extends ContextSource {
 		}
 		[ $po, ] = $this->parseInternal(
 			$text, $title, $linestart,
-			/*interface*/true, false/*allowTOC*/, /*wrapperDivClass*/null,
-			/*postprocess*/true
+			$this->internalParserOptions( true ),
+			/*allowTOC*/ false, /*wrapperDivClass*/ null, /*postprocess*/ true
 		);
 		return $po->getContentHolderText();
 	}
@@ -2730,9 +2743,7 @@ class OutputPage extends ContextSource {
 	 * @param string $text
 	 * @param PageReference $title The title to use
 	 * @param bool $linestart Is this the start of a line?
-	 * @param bool $interface Use interface language (instead of content language) while parsing
-	 *   language sensitive magic words like GRAMMAR and PLURAL.  This also disables
-	 *   LanguageConverter.
+	 * @param ParserOptions $popts
 	 * @param bool $allowTOC Whether to allow a TOC to be generated
 	 * @param ?string $wrapperClass Wrapper class to use, or `null` for
 	 *   unwrapped output.
@@ -2740,24 +2751,19 @@ class OutputPage extends ContextSource {
 	 */
 	private function parseInternal(
 		string $text, PageReference $title,
-		bool $linestart, bool $interface, bool $allowTOC, ?string $wrapperClass,
+		bool $linestart, ParserOptions $popts, bool $allowTOC, ?string $wrapperClass,
 		bool $postprocess
 	) {
-		$popts = $this->internalParserOptions( $interface );
-
 		$parserOutput = MediaWikiServices::getInstance()->getParserFactory()->getInstance()
 			->parse(
 				$text, $title, $popts,
 				$linestart, true, $this->mRevisionId
 			);
 
-		// Set wrapper class directly on ParserOutput, since otherwise
-		// ParserOptions::getWrapOutputClass() is ignored if $interface=true;
-		// see ParserOutput::setFromParserOptions()
+		// Don't include default mw-parser-output wrap class, just use our own
+		$parserOutput->clearWrapperDivClass();
 		if ( $wrapperClass !== null ) {
 			$parserOutput->addWrapperDivClass( $wrapperClass );
-		} else {
-			$parserOutput->clearWrapperDivClass();
 		}
 
 		if ( !$allowTOC ) {
@@ -2877,6 +2883,10 @@ class OutputPage extends ContextSource {
 		$this->cacheIsFinal = true;
 	}
 
+	private function getSessionManager(): SessionManagerInterface {
+		return MediaWikiServices::getInstance()->getSessionManager();
+	}
+
 	/**
 	 * Get the list of cookie names that will influence the cache
 	 *
@@ -2886,7 +2896,7 @@ class OutputPage extends ContextSource {
 		if ( self::$cacheVaryCookies === null ) {
 			$config = $this->getConfig();
 			self::$cacheVaryCookies = array_values( array_unique( array_merge(
-				SessionManager::singleton()->getVaryCookies(),
+				$this->getSessionManager()->getVaryCookies(),
 				[
 					'forceHTTPS',
 				],
@@ -2938,7 +2948,7 @@ class OutputPage extends ContextSource {
 			$this->addVaryHeader( 'Cookie' );
 		}
 
-		foreach ( SessionManager::singleton()->getVaryHeaders() as $header => $_ ) {
+		foreach ( $this->getSessionManager()->getVaryHeaders() as $header => $_ ) {
 			$this->addVaryHeader( $header );
 		}
 		return 'Vary: ' . implode( ', ', array_keys( $this->mVaryHeader ) );
@@ -3310,26 +3320,11 @@ class OutputPage extends ContextSource {
 
 	/**
 	 * Prepare this object to display an error page; disable caching and
-	 * indexing, clear the current text and redirect, set the page's title
-	 * and optionally a custom HTML title (content of the "<title>" tag).
+	 * indexing, clear the current text and redirect.
 	 *
-	 * @param string|Message|null $pageTitle Will be passed directly to setPageTitle()
-	 * @param string|Message|false $htmlTitle Will be passed directly to setHTMLTitle();
-	 *                   optional, if not passed the "<title>" attribute will be
-	 *                   based on $pageTitle
-	 * @note Explicitly passing $pageTitle or $htmlTitle has been deprecated
-	 *   since 1.41; use ::setPageTitleMsg() and ::setHTMLTitle() instead.
+	 * You should usually call setPageTitleMsg() with the error message after this method.
 	 */
-	public function prepareErrorPage( $pageTitle = null, $htmlTitle = false ) {
-		if ( $pageTitle !== null || $htmlTitle !== false ) {
-			wfDeprecated( __METHOD__ . ' with explicit arguments', '1.41' );
-			if ( $pageTitle !== null ) {
-				$this->setPageTitle( $pageTitle );
-			}
-			if ( $htmlTitle !== false ) {
-				$this->setHTMLTitle( $htmlTitle );
-			}
-		}
+	public function prepareErrorPage() {
 		$this->setRobotPolicy( 'noindex,nofollow' );
 		$this->setArticleRelated( false );
 		$this->disableClientCache();
@@ -3387,40 +3382,8 @@ class OutputPage extends ContextSource {
 	public function showPermissionStatus( PermissionStatus $status, $action = null ) {
 		Assert::precondition( !$status->isGood(), 'Status must have errors' );
 
-		$this->showPermissionInternal(
-			array_map( fn ( $msg ) => $this->msg( $msg ), $status->getMessages() ),
-			$action
-		);
-	}
+		$messages = $status->getMessages();
 
-	/**
-	 * Output a standard permission error page
-	 *
-	 * @deprecated since 1.43. Use ::showPermissionStatus instead
-	 * @param array $errors Error message keys or [key, param...] arrays
-	 * @param string|null $action Action that was denied or null if unknown
-	 */
-	public function showPermissionsErrorPage( array $errors, $action = null ) {
-		wfDeprecated( __METHOD__, '1.43' );
-		foreach ( $errors as $key => $error ) {
-			$errors[$key] = (array)$error;
-		}
-
-		$this->showPermissionInternal(
-			// @phan-suppress-next-line PhanParamTooFewUnpack Elements of $errors already annotated as non-empty
-			array_map( fn ( $err ) => $this->msg( ...$err ), $errors ),
-			$action
-		);
-	}
-
-	/**
-	 * Helper for showPermissionStatus() and deprecated showPermissionsErrorMessage(),
-	 * should be inlined when the deprecated method is removed.
-	 *
-	 * @param Message[] $messages
-	 * @param string|null $action
-	 */
-	public function showPermissionInternal( array $messages, $action = null ) {
 		$services = MediaWikiServices::getInstance();
 		$groupPermissionsLookup = $services->getGroupPermissionsLookup();
 
@@ -3493,7 +3456,7 @@ class OutputPage extends ContextSource {
 		} else {
 			$this->prepareErrorPage();
 			$this->setPageTitleMsg( $this->msg( 'permissionserrors' ) );
-			$this->addWikiTextAsInterface( $this->formatPermissionInternal( $messages, $action ) );
+			$this->addWikiTextAsInterface( $this->formatPermissionStatus( $status, $action ) );
 		}
 	}
 
@@ -3521,31 +3484,16 @@ class OutputPage extends ContextSource {
 	 * @param string|null $action that was denied or null if unknown
 	 * @return string
 	 * @return-taint tainted
+	 *
+	 * @suppress SecurityCheck-DoubleEscaped Working with plain text, not HTML
 	 */
 	public function formatPermissionStatus( PermissionStatus $status, ?string $action = null ): string {
 		if ( $status->isGood() ) {
 			return '';
 		}
 
-		return $this->formatPermissionInternal(
-			array_map( fn ( $msg ) => $this->msg( $msg ), $status->getMessages() ),
-			$action
-		);
-	}
+		$messages = array_map( fn ( $msg ) => $this->msg( $msg ), $status->getMessages() );
 
-	/**
-	 * Helper for formatPermissionStatus() that was meant to be inlined when formatPermissionsErrorMessage()
-	 * was removed, but is also being called from showPermissionInternal() too.
-	 *
-	 * @param Message[] $messages
-	 * @param-taint $messages none
-	 * @param string|null $action
-	 * @return string
-	 * @return-taint tainted
-	 *
-	 * @suppress SecurityCheck-DoubleEscaped Working with plain text, not HTML
-	 */
-	private function formatPermissionInternal( array $messages, $action = null ) {
 		if ( $action == null ) {
 			$text = $this->msg( 'permissionserrorstext', count( $messages ) )->plain() . "\n\n";
 		} else {
@@ -3601,21 +3549,6 @@ class OutputPage extends ContextSource {
 			$wrap = Html::rawElement( 'div', [ 'class' => "mw-{$message}" ], "\n$1\n" );
 			$this->wrapWikiMsg( "$wrap\n", [ $message, $this->getLanguage()->formatNum( $lag ) ] );
 		}
-	}
-
-	/**
-	 * Output an error page
-	 *
-	 * @deprecated since 1.43 Use showErrorPage() instead
-	 * @param string $message Error to output. Must be escaped for HTML.
-	 */
-	public function showFatalError( $message ) {
-		wfDeprecated( __METHOD__, '1.43' );
-
-		$this->prepareErrorPage();
-		$this->setPageTitleMsg( $this->msg( 'internalerror' ) );
-
-		$this->addHTML( $message );
 	}
 
 	/**
@@ -4953,7 +4886,7 @@ class OutputPage extends ContextSource {
 		// supported dir/path pair in the configuration (wgUploadDirectory, wgUploadPath)
 		// which is not expected to be in wgResourceBasePath on CDNs. (T155146)
 		$uploadPath = $config->get( MainConfigNames::UploadPath );
-		if ( strpos( $path, $uploadPath ) === 0 ) {
+		if ( str_starts_with( $path, $uploadPath ) ) {
 			$localDir = $config->get( MainConfigNames::UploadDirectory );
 			$remotePathPrefix = $remotePath = $uploadPath;
 		}
@@ -5089,7 +5022,17 @@ class OutputPage extends ContextSource {
 			}
 			$s = str_replace( '$' . ( $n + 1 ), $this->msg( $name, $args )->plain(), $s );
 		}
-		$this->addWikiTextAsInterface( $s );
+
+		$title = $this->getTitle();
+		if ( $title === null ) {
+			throw new RuntimeException( 'No title in ' . __METHOD__ );
+		}
+		$popts = $this->internalParserOptions( true );
+		// We are *mostly* parsing a message. Other code wants to rely on that. (T395196)
+		// It would be cleaner if the wrappers were added outside of wikitext parsing, so we could
+		// really just parse the message, but it seems scary to change that now.
+		$popts->setIsMessage( true );
+		$this->addWikiTextTitleInternal( $s, $title, /*linestart*/ true, $popts );
 	}
 
 	/**

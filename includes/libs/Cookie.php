@@ -39,7 +39,7 @@ class Cookie {
 	// TO IMPLEMENT? protected $version
 	// TO IMPLEMENT? protected $comment
 
-	public function __construct( $name, $value, $attr ) {
+	public function __construct( string $name, string $value, array $attr ) {
 		$this->name = $name;
 		$this->set( $value, $attr );
 	}
@@ -94,7 +94,7 @@ class Cookie {
 		$dc = explode( ".", $domain );
 
 		// Don't allow a trailing dot or addresses without a or just a leading dot
-		if ( substr( $domain, -1 ) == '.' ||
+		if ( str_ends_with( $domain, '.' ) ||
 			count( $dc ) <= 1 ||
 			( count( $dc ) == 2 && $dc[0] === '' )
 		) {
@@ -125,11 +125,11 @@ class Cookie {
 		}
 
 		if ( $originDomain != null ) {
-			if ( substr( $domain, 0, 1 ) != '.' && $domain != $originDomain ) {
+			if ( !str_starts_with( $domain, '.' ) && $domain != $originDomain ) {
 				return false;
 			}
 
-			if ( substr( $domain, 0, 1 ) == '.'
+			if ( str_starts_with( $domain, '.' )
 				&& substr_compare(
 					$originDomain,
 					$domain,
@@ -192,7 +192,7 @@ class Cookie {
 	 * @return bool
 	 */
 	protected function canServePath( $path ) {
-		return ( $this->path && substr_compare( $this->path, $path, 0, strlen( $this->path ) ) == 0 );
+		return $this->path && str_starts_with( $path, $this->path );
 	}
 
 	/**

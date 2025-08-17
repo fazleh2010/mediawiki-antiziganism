@@ -1,14 +1,61 @@
 # Changelog
 
+## 5.1.0 / 2025-07-18
+
+* Fix how to count number of tests for Prometheus. (T399677)
+* Get spec test retries in Prometheus per project. (T398782)
+* Tag project/test metrics per beta or ci. (T399685)
+* Throw exception when API response lacks expected field. (T393428)
+
+## 5.0.1 / 2025-07-04
+
+* Use ECMAScript modules in RunJobs.js. (T398046)
+
+## 5.0.0 / 2025-06-26
+
+* Use ECMAScript modules. (T373125)
+
+## 4.1.3 / 2025-06-24
+
+* Update waitForModuleState to use mw.loader.using for wdio 9 (T397014)
+
+## 4.1.2 / 2025-06-17
+
+* Fix skipping tests for PrometheusReporter (T397030)
+
+## 4.1.1 / 2025-06-13
+
+* Use package name as project name for Prometheus (T396710)
+
+## 4.1.0 / 2025-06-12
+
+* Add Prometheus support for CI usage. (T391078)
+
+## 4.0.0 / 2025-06-04
+
+* Upgrade WebdriverIO to v9. (T372633)
+
+## 3.0.1 / 2025-05-28
+
+* Fix specs in configuration file. (T395322)
+
+## 3.0.0 / 2025-05-26
+
+* Pin browser version in CI. (T391320)
+* Upgrade WebdriverIO to v8. (T324766)
+
 ## 2.7.1 / 2025-03-27
+
 * Set `--disable-gpu` Chromium arg when running in Docker. (T389536)
 * Exit the process early from global `uncaughtException`. (T389562)
 * Skip video recording if ffmpeg is unavailable. (T381727)
 
 ## 2.7.0 / 2025-01-22
+
 * Api: Add `api.addUserToGroup()` to add user to a user group.
 
 ## 2.6.0 / 2025-01-09
+
 * Skip wikitext-specific tests if NS_MAIN isn't wikitext. (T358530)
 * Add LoginPage.getActualUsername().
 * Wait for form submission in `LoginPage.login()`.

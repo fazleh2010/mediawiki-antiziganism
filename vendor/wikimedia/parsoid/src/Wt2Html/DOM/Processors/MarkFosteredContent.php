@@ -27,7 +27,6 @@ use Wikimedia\Parsoid\Wt2Html\Wt2HtmlDOMProcessor;
  * content".
  *
  * http://www.w3.org/TR/html5/syntax.html#foster-parent
- * @module
  */
 class MarkFosteredContent implements Wt2HtmlDOMProcessor {
 	/**
@@ -53,7 +52,6 @@ class MarkFosteredContent implements Wt2HtmlDOMProcessor {
 	 * @return bool
 	 */
 	private static function removeTransclusionShadows( Node $node ): bool {
-		$sibling = null;
 		$fosteredTransclusions = false;
 		if ( $node instanceof Element ) {
 			if ( DOMUtils::isMarkerMeta( $node, 'mw:TransclusionShadow' ) ) {
@@ -160,8 +158,7 @@ class MarkFosteredContent implements Wt2HtmlDOMProcessor {
 			$tableParent->insertBefore( $e, $tableNextSibling );
 		} elseif ( $e instanceof Element && $e->hasChildNodes() ) {
 			// avoid iterating over a mutated DOMNodeList
-			$childNodeList = iterator_to_array( $e->childNodes );
-			foreach ( $childNodeList as $child ) {
+			foreach ( DOMUtils::childNodes( $e ) as $child ) {
 				self::moveFosteredAnnotations( $child, $firstFosteredNode, $tableParent, $tableNextSibling );
 			}
 		}

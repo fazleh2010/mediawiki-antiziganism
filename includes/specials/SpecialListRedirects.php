@@ -31,7 +31,7 @@ use MediaWiki\SpecialPage\QueryPage;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -59,18 +59,22 @@ class SpecialListRedirects extends QueryPage {
 		$this->redirectLookup = $redirectLookup;
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return [
 			'tables' => [ 'page', 'redirect' ],
@@ -88,6 +92,7 @@ class SpecialListRedirects extends QueryPage {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getOrderFields() {
 		return [ 'page_namespace', 'page_title' ];
 	}
@@ -95,7 +100,7 @@ class SpecialListRedirects extends QueryPage {
 	/**
 	 * Cache page existence for performance
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -169,11 +174,13 @@ class SpecialListRedirects extends QueryPage {
 		}
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->addHelpLink( 'Help:Redirects' );
 		parent::execute( $par );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pages';
 	}

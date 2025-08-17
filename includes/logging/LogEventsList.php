@@ -52,6 +52,7 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Status\Status;
 use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\Title;
+use MediaWiki\User\TempUser\TempUserConfig;
 use MediaWiki\User\UserIdentity;
 use MessageLocalizer;
 use stdClass;
@@ -83,6 +84,8 @@ class LogEventsList extends ContextSource {
 	/** @var MapCacheLRU */
 	private $tagsCache;
 
+	private TempUserConfig $tempUserConfig;
+
 	/**
 	 * @param IContextSource $context
 	 * @param LinkRenderer|null $linkRenderer
@@ -100,6 +103,7 @@ class LogEventsList extends ContextSource {
 		$this->hookRunner = new HookRunner( $services->getHookContainer() );
 		$this->logFormatterFactory = $services->getLogFormatterFactory();
 		$this->tagsCache = new MapCacheLRU( 50 );
+		$this->tempUserConfig = $services->getTempUserConfig();
 	}
 
 	/**
@@ -156,9 +160,28 @@ class LogEventsList extends ContextSource {
 
 		// Add extra inputs if any
 		$extraInputsDescriptor = $this->getExtraInputsDesc( $type );
+
+		// Single inputs (array of attributes) and multiple inputs (array of arrays)
+		// are supported. Distinguish between the two by checking if the first element
+		// is an array or not.
 		if ( $extraInputsDescriptor ) {
-			$formDescriptor[ 'extra' ] = $extraInputsDescriptor;
+			if ( isset( $extraInputsDescriptor[0] ) && is_array( $extraInputsDescriptor[0] ) ) {
+				foreach ( $extraInputsDescriptor as $i => $input ) {
+					$formDescriptor[ 'extra_' . $i ] = $input;
+				}
+			} else {
+				$formDescriptor[ 'extra' ] = $extraInputsDescriptor;
+			}
 		}
+
+		// By default, expose if the form was submitted by passing along a hidden input.
+		// This is useful for extra inputs that check checkboxes by default on load and have to pass
+		// along that modifier to the pager (eg. `newusers`'s temporary account creation exclusions)
+		$formDescriptor['issubmitted'] = [
+			'type' => 'hidden',
+			'name' => 'issubmitted',
+			'default' => true,
+		];
 
 		// Date menu
 		$formDescriptor['date'] = [
@@ -275,20 +298,35 @@ class LogEventsList extends ContextSource {
 	 * @return array Form descriptor
 	 */
 	private function getExtraInputsDesc( $type ) {
+		$formDescriptor = [];
+
 		if ( $type === 'suppress' ) {
-			return [
+			$formDescriptor[] = [
 				'type' => 'text',
 				'label-message' => 'revdelete-offender',
 				'name' => 'offender',
 			];
-		} else {
-			// Allow extensions to add an extra input into the descriptor array.
-			$unused = ''; // Deprecated since 1.32, removed in 1.41
-			$formDescriptor = [];
-			$this->hookRunner->onLogEventsListGetExtraInputs( $type, $this, $unused, $formDescriptor );
-
 			return $formDescriptor;
 		}
+
+		if ( $type === 'newusers' || $type === '' ) {
+			// Add option to exclude/include temporary account creations in results,
+			// excluding them by default.
+			if ( $this->tempUserConfig->isKnown() ) {
+				$formDescriptor[] = [
+						'type' => 'check',
+						'label-message' => 'newusers-excludetempacct',
+						'name' => 'excludetempacct',
+						'default' => true,
+					];
+			}
+		}
+
+		// Allow extensions to add an extra input into the descriptor array.
+		$unused = ''; // Deprecated since 1.32, removed in 1.41
+		$this->hookRunner->onLogEventsListGetExtraInputs( $type, $this, $unused, $formDescriptor );
+
+		return $formDescriptor;
 	}
 
 	/**
@@ -378,10 +416,7 @@ class LogEventsList extends ContextSource {
 				$this->getContext()
 			)
 		);
-		$classes = array_merge(
-			[ 'mw-logline-' . $entry->getType() ],
-			$newClasses
-		);
+		$classes = [ 'mw-logline-' . $entry->getType(), ...$newClasses ];
 		$attribs = [
 			'data-mw-logid' => $entry->getId(),
 			'data-mw-logaction' => $entry->getFullType(),
@@ -546,7 +581,8 @@ class LogEventsList extends ContextSource {
 	 *
 	 * @param OutputPage|string &$out
 	 * @param string|array $types Log types to show
-	 * @param string|PageReference $page The page title to show log entries for
+	 * @param string|PageReference|(string|PageReference)[] $pages The page title(s) to show log
+	 *   entries for
 	 * @param string $user The user who made the log entries
 	 * @param array $param Associative Array with the following additional options:
 	 * - lim Integer Limit of items to show, default is 50
@@ -569,7 +605,7 @@ class LogEventsList extends ContextSource {
 	 * @return int Number of total log items (not limited by $lim)
 	 */
 	public static function showLogExtract(
-		&$out, $types = [], $page = '', $user = '', $param = []
+		&$out, $types = [], $pages = '', $user = '', $param = []
 	) {
 		$defaultParameters = [
 			'lim' => 25,
@@ -596,7 +632,6 @@ class LogEventsList extends ContextSource {
 		$extraUrlParams = $param['extraUrlParams'];
 
 		$useRequestParams = $param['useRequestParams'];
-		// @phan-suppress-next-line PhanRedundantCondition
 		if ( !is_array( $msgKey ) ) {
 			$msgKey = [ $msgKey ];
 		}
@@ -613,13 +648,17 @@ class LogEventsList extends ContextSource {
 		// FIXME: Figure out how to inject this
 		$linkRenderer = $services->getLinkRenderer();
 
+		if ( !is_array( $pages ) ) {
+			$pages = [ $pages ];
+		}
+
 		# Insert list of top 50 (or top $lim) items
 		$loglist = new LogEventsList( $context, $linkRenderer, $flags );
 		$pager = new LogPager(
 			$loglist,
 			$types,
 			$user,
-			$page,
+			$pages,
 			false,
 			$conds,
 			false,
@@ -643,12 +682,11 @@ class LogEventsList extends ContextSource {
 		if ( $param['useMaster'] ) {
 			$pager->mDb = $services->getConnectionProvider()->getPrimaryDatabase();
 		}
-		// @phan-suppress-next-line PhanImpossibleCondition
+
 		if ( isset( $param['offset'] ) ) { # Tell pager to ignore WebRequest offset
 			$pager->setOffset( $param['offset'] );
 		}
 
-		// @phan-suppress-next-line PhanSuspiciousValueComparison
 		if ( $lim > 0 ) {
 			$pager->mLimit = $lim;
 		}
@@ -663,8 +701,8 @@ class LogEventsList extends ContextSource {
 			if ( $msgKey[0] ) {
 				// @phan-suppress-next-line PhanParamTooFewUnpack Non-emptiness checked above
 				$msg = $context->msg( ...$msgKey );
-				if ( $page instanceof PageReference ) {
-					$msg->page( $page );
+				if ( ( $pages[0] ?? null ) instanceof PageReference ) {
+					$msg->page( $pages[0] );
 				}
 				$s .= $msg->parseAsBlock();
 			}
@@ -678,19 +716,20 @@ class LogEventsList extends ContextSource {
 				$context->msg( 'logempty' )->parse() );
 		}
 
-		if ( $page instanceof PageReference ) {
-			$titleFormatter = MediaWikiServices::getInstance()->getTitleFormatter();
-			$pageName = $titleFormatter->getPrefixedDBkey( $page );
-		} elseif ( $page != '' ) {
-			$pageName = $page;
-		} else {
-			$pageName = null;
+		$pageNames = [];
+		foreach ( $pages as $page ) {
+			if ( $page instanceof PageReference ) {
+				$titleFormatter = MediaWikiServices::getInstance()->getTitleFormatter();
+				$pageNames[] = $titleFormatter->getPrefixedDBkey( $page );
+			} elseif ( $page != '' ) {
+				$pageNames[] = $page;
+			}
 		}
 
 		if ( $numRows > $pager->mLimit ) { # Show "Full log" link
 			$urlParam = [];
-			if ( $pageName ) {
-				$urlParam['page'] = $pageName;
+			if ( $pageNames ) {
+				$urlParam['page'] = count( $pageNames ) > 1 ? $pageNames : $pageNames[0];
 			}
 
 			if ( $user != '' ) {
@@ -706,7 +745,6 @@ class LogEventsList extends ContextSource {
 				$urlParam['type'] = $types[0];
 			}
 
-			// @phan-suppress-next-line PhanSuspiciousValueComparison
 			if ( $extraUrlParams !== false ) {
 				$urlParam = array_merge( $urlParam, $extraUrlParams );
 			}
@@ -751,14 +789,15 @@ class LogEventsList extends ContextSource {
 			$context->getOutput()->addModuleStyles( 'mediawiki.codex.messagebox.styles' );
 		}
 
-		// @phan-suppress-next-line PhanSuspiciousValueComparison
 		if ( $wrap != '' ) { // Wrap message in html
 			$s = str_replace( '$1', $s, $wrap );
 		}
 
 		/* hook can return false, if we don't want the message to be emitted (Wikia BugId:7093) */
 		$hookRunner = new HookRunner( $services->getHookContainer() );
-		if ( $hookRunner->onLogEventsListShowLogExtract( $s, $types, $pageName, $user, $param ) ) {
+		if ( $hookRunner->onLogEventsListShowLogExtract(
+			$s, $types, $pageNames, $user, $param
+		) ) {
 			// $out can be either an OutputPage object or a String-by-reference
 			if ( $out instanceof OutputPage ) {
 				$out->addHTML( $s );
@@ -832,7 +871,7 @@ class LogEventsList extends ContextSource {
 			return null;
 		}
 		$appliesToTitle = false;
-		$logTargetPage = '';
+		$logTargetPages = [];
 		$blockTargetName = '';
 		$blocks = $blockStore->newListFromTarget( $user, $user, false,
 			DatabaseBlockStore::AUTO_NONE );
@@ -841,7 +880,7 @@ class LogEventsList extends ContextSource {
 				$appliesToTitle = true;
 			}
 			$blockTargetName = $block->getTargetName();
-			$logTargetPage = $namespaceInfo->getCanonicalName( NS_USER ) .
+			$logTargetPages[] = $namespaceInfo->getCanonicalName( NS_USER ) .
 				':' . $blockTargetName;
 		}
 
@@ -873,7 +912,7 @@ class LogEventsList extends ContextSource {
 		}
 
 		$outString = '';
-		self::showLogExtract( $outString, 'block', $logTargetPage, '', $params );
+		self::showLogExtract( $outString, 'block', $logTargetPages, '', $params );
 		return $outString ?: null;
 	}
 }

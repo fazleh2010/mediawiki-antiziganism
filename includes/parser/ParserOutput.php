@@ -1,4 +1,6 @@
 <?php
+declare( strict_types = 1 );
+
 /**
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,18 +30,19 @@ use MediaWiki\Json\JsonDeserializableTrait;
 use MediaWiki\Json\JsonDeserializer;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\Message\Message;
 use MediaWiki\Output\OutputPage;
 use MediaWiki\Parser\Parsoid\PageBundleParserOutputConverter;
 use MediaWiki\Title\TitleValue;
 use UnexpectedValueException;
 use Wikimedia\Bcp47Code\Bcp47Code;
 use Wikimedia\Bcp47Code\Bcp47CodeValue;
+use Wikimedia\Message\MessageSpecifier;
 use Wikimedia\Message\MessageValue;
 use Wikimedia\Parsoid\Core\ContentMetadataCollector;
 use Wikimedia\Parsoid\Core\ContentMetadataCollectorCompat;
 use Wikimedia\Parsoid\Core\LinkTarget as ParsoidLinkTarget;
 use Wikimedia\Parsoid\Core\TOCData;
-use Wikimedia\Reflection\GhostFieldAccessTrait;
 
 /**
  * ParserOutput is a rendering of a Content object or a message.
@@ -59,11 +62,12 @@ use Wikimedia\Reflection\GhostFieldAccessTrait;
  * wikitext rendered to create special pages and other UX elements are
  * rendered to `ParserOutput` objects.  In these cases the metadata
  * from the `ParserOutput` is generally discarded and the
- * `ParserOutput` is not cached.  These bits of wikitext are generally
- * rendered with `ParserOptions::setInterfaceMessage(true)` when
- * content is intended to be in the user interface language, but
- * sometimes rendered to the content language and displayed in the
- * content area instead.
+ * `ParserOutput` is not cached.  `ParserOptions::setIsMessage(true)`
+ * is usually used when rendering system messages.
+ * `ParserOptions::setInterfaceMessage(true)` is usually used when
+ * rendering system messages in the user interface language,
+ * and occasionally for the other odd bits of wikitext as well.
+ * These options are not used as consistently as one would hope.
  *
  * A `ParserOutput` object corresponding to a given revision may be a
  * combination of the renderings of multiple "slots":
@@ -91,7 +95,6 @@ use Wikimedia\Reflection\GhostFieldAccessTrait;
  * @ingroup Parser
  */
 class ParserOutput extends CacheTime implements ContentMetadataCollector {
-	use GhostFieldAccessTrait;
 	use JsonDeserializableTrait;
 	// This is used to break cyclic dependencies and allow a measure
 	// of compatibility when new methods are added to ContentMetadataCollector
@@ -200,6 +203,11 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	private $mInterwikiLinks = [];
 
 	/**
+	 * @var array<int,array<string,bool>> 2-D map of NS/DBK to true for #ifexist and similar
+	 */
+	private $existenceLinks = [];
+
+	/**
 	 * @var bool Show a new section link?
 	 */
 	private $mNewSection = false;
@@ -237,13 +245,13 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	/**
 	 * @var array<string,int> Warning text to be returned to the user.
 	 *  Wikitext formatted, in the key only.
+	 * @deprecated since 1.45; use ::$mWarningMsgs instead
 	 */
 	private $mWarnings = [];
 
 	/**
-	 * @var array<string,array> *Unformatted* warning messages and
-	 * arguments to be returned to the user.  This is for internal use
-	 * when merging ParserOutputs and are not serialized/deserialized.
+	 * @var array<string,MessageValue> *Unformatted* warning messages and
+	 * arguments to be returned to the user.
 	 */
 	private $mWarningMsgs = [];
 
@@ -294,7 +302,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	private $mCacheMessage = '';
 
 	/**
-	 * @var array Timestamps for getTimeSinceStart().
+	 * @var array Timestamps for getTimeProfile().
 	 */
 	private $mParseStartTime = [];
 
@@ -374,16 +382,13 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * @param bool $unused
 	 * @param string $titletext
 	 */
-	public function __construct( $text = null, $languageLinks = [], $categoryLinks = [],
+	public function __construct( ?string $text = null, array $languageLinks = [], array $categoryLinks = [],
 		$unused = false, $titletext = ''
 	) {
 		$this->mRawText = $text;
 		$this->mCategories = $categoryLinks;
 		$this->mTitleText = $titletext;
-		if ( $languageLinks === null ) { // T376323
-			wfDeprecated( __METHOD__ . ' with null $languageLinks', '1.43' );
-		}
-		foreach ( ( $languageLinks ?? [] ) as $ll ) {
+		foreach ( $languageLinks as $ll ) {
 			$this->addLanguageLink( $ll );
 		}
 		// If the content handler does not specify an alternative (by
@@ -420,63 +425,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		}
 
 		return $this->mRawText;
-	}
-
-	/**
-	 * Get the output HTML
-	 *
-	 * T293512: in the future, ParserOutput::getText() will be deprecated in favor of invoking
-	 * the OutputTransformPipeline directly on a ParserOutput.
-	 * @param array $options (since 1.31) Transformations to apply to the HTML
-	 * 	- allowClone: (bool) Whether to clone the ParserOutput before
-	 *     applying transformations. Default is false.
-	 *  - allowTOC: (bool) Show the TOC, assuming there were enough headings
-	 *     to generate one and `__NOTOC__` wasn't used. Default is true,
-	 *     but might be statefully overridden.
-	 *  - injectTOC: (bool) Replace the TOC_PLACEHOLDER with TOC contents;
-	 *     otherwise the marker will be left in the article (and the skin
-	 *     will be responsible for replacing or removing it).  Default is
-	 *     true.
-	 *  - enableSectionEditLinks: (bool) Include section edit links, assuming
-	 *     section edit link tokens are present in the HTML. Default is true,
-	 *     but might be statefully overridden.
-	 *  - userLang: (Language) Language object used for localizing UX messages,
-	 *    for example the heading of the table of contents. If omitted, will
-	 *    use the language of the main request context.
-	 *  - skin: (Skin) Skin object used for transforming section edit links.
-	 *  - unwrap: (bool) Return text without a wrapper div. Default is false,
-	 *    meaning a wrapper div will be added if getWrapperDivClass() returns
-	 *    a non-empty string.
-	 *  - wrapperDivClass: (string) Wrap the output in a div and apply the given
-	 *    CSS class to that div. This overrides the output of getWrapperDivClass().
-	 *    Setting this to an empty string has the same effect as 'unwrap' => true.
-	 *  - deduplicateStyles: (bool) When true, which is the default, `<style>`
-	 *    tags with the `data-mw-deduplicate` attribute set are deduplicated by
-	 *    value of the attribute: all but the first will be replaced by `<link
-	 *    rel="mw-deduplicated-inline-style" href="mw-data:..."/>` tags, where
-	 *    the scheme-specific-part of the href is the (percent-encoded) value
-	 *    of the `data-mw-deduplicate` attribute.
-	 *  - absoluteURLs: (bool) use absolute URLs in all links. Default: false
-	 *  - includeDebugInfo: (bool) render PP limit report in HTML. Default: false
-	 * @return string HTML
-	 * @return-taint escaped
-	 * @deprecated since 1.42, this method has side-effects on the ParserOutput
-	 *  (see T353257) and so should be avoided in favor of directly invoking
-	 *  the default output pipeline on a ParserOutput; for now, use of
-	 *  ::runOutputPipeline() is preferred to ensure that ParserOptions are
-	 *  available.
-	 */
-	public function getText( $options = [] ) {
-		wfDeprecated( __METHOD__, '1.42' );
-		$oldText = $this->mRawText; // T353257
-		$options += [ 'allowClone' => false ];
-		$po = $this->runPipelineInternal( null, $options );
-		$newText = $po->getContentHolderText();
-		// T353257: for back-compat only mutations to metadata performed by
-		// the pipeline should be preserved; mutations to $mText should be
-		// discarded.
-		$this->setRawText( $oldText );
-		return $newText;
 	}
 
 	/**
@@ -669,8 +617,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	public function getLanguageLinks() {
 		$result = [];
 		foreach ( $this->mLanguageLinkMap as $lang => $title ) {
-			// T374736: Back-compat with empty prefix; see ::addLanguageLink()
-			$result[] = $title === '|' ? "$lang" : "$lang:$title";
+			$result[] = "$lang:$title";
 		}
 		return $result;
 	}
@@ -737,6 +684,9 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $this->mIndicators;
 	}
 
+	/**
+	 * @return string
+	 */
 	public function getTitleText() {
 		return $this->mTitleText;
 	}
@@ -797,6 +747,16 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 				}
 				break;
 
+			case ParserOutputLinkTypes::EXISTENCE:
+				foreach ( $this->existenceLinks as $ns => $titles ) {
+					foreach ( $titles as $dbkey => $unused ) {
+						$result[] = [
+							'link' => new TitleValue( $ns, (string)$dbkey )
+						];
+					}
+				}
+				break;
+
 			case ParserOutputLinkTypes::INTERWIKI:
 				foreach ( $this->mInterwikiLinks as $prefix => $arr ) {
 					foreach ( $arr as $dbkey => $ignore ) {
@@ -809,9 +769,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 
 			case ParserOutputLinkTypes::LANGUAGE:
 				foreach ( $this->mLanguageLinkMap as $lang => $title ) {
-					if ( $title === '|' ) {
-						continue; // T374736
-					}
 					# language links can have fragments!
 					[ $title, $frag ] = array_pad( explode( '#', $title, 2 ), 2, '' );
 					$result[]  = [
@@ -934,22 +891,37 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $this->mExternalLinks;
 	}
 
+	/**
+	 * @param bool $value
+	 */
 	public function setNoGallery( $value ): void {
 		$this->mNoGallery = (bool)$value;
 	}
 
+	/**
+	 * @return bool
+	 */
 	public function getNoGallery() {
 		return $this->mNoGallery;
 	}
 
+	/**
+	 * @return array
+	 */
 	public function getHeadItems() {
 		return $this->mHeadItems;
 	}
 
+	/**
+	 * @return array
+	 */
 	public function getModules() {
 		return array_keys( $this->mModuleSet );
 	}
 
+	/**
+	 * @return array
+	 */
 	public function getModuleStyles() {
 		return array_keys( $this->mModuleStyleSet );
 	}
@@ -972,8 +944,16 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $result;
 	}
 
+	/** @deprecated since 1.45; use ::getWarningMsgs. */
 	public function getWarnings(): array {
+		// T343048: Don't emit deprecation warnings here until the
+		// compatibility fallback in ApiParse is removed.
 		return array_keys( $this->mWarnings );
+	}
+
+	/** @return list<MessageValue> */
+	public function getWarningMsgs(): array {
+		return array_values( $this->mWarningMsgs );
 	}
 
 	public function getIndexPolicy(): string {
@@ -1001,14 +981,23 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $this->getRevisionTimestamp();
 	}
 
+	/**
+	 * @return array
+	 */
 	public function getLimitReportData() {
 		return $this->mLimitReportData;
 	}
 
+	/**
+	 * @return array
+	 */
 	public function getLimitReportJSData() {
 		return $this->mLimitReportJSData;
 	}
 
+	/**
+	 * @return bool
+	 */
 	public function getEnableOOUI() {
 		return $this->mEnableOOUI;
 	}
@@ -1072,6 +1061,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * @deprecated since 1.42, use ::addLanguageLink() instead.
 	 */
 	public function setLanguageLinks( $ll ) {
+		wfDeprecated( __METHOD__, '1.42' );
 		$old = $this->getLanguageLinks();
 		$this->mLanguageLinkMap = [];
 		if ( $ll === null ) { // T376323
@@ -1083,6 +1073,15 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $old;
 	}
 
+	/** @internal For use by OutputPage only. */
+	public function clearLanguageLinks(): void {
+		$this->mLanguageLinkMap = [];
+	}
+
+	/**
+	 * @param string $t
+	 * @return ?string
+	 */
 	public function setTitleText( $t ) {
 		return wfSetVar( $this->mTitleText, $t );
 	}
@@ -1214,21 +1213,37 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			[ $lang, $title ] = array_pad( explode( ':', $t, 2 ), -2, '' );
 		}
 		if ( $lang === '' ) {
-			// T374736: For backward compatibility with test cases only!
-			wfDeprecated( __METHOD__ . ' without prefix', '1.43' );
-			[ $lang, $title ] = [ $title, '|' ]; // | can not occur in valid title
+			throw new InvalidArgumentException( __METHOD__ . ' without prefix' );
 		}
 		$this->mLanguageLinkMap[$lang] ??= $title;
 	}
 
 	/**
 	 * Add a warning to the output for this page.
-	 * @param MessageValue $mv
+	 * @param MessageSpecifier $mv
+	 * @param ?string $key An optional deduplication key, used to prevent
+	 *  duplicate messages.  If omitted or null, the MessageValue key will
+	 *  be used for deduplication.
 	 * @since 1.43
 	 */
-	public function addWarningMsgVal( MessageValue $mv ) {
-		// These can eventually be stored as MessageValue directly.
-		$this->addWarningMsg( $mv->getKey(), ...$mv->getParams() );
+	public function addWarningMsgVal( MessageSpecifier $mv, ?string $key = null ) {
+		$mv = MessageValue::newFromSpecifier( $mv );
+		$key ??= $mv->getKey();
+		$this->mWarningMsgs[$key] = $mv;
+		// Ensure callers aren't passing nonserializable arguments: T343048.
+		$jsonCodec = MediaWikiServices::getInstance()->getJsonCodec();
+		$path = $jsonCodec->detectNonSerializableData( $mv, true );
+		if ( $path !== null ) {
+			throw new InvalidArgumentException( __METHOD__ . ": nonserializable" );
+		}
+		// For backward compatibility with callers of ::getWarnings()
+		// and rollback compatibility for ParserCache; don't remove
+		// until we no longer need rollback compatiblity with MW 1.43.
+		$s = Message::newFromSpecifier( $mv )
+			// some callers set the title here?
+			->inContentLanguage() // because this ends up in cache
+			->text();
+		$this->mWarnings[$s] = 1;
 	}
 
 	/**
@@ -1240,31 +1255,15 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * @since 1.38
 	 */
 	public function addWarningMsg( string $msg, ...$args ): void {
-		// MessageValue objects are defined in core and thus not visible
-		// to Parsoid or to its ContentMetadataCollector interface.
-		// Eventually this method (defined in ContentMetadataCollector) should
-		// call ::addWarningMsgVal() instead of the other way around.
-
-		// preserve original arguments in $mWarningMsgs to allow merge
-		// @todo: these aren't serialized/deserialized yet -- before we
-		// turn on serialization of $this->mWarningMsgs we need to ensure
-		// callers aren't passing nonserializable arguments: T343048.
-		$jsonCodec = MediaWikiServices::getInstance()->getJsonCodec();
-		$path = $jsonCodec->detectNonSerializableData( $args, true );
-		if ( $path !== null ) {
-			wfDeprecatedMsg(
-				"ParserOutput::addWarningMsg() called with nonserializable arguments: $path",
-				'1.41'
-			);
-		}
-		$this->mWarningMsgs[$msg] = $args;
-		$s = wfMessage( $msg, ...$args )
-			// some callers set the title here?
-			->inContentLanguage() // because this ends up in cache
-			->text();
-		$this->mWarnings[$s] = 1;
+		// T227447: Once MessageSpecifier is moved to a library, Parsoid would
+		// be able to use ::addWarningMsgVal() directly and this method
+		// could be deprecated and removed.
+		$this->addWarningMsgVal( MessageValue::new( $msg, $args ) );
 	}
 
+	/**
+	 * @param bool $value
+	 */
 	public function setNewSection( $value ): void {
 		$this->mNewSection = (bool)$value;
 	}
@@ -1295,7 +1294,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	public static function isLinkInternal( $internal, $url ): bool {
 		return (bool)preg_match( '/^' .
 			# If server is proto relative, check also for http/https links
-			( substr( $internal, 0, 2 ) === '//' ? '(?:https?:)?' : '' ) .
+			( str_starts_with( $internal, '//' ) ? '(?:https?:)?' : '' ) .
 			preg_quote( $internal, '/' ) .
 			# check for query/path/anchor or end of link in each case
 			'(?:[\?\/\#]|$)/i',
@@ -1303,6 +1302,9 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		);
 	}
 
+	/**
+	 * @param string $url
+	 */
 	public function addExternalLink( $url ): void {
 		# We don't register links pointing to our own server, unless... :-)
 		$config = MediaWikiServices::getInstance()->getMainConfig();
@@ -1381,8 +1383,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	public function addTemplate( $link, $page_id, $rev_id ): void {
 		if ( $link->isExternal() ) {
 			// Will throw an InvalidArgumentException in a future release.
-			wfDeprecated( __METHOD__ . " with interwiki link", '1.42' );
-			return;
+			throw new InvalidArgumentException( __METHOD__ . " with interwiki link" );
 		}
 		$ns = $link->getNamespace();
 		$dbk = $link->getDBkey();
@@ -1401,6 +1402,26 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		}
 		$prefix = $link->getInterwiki();
 		$this->mInterwikiLinks[$prefix][$link->getDBkey()] = 1;
+	}
+
+	/**
+	 * Add a dependency on the existence of a page. The cache entry will be
+	 * invalidated if the page is created or deleted.
+	 *
+	 * @since 1.44
+	 * @param ParsoidLinkTarget $link
+	 */
+	public function addExistenceDependency( ParsoidLinkTarget $link ) {
+		$ns = $link->getNamespace();
+		$dbk = $link->getDBkey();
+		// Ignore some kinds of links, as in addLink()
+		if ( $link->isExternal() || $ns === NS_SPECIAL || $dbk === '' ) {
+			return;
+		}
+		if ( $ns === NS_MEDIA ) {
+			$ns = NS_FILE;
+		}
+		$this->existenceLinks[$ns][$dbk] = true;
 	}
 
 	/**
@@ -1789,30 +1810,20 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 *    $output->getExtensionData( 'my_ext_foo' );
 	 * @endcode
 	 *
-	 * @note The use of `null` as a value is deprecated since 1.42; use
+	 * @note The use of `null` as a value was deprecated in 1.42; use
 	 * the empty string instead if you need a placeholder value, or
 	 * ::unsetPageProperty() if you mean to remove a page property.
 	 *
-	 * @note The use of non-string values is deprecated since 1.42; if you
+	 * @note The use of non-string values was deprecated in 1.42; if you
 	 * need an page property value with a sort index
 	 * use ::setNumericPageProperty().
 	 *
 	 * @param string $name
-	 * @param ?scalar $value
+	 * @param string $value
 	 * @since 1.38
 	 */
-	public function setPageProperty( string $name, $value ): void {
-		if ( $value === null ) {
-			// Use an empty string instead.
-			wfDeprecated( __METHOD__ . " with null value for $name", '1.42' );
-		} elseif ( !is_scalar( $value ) ) {
-			// Use ::setExtensionData() instead.
-			wfDeprecated( __METHOD__ . " with non-scalar value for $name", '1.42' );
-		} elseif ( !is_string( $value ) ) {
-			// Use ::setNumericPageProperty() instead.
-			wfDeprecated( __METHOD__ . " with non-string value for $name", '1.42' );
-		}
-		$this->mProperties[$name] = $value;
+	public function setPageProperty( string $name, string $value ): void {
+		$this->setUnsortedPageProperty( $name, $value );
 	}
 
 	/**
@@ -1831,7 +1842,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 */
 	public function setNumericPageProperty( string $propName, $numericValue ): void {
 		if ( !is_numeric( $numericValue ) ) {
-			throw new \TypeError( __METHOD__ . " with non-numeric value" );
+			throw new InvalidArgumentException( __METHOD__ . " with non-numeric value" );
 		}
 		// Coerce numeric sort key to a number.
 		$this->mProperties[$propName] = 0 + $numericValue;
@@ -1913,12 +1924,18 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * expected that NO_INDEX_POLICY "wins" in that case. (T16899)
 	 * (This resolution is implemented in ::getIndexPolicy().)
 	 *
-	 * @param string $name A flag name
+	 * @param ParserOutputFlags|string $name A flag name
 	 * @param bool $val
 	 * @since 1.38
 	 */
-	public function setOutputFlag( string $name, bool $val = true ): void {
-		switch ( $name ) {
+	public function setOutputFlag( ParserOutputFlags|string $name, bool $val = true ): void {
+		if ( is_string( $name ) ) {
+			$flag = ParserOutputFlags::tryFrom( $name );
+		} else {
+			$flag = $name;
+			$name = $flag->value;
+		}
+		switch ( $flag ) {
 			case ParserOutputFlags::NO_GALLERY:
 				$this->setNoGallery( $val );
 				break;
@@ -1965,12 +1982,18 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * ParserOutputFlags in core; they should use ::getExtensionData()
 	 * to define their own flags.
 	 *
-	 * @param string $name A flag name
+	 * @param ParserOutputFlags|string $name A flag name
 	 * @return bool The flag value
 	 * @since 1.38
 	 */
-	public function getOutputFlag( string $name ): bool {
-		switch ( $name ) {
+	public function getOutputFlag( ParserOutputFlags|string $name ): bool {
+		if ( is_string( $name ) ) {
+			$flag = ParserOutputFlags::tryFrom( $name );
+		} else {
+			$flag = $name;
+			$name = $flag->value;
+		}
+		switch ( $flag ) {
 			case ParserOutputFlags::NO_GALLERY:
 				return $this->getNoGallery();
 
@@ -1993,7 +2016,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 				return $this->getPreventClickjacking();
 
 			default:
-				return isset( $this->mFlags[$name] );
+				return $this->mFlags[$name] ?? false;
 
 		}
 	}
@@ -2005,36 +2028,32 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * should use ::appendExtensionData() rather than creating new string sets
 	 * with ::appendOutputStrings() in order to prevent namespace conflicts.
 	 *
-	 * @param string $name A string set name
+	 * @param string|ParserOutputStringSets $name A string set name
 	 * @param string[] $value
 	 * @since 1.41
 	 */
-	public function appendOutputStrings( string $name, array $value ): void {
-		switch ( $name ) {
-			case ParserOutputStringSets::MODULE:
-				$this->addModules( $value );
-				break;
-			case ParserOutputStringSets::MODULE_STYLE:
-				$this->addModuleStyles( $value );
-				break;
-			case ParserOutputStringSets::EXTRA_CSP_DEFAULT_SRC:
-				foreach ( $value as $v ) {
-					$this->addExtraCSPDefaultSrc( $v );
-				}
-				break;
-			case ParserOutputStringSets::EXTRA_CSP_SCRIPT_SRC:
-				foreach ( $value as $v ) {
-					$this->addExtraCSPScriptSrc( $v );
-				}
-				break;
-			case ParserOutputStringSets::EXTRA_CSP_STYLE_SRC:
-				foreach ( $value as $v ) {
-					$this->addExtraCSPStyleSrc( $v );
-				}
-				break;
-			default:
-				throw new UnexpectedValueException( "Unknown output string set name $name" );
+	public function appendOutputStrings( string|ParserOutputStringSets $name, array $value ): void {
+		if ( is_string( $name ) ) {
+			$name = ParserOutputStringSets::from( $name );
 		}
+		match ( $name ) {
+			ParserOutputStringSets::MODULE =>
+				$this->addModules( $value ),
+			ParserOutputStringSets::MODULE_STYLE =>
+				$this->addModuleStyles( $value ),
+			ParserOutputStringSets::EXTRA_CSP_DEFAULT_SRC =>
+				array_walk( $value, fn ( $v, $i ) =>
+					$this->addExtraCSPDefaultSrc( $v )
+				),
+			ParserOutputStringSets::EXTRA_CSP_SCRIPT_SRC =>
+				array_walk( $value, fn ( $v, $i ) =>
+					$this->addExtraCSPScriptSrc( $v )
+				),
+			ParserOutputStringSets::EXTRA_CSP_STYLE_SRC =>
+				array_walk( $value, fn ( $v, $i ) =>
+					$this->addExtraCSPStyleSrc( $v )
+				),
+		};
 	}
 
 	/**
@@ -2045,25 +2064,26 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 * ParserOutputStringSets in core; they should use ::appendExtensionData()
 	 * to define their own string sets.
 	 *
-	 * @param string $name A string set name
+	 * @param string|ParserOutputStringSets $name A string set name
 	 * @return string[] The string set value
 	 * @since 1.41
 	 */
-	public function getOutputStrings( string $name ): array {
-		switch ( $name ) {
-			case ParserOutputStringSets::MODULE:
-				return $this->getModules();
-			case ParserOutputStringSets::MODULE_STYLE:
-				return $this->getModuleStyles();
-			case ParserOutputStringSets::EXTRA_CSP_DEFAULT_SRC:
-				return $this->getExtraCSPDefaultSrcs();
-			case ParserOutputStringSets::EXTRA_CSP_SCRIPT_SRC:
-				return $this->getExtraCSPScriptSrcs();
-			case ParserOutputStringSets::EXTRA_CSP_STYLE_SRC:
-				return $this->getExtraCSPStyleSrcs();
-			default:
-				throw new UnexpectedValueException( "Unknown output string set name $name" );
+	public function getOutputStrings( string|ParserOutputStringSets $name ): array {
+		if ( is_string( $name ) ) {
+			$name = ParserOutputStringSets::from( $name );
 		}
+		return match ( $name ) {
+			ParserOutputStringSets::MODULE =>
+				$this->getModules(),
+			ParserOutputStringSets::MODULE_STYLE =>
+				$this->getModuleStyles(),
+			ParserOutputStringSets::EXTRA_CSP_DEFAULT_SRC =>
+				$this->getExtraCSPDefaultSrcs(),
+			ParserOutputStringSets::EXTRA_CSP_SCRIPT_SRC =>
+				$this->getExtraCSPScriptSrcs(),
+			ParserOutputStringSets::EXTRA_CSP_STYLE_SRC =>
+				$this->getExtraCSPStyleSrcs(),
+		};
 	}
 
 	/**
@@ -2199,7 +2219,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	private static function getTimes( ?string $clock = null ): array {
 		$ret = [];
 		if ( !$clock || $clock === 'wall' ) {
-			$ret['wall'] = microtime( true );
+			$ret['wall'] = hrtime( true ) / 10 ** 9;
 		}
 		if ( !$clock || $clock === 'cpu' ) {
 			$ru = getrusage( 0 /* RUSAGE_SELF */ );
@@ -2210,7 +2230,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	}
 
 	/**
-	 * Resets the parse start timestamps for future calls to getTimeSinceStart()
+	 * Resets the parse start timestamps for future calls to getTimeProfile()
 	 * and recordTimeProfile().
 	 *
 	 * @since 1.22
@@ -2280,29 +2300,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 */
 	public function getTimeProfile( string $clock ) {
 		return $this->mTimeProfile[ $clock ] ?? null;
-	}
-
-	/**
-	 * Returns the time since resetParseStartTime() was last called
-	 *
-	 * Clocks available are:
-	 *  - wall: Wall clock time
-	 *  - cpu: CPU time (requires getrusage)
-	 *
-	 * @since 1.22
-	 * @deprecated since 1.42, use getTimeProfile() instead.
-	 * @param string $clock
-	 * @return float|null
-	 */
-	public function getTimeSinceStart( $clock ) {
-		wfDeprecated( __METHOD__, '1.42' );
-
-		if ( !isset( $this->mParseStartTime[$clock] ) ) {
-			return null;
-		}
-
-		$end = self::getTimes( $clock );
-		return $end[$clock] - $this->mParseStartTime[$clock];
 	}
 
 	/**
@@ -2495,7 +2492,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		// Wrap non-interface parser output in a <div> so it can be targeted
 		// with CSS (T37247)
 		$class = $parserOptions->getWrapOutputClass();
-		if ( $class !== false && !$parserOptions->getInterfaceMessage() ) {
+		if ( $class !== false && !$parserOptions->isMessage() ) {
 			$this->addWrapperDivClass( $class );
 		}
 
@@ -2515,19 +2512,12 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			// Ensure that previews aren't cacheable, just to be safe.
 			$this->updateCacheExpiry( 0 );
 		}
-	}
 
-	public function __sleep() {
-		return array_filter( array_keys( get_object_vars( $this ) ),
-			static function ( $field ) {
-				if ( $field === 'mParseStartTime' || $field === 'mWarningMsgs' ) {
-					return false;
-				}
-				// Unserializing unknown private fields in HHVM causes
-				// member variables with nulls in their names (T229366)
-				return strpos( $field, "\0" ) === false;
-			}
-		);
+		// Record whether this was parsed with the legacy parser
+		// (Unlike some other options here, this does/should fork the cache.)
+		if ( $parserOptions->getUseParsoid() ) {
+			$this->setOutputFlag( ParserOutputFlags::USE_PARSOID, true );
+		}
 	}
 
 	/**
@@ -2537,6 +2527,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 */
 	public function mergeInternalMetaDataFrom( ParserOutput $source ): void {
 		$this->mWarnings = self::mergeMap( $this->mWarnings, $source->mWarnings ); // don't use getter
+		$this->mWarningMsgs = self::mergeMap( $this->mWarningMsgs, $source->mWarningMsgs );
 		$this->mTimestamp = $this->useMaxValue( $this->mTimestamp, $source->getRevisionTimestamp() );
 		if ( $source->hasCacheTime() ) {
 			$sourceCacheTime = $source->getCacheTime();
@@ -2704,6 +2695,12 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			$this->addTemplate( $link, $pageid, $revid );
 		}
 		foreach (
+			$source->getLinkList( ParserOutputLinkTypes::EXISTENCE )
+			as [ 'link' => $link ]
+		) {
+			$this->addExistenceDependency( $link );
+		}
+		foreach (
 			$source->getLinkList( ParserOutputLinkTypes::MEDIA ) as $item
 		) {
 			$this->addImage( $item['link'], $item['time'] ?? null, $item['sha1'] ?? null );
@@ -2747,9 +2744,10 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	public function collectMetadata( ContentMetadataCollector $metadata ): void {
 		// Uniform handling of all boolean flags: they are OR'ed together.
 		$flags = array_keys(
-			$this->mFlags + array_flip( ParserOutputFlags::cases() )
+			$this->mFlags + array_flip( ParserOutputFlags::values() )
 		);
 		foreach ( $flags as $name ) {
+			$name = (string)$name;
 			if ( $this->getOutputFlag( $name ) ) {
 				$metadata->setOutputFlag( $name );
 			}
@@ -2757,7 +2755,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 
 		// Uniform handling of string sets: they are unioned.
 		// (This includes modules, style modes, and CSP src.)
-		foreach ( ParserOutputStringSets::cases() as $name ) {
+		foreach ( ParserOutputStringSets::values() as $name ) {
 			$metadata->appendOutputStrings(
 				$name, $this->getOutputStrings( $name )
 			);
@@ -2789,7 +2787,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 
 		foreach ( $this->mLinksSpecial as $dbk => $ignore ) {
 			// Numeric titles are going to come out of the
-			// `mLinks` array as ints; cast back to string.
+			// `mLinksSpecial` array as ints; cast back to string.
 			$lt = TitleValue::tryNew( NS_SPECIAL, (string)$dbk );
 			$metadata->addLink( $lt );
 		}
@@ -2802,9 +2800,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		}
 
 		foreach ( $this->mLanguageLinkMap as $lang => $title ) {
-			if ( $title === '|' ) {
-				continue; // T374736: not a valid language link
-			}
 			# language links can have fragments!
 			[ $title, $frag ] = array_pad( explode( '#', $title, 2 ), 2, '' );
 			$lt = TitleValue::tryNew( NS_MAIN, $title, $frag, (string)$lang );
@@ -2812,9 +2807,13 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		}
 
 		foreach ( $this->mJsConfigVars as $key => $value ) {
+			// Numeric keys and items are going to come out of the
+			// `mJsConfigVars` array as ints; cast back to string.
+			$key = (string)$key;
 			if ( is_array( $value ) && isset( $value[self::MW_MERGE_STRATEGY_KEY] ) ) {
 				$strategy = $value[self::MW_MERGE_STRATEGY_KEY];
 				foreach ( $value as $item => $ignore ) {
+					$item = (string)$item;
 					if ( $item !== self::MW_MERGE_STRATEGY_KEY ) {
 						$metadata->appendJsConfigVar( $key, $item, $strategy );
 					}
@@ -2833,9 +2832,13 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			}
 		}
 		foreach ( $this->mExtensionData as $key => $value ) {
+			// Numeric keys and items are going to come out of the array as
+			// ints, cast back to string.
+			$key = (string)$key;
 			if ( is_array( $value ) && isset( $value[self::MW_MERGE_STRATEGY_KEY] ) ) {
 				$strategy = $value[self::MW_MERGE_STRATEGY_KEY];
 				foreach ( $value as $item => $ignore ) {
+					$item = (string)$item;
 					if ( $item !== self::MW_MERGE_STRATEGY_KEY ) {
 						$metadata->appendExtensionData( $key, $item, $strategy );
 					}
@@ -2854,27 +2857,29 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			}
 		}
 		foreach ( $this->mExternalLinks as $url => $ignore ) {
-			$metadata->addExternalLink( $url );
+			$metadata->addExternalLink( (string)$url );
 		}
 		foreach ( $this->mProperties as $prop => $value ) {
-			if ( is_numeric( $value ) ) {
-				$metadata->setNumericPageProperty( $prop, $value );
-			} elseif ( is_string( $value ) ) {
+			// Numeric properties are going to come out of the array as ints
+			$prop = (string)$prop;
+			if ( is_string( $value ) ) {
 				$metadata->setUnsortedPageProperty( $prop, $value );
+			} elseif ( is_numeric( $value ) ) {
+				$metadata->setNumericPageProperty( $prop, $value );
 			} else {
 				// Deprecated, but there are still sites which call
 				// ::setPageProperty() with "unusual" values (T374046)
-				$metadata->setPageProperty( $prop, $value );
+				wfDeprecated( __METHOD__ . ' with unusual page property', '1.45' );
 			}
 		}
-		foreach ( $this->mWarningMsgs as $msg => $args ) {
-			$metadata->addWarningMsg( $msg, ...$args );
+		foreach ( $this->mWarningMsgs as $key => $msg ) {
+			$metadata->addWarningMsgVal( $msg, (string)$key );
 		}
 		foreach ( $this->mLimitReportData as $key => $value ) {
-			$metadata->setLimitReportData( $key, $value );
+			$metadata->setLimitReportData( (string)$key, $value );
 		}
 		foreach ( $this->mIndicators as $id => $content ) {
-			$metadata->setIndicator( $id, $content );
+			$metadata->setIndicator( (string)$id, $content );
 		}
 
 		// ParserOutput-only fields; maintained "behind the curtain"
@@ -2918,6 +2923,12 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 					$rev_id = $this->mTemplateIds[$ns][$dbk] ?? 0;
 					$metadata->addTemplate( TitleValue::tryNew( $ns, (string)$dbk ), $page_id, $rev_id );
 				}
+			}
+			foreach (
+				$this->getLinkList( ParserOutputLinkTypes::EXISTENCE )
+				as [ 'link' => $link ]
+			) {
+				$metadata->addExistenceDependency( $link );
 			}
 		}
 	}
@@ -3038,6 +3049,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			'FileSearchOptions' => $this->mFileSearchOptions,
 			'ExternalLinks' => $this->mExternalLinks,
 			'InterwikiLinks' => $this->mInterwikiLinks,
+			'ExistenceLinks' => $this->existenceLinks,
 			'NewSection' => $this->mNewSection,
 			'HideNewSection' => $this->mHideNewSection,
 			'NoGallery' => $this->mNoGallery,
@@ -3046,6 +3058,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 			'ModuleStyles' => array_keys( $this->mModuleStyleSet ),
 			'JsConfigVars' => $this->mJsConfigVars,
 			'Warnings' => $this->mWarnings,
+			'WarningMsgs' => $this->mWarningMsgs,
 			'Sections' => $this->getSections(),
 			'Properties' => self::detectAndEncodeBinary( $this->mProperties ),
 			'Timestamp' => $this->mTimestamp,
@@ -3117,7 +3130,12 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		$this->mRawText = $jsonData['Text'];
 		$this->mLanguageLinkMap = [];
 		foreach ( ( $jsonData['LanguageLinks'] ?? [] ) as $l ) {
-			$this->addLanguageLink( $l );
+			// T374736: old serialized parser cache entries may
+			// contain invalid language links; drop them quietly.
+			// (This code can be removed two LTS releases past 1.45.)
+			if ( str_contains( $l, ':' ) ) {
+				$this->addLanguageLink( $l );
+			}
 		}
 		$this->mCategories = $jsonData['Categories'];
 		$this->mIndicators = $jsonData['Indicators'];
@@ -3130,6 +3148,7 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		$this->mFileSearchOptions = $jsonData['FileSearchOptions'];
 		$this->mExternalLinks = $jsonData['ExternalLinks'];
 		$this->mInterwikiLinks = $jsonData['InterwikiLinks'];
+		$this->existenceLinks = $jsonData['ExistenceLinks'] ?? [];
 		$this->mNewSection = $jsonData['NewSection'];
 		$this->mHideNewSection = $jsonData['HideNewSection'];
 		$this->mNoGallery = $jsonData['NoGallery'];
@@ -3137,24 +3156,47 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		$this->mModuleSet = array_fill_keys( $jsonData['Modules'], true );
 		$this->mModuleStyleSet = array_fill_keys( $jsonData['ModuleStyles'], true );
 		$this->mJsConfigVars = $jsonData['JsConfigVars'];
-		$this->mWarnings = $jsonData['Warnings'];
+		$this->mWarnings = $jsonData['Warnings'] ?? [];
+		$this->mWarningMsgs = $jsonData['WarningMsgs'] ?? [];
 		$this->mFlags = $jsonData['Flags'];
-		if (
-			$jsonData['Sections'] !== [] ||
-			// backward-compatibility: distinguish "no sections" from
-			// "sections not set" (Will be unnecessary after T327439.)
+		if ( isset( $jsonData['TOCData'] ) ) {
+			$this->mTOCData = $jsonData['TOCData'];
+		// Backward-compatibility with old TOCData encoding (T327439)
+		// emitted in MW < 1.45
+		} elseif (
+			( $jsonData['Sections'] ?? [] ) !== [] ||
+			// distinguish "no sections" from "sections not set"
 			$this->getOutputFlag( 'mw:toc-set' )
 		) {
-			$this->setSections( $jsonData['Sections'] );
+			$this->setSections( $jsonData['Sections'] ?? [] );
 			unset( $this->mFlags['mw:toc-set'] );
 			if ( isset( $jsonData['TOCExtensionData'] ) ) {
 				$tocData = $this->getTOCData(); // created by setSections() above
 				foreach ( $jsonData['TOCExtensionData'] as $key => $value ) {
-					$tocData->setExtensionData( $key, $value );
+					$tocData->setExtensionData( (string)$key, $value );
 				}
 			}
 		}
-		$this->mProperties = self::detectAndDecodeBinary( $jsonData['Properties'] );
+		// backward-compatibility: convert page properties to their
+		// 'database representation'.  We haven't permitted non-string
+		// non-numeric values since 1.45.
+		$this->mProperties = [];
+		foreach (
+			self::detectAndDecodeBinary( $jsonData['Properties'] )
+			as $k => $v
+		) {
+			if ( is_int( $v ) || is_float( $v ) || is_string( $v ) ) {
+				$this->mProperties[$k] = $v;
+			} elseif ( is_bool( $v ) ) {
+				$this->mProperties[$k] = (int)$v;
+			} elseif ( $v === null ) {
+				$this->mProperties[$k] = '';
+			} elseif ( is_array( $v ) ) {
+				$this->mProperties[$k] = 'Array';
+			} else {
+				$this->mProperties[$k] = strval( $v );
+			}
+		}
 		$this->mTimestamp = $jsonData['Timestamp'];
 		$this->mEnableOOUI = $jsonData['EnableOOUI'];
 		$this->setIndexPolicy( $jsonData['IndexPolicy'] );
@@ -3222,102 +3264,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 		return $properties;
 	}
 
-	public function __wakeup() {
-		$oldAliases = [
-			// This was the pre-namespace name of the class, which is still
-			// used in pre-1.42 serialized objects.
-			'ParserOutput',
-		];
-		// Backwards compatibility, pre 1.36
-		$priorAccessedOptions = $this->getGhostFieldValue( 'mAccessedOptions', ...$oldAliases );
-		if ( $priorAccessedOptions ) {
-			$this->mParseUsedOptions = $priorAccessedOptions;
-		}
-		// Backwards compatibility, pre 1.39
-		$priorIndexPolicy = $this->getGhostFieldValue( 'mIndexPolicy', ...$oldAliases );
-		if ( $priorIndexPolicy ) {
-			$this->setIndexPolicy( $priorIndexPolicy );
-		}
-		// Backwards compatibility, pre 1.40
-		$mSections = $this->getGhostFieldValue( 'mSections', ...$oldAliases );
-		if ( $mSections !== null && $mSections !== [] ) {
-			$this->setSections( $mSections );
-		}
-		// Backwards compatibility, pre 1.42
-		$mModules = $this->getGhostFieldValue( 'mModules', ...$oldAliases );
-		if ( $mModules !== null && $mModules !== [] ) {
-			$this->addModules( $mModules );
-		}
-		// Backwards compatibility, pre 1.42
-		$mModuleStyles = $this->getGhostFieldValue( 'mModuleStyles', ...$oldAliases );
-		if ( $mModuleStyles !== null && $mModuleStyles !== [] ) {
-			$this->addModuleStyles( $mModuleStyles );
-		}
-		// Backwards compatibility, pre 1.42
-		$mText = $this->getGhostFieldValue( 'mText', ...$oldAliases );
-		if ( $mText !== null ) {
-			$this->setRawText( $mText );
-		}
-		// Backwards compatibility, pre 1.42
-		$ll = $this->getGhostFieldValue( 'mLanguageLinks', ...$oldAliases );
-		if ( $ll !== null && $ll !== [] ) {
-			foreach ( $ll as $l ) {
-				$this->addLanguageLink( $l );
-			}
-		}
-		// Backward compatibility with private fields, pre 1.42
-		$oldPrivateFields = [
-			'mRawText',
-			'mCategories',
-			'mIndicators',
-			'mTitleText',
-			'mLinks',
-			'mLinksSpecial',
-			'mTemplates',
-			'mTemplateIds',
-			'mImages',
-			'mFileSearchOptions',
-			'mExternalLinks',
-			'mInterwikiLinks',
-			'mNewSection',
-			'mHideNewSection',
-			'mNoGallery',
-			'mHeadItems',
-			'mModuleSet',
-			'mModuleStyleSet',
-			'mJsConfigVars',
-			'mWarnings',
-			'mWarningMsgs',
-			'mTOCData',
-			'mProperties',
-			'mTimestamp',
-			'mEnableOOUI',
-			'mIndexSet',
-			'mNoIndexSet',
-			'mExtensionData',
-			'mLimitReportData',
-			'mLimitReportJSData',
-			'mCacheMessage',
-			'mParseStartTime',
-			'mTimeProfile',
-			'mPreventClickjacking',
-			'mExtraScriptSrcs',
-			'mExtraDefaultSrcs',
-			'mExtraStyleSrcs',
-			'mFlags',
-			'mSpeculativeRevId',
-			'speculativePageIdUsed',
-			'revisionTimestampUsed',
-			'revisionUsedSha1Base36',
-			'mWrapperDivClasses',
-			'mMaxAdaptiveExpiry',
-		];
-		foreach ( $oldPrivateFields as $f ) {
-			$this->restoreAliasedGhostField( $f, ...$oldAliases );
-		}
-		$this->clearParseStartTime();
-	}
-
 	public function __clone() {
 		// It seems that very little of this object needs to be explicitly deep-cloned
 		// while keeping copies reasonably separated.
@@ -3356,33 +3302,6 @@ class ParserOutput extends CacheTime implements ContentMetadataCollector {
 	 */
 	public function setContentHolderText( string $s ): void {
 		$this->setRawText( $s );
-	}
-
-	public function __get( $name ) {
-		if ( property_exists( get_called_class(), $name ) ) {
-			// Direct access to a public property, deprecated.
-			wfDeprecatedMsg( "ParserOutput::{$name} public read access deprecated", '1.38' );
-			return $this->$name;
-		} elseif ( property_exists( $this, $name ) ) {
-			// Dynamic property access, deprecated.
-			wfDeprecatedMsg( "ParserOutput::{$name} dynamic property read access deprecated", '1.38' );
-			return $this->$name;
-		} else {
-			trigger_error( "Inaccessible property via __get(): $name" );
-			return null;
-		}
-	}
-
-	public function __set( $name, $value ) {
-		if ( property_exists( get_called_class(), $name ) ) {
-			// Direct access to a public property, deprecated.
-			wfDeprecatedMsg( "ParserOutput::$name public write access deprecated", '1.38' );
-			$this->$name = $value;
-		} else {
-			// Dynamic property access, deprecated.
-			wfDeprecatedMsg( "ParserOutput::$name dynamic property write access deprecated", '1.38' );
-			$this->$name = $value;
-		}
 	}
 }
 

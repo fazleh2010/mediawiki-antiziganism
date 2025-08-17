@@ -4,6 +4,7 @@
 
 /* @phan-file-suppress PhanTypeSuspiciousEcho, PhanTypeConversionFromArray, PhanPluginUseReturnValueInternalKnown, PhanNoopNew */
 /* @phan-file-suppress PhanTypeMismatchArgument Ignore list/array mismatch for taint checks */
+/* @phan-file-suppress PhanParamTooFewInPHPDoc */
 
 /*
  * This test ensures that taint-check knows about unsafe methods in MediaWiki. Knowledge about those methods
@@ -28,13 +29,16 @@ use MediaWiki\Shell\Result;
 use MediaWiki\Shell\Shell;
 use MediaWiki\Status\Status;
 use MediaWiki\Status\StatusFormatter;
-use MediaWiki\Title\TitleValue;
 use Shellbox\Command\UnboxedResult;
 use Shellbox\Shellbox;
+use Wikimedia\Rdbms\Database\DbQuoter;
 use Wikimedia\Rdbms\DeleteQueryBuilder;
 use Wikimedia\HtmlArmor\HtmlArmor;
 use Wikimedia\Rdbms\Expression;
+use Wikimedia\Rdbms\IDatabase;
 use Wikimedia\Rdbms\InsertQueryBuilder;
+use Wikimedia\Rdbms\JoinGroupBase;
+use Wikimedia\Rdbms\Platform\ISQLPlatform;
 use Wikimedia\Rdbms\RawSQLExpression;
 use Wikimedia\Rdbms\RawSQLValue;
 use Wikimedia\Rdbms\ReplaceQueryBuilder;
@@ -53,32 +57,110 @@ class TaintCheckAnnotationsTest {
 		$db->select( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->select( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->select( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->select( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectField( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectField( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectField( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectFieldValues( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectFieldValues( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectSQLText( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectSQLText( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
-		$db->query( $db->selectSQLText( 'safe', 'safe' ) ); // Safe
+		$db->query( $db->selectSQLText( 'safe', 'safe', [ 'foo' => $_GET['a'] ] ) ); // Safe
+		// Check $options special handling
+		$db->selectSQLText( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRowCount( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRowCount( 'safe', 'safe' ); // Safe
+		// Check $options special handling
+		$db->selectRowCount( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRow( $_GET['a'], '', [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', $_GET['a'], [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRow( 'safe', 'safe', [] ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectRow( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->delete( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->delete( '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
@@ -105,19 +187,34 @@ class TaintCheckAnnotationsTest {
 		echo $quoted;// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $quoted );// Safe
 
-		// buildLike is only hardcoded for the Database class
 		echo $db->buildLike( $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $db->buildLike( $_GET['a'] ) );// Safe
 		echo $db->buildLike( '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $db->buildLike( '', $_GET['a'] ) );// Safe
 		echo $db->buildLike( '', '', '', '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $db->buildLike( '', '', '', '', '', $_GET['a'] ) );// Safe
+
+		echo $db->makeList( [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-XSS
+		$db->query( $db->makeList( $_GET['a'] ) );// Safe
+		echo $db->makeList( [] );// Safe
+		// Check special handling
+		$db->makeList( $_GET['a'] ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_COMMA ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_AND ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_SET ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( $_GET['a'], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_OR ); // Safe
 	}
 
-	/**
-	 * @suppress PhanParamTooFewInPHPDoc
-	 */
-	function testIDatabase( \Wikimedia\Rdbms\IDatabase $db ) {
+	function testIDatabase( IDatabase $db ) {
 		$db->query( $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->query( 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
 
@@ -125,32 +222,110 @@ class TaintCheckAnnotationsTest {
 		$db->select( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->select( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->select( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+// Check $options special handling
+		$db->select( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectField( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectField( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectField( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectFieldValues( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectFieldValues( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+// Check $options special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectSQLText( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectSQLText( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
-		$db->query( $db->selectSQLText( 'safe', 'safe' ) ); // Safe
+		$db->query( $db->selectSQLText( 'safe', 'safe', [ 'foo' => $_GET['a'] ] ) ); // Safe
+		// Check $options special handling
+		$db->selectSQLText( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRowCount( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRowCount( 'safe', 'safe' ); // Safe
+		// Check $options special handling
+		$db->selectRowCount( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRow( $_GET['a'], '', [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', $_GET['a'], [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRow( 'safe', 'safe', [] ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectRow( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->delete( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->delete( '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
@@ -177,15 +352,125 @@ class TaintCheckAnnotationsTest {
 		echo $quoted;// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $quoted );// Safe
 
-		// makeList is only hardcoded for the IDatabase interface
+		echo $db->buildLike( $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$db->query( $db->buildLike( $_GET['a'] ) );// Safe
+		echo $db->buildLike( '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$db->query( $db->buildLike( '', $_GET['a'] ) );// Safe
+		echo $db->buildLike( '', '', '', '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$db->query( $db->buildLike( '', '', '', '', '', $_GET['a'] ) );// Safe
+
 		echo $db->makeList( [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-XSS
 		$db->query( $db->makeList( $_GET['a'] ) );// Safe
 		echo $db->makeList( [] );// Safe
+		// Check special handling
+		$db->makeList( $_GET['a'] ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_COMMA ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_AND ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_SET ); // Safe
+		$db->makeList( $_GET['a'], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( $_GET['a'], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ $_GET['a'] ], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_OR ); // Safe
 	}
 
-	/**
-	 * @suppress PhanParamTooFewInPHPDoc
-	 */
+	function testIReadableDatabase( \Wikimedia\Rdbms\IReadableDatabase $dbr ) {
+		$dbr->select( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $dbr->select( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$dbr->select( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$dbr->select( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$dbr->select( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+
+		$dbr->selectField( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $dbr->selectField( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$dbr->selectField( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$dbr->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$dbr->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+
+		$dbr->selectFieldValues( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $dbr->selectFieldValues( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+
+		$dbr->selectRowCount( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $dbr->selectRowCount( 'safe', 'safe' ); // Safe
+		// Check $options special handling
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$dbr->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+
+		$dbr->selectRow( $_GET['a'], '', [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( '', $_GET['a'], [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $dbr->selectRow( 'safe', 'safe', [] ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$dbr->selectRow( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$dbr->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$dbr->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$dbr->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+	}
+
 	function testIMaintainableDatabase( \Wikimedia\Rdbms\IMaintainableDatabase $db ) {
 		$db->query( $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->query( 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
@@ -194,32 +479,110 @@ class TaintCheckAnnotationsTest {
 		$db->select( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->select( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->select( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->select( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectField( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectField( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectField( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectFieldValues( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectFieldValues( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectSQLText( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectSQLText( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
-		$db->query( $db->selectSQLText( 'safe', 'safe' ) ); // Safe
+		$db->query( $db->selectSQLText( 'safe', 'safe', [ 'foo' => $_GET['a'] ] ) ); // Safe
+		// Check $options special handling
+		$db->selectSQLText( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRowCount( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRowCount( 'safe', 'safe' ); // Safe
+		// Check $options special handling
+		$db->selectRowCount( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRow( $_GET['a'], '', [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', $_GET['a'], [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRow( 'safe', 'safe', [] ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectRow( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->delete( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->delete( '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
@@ -255,32 +618,110 @@ class TaintCheckAnnotationsTest {
 		$db->select( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->select( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->select( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->select( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->select( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->select( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectField( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectField( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectField( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectField( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectField( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectField( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectFieldValues( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectFieldValues( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectFieldValues( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectFieldValues( 'safe', 'x', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectSQLText( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectSQLText( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectSQLText( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
-		$db->query( $db->selectSQLText( 'safe', 'safe' ) ); // Safe
+		$db->query( $db->selectSQLText( 'safe', 'safe', [ 'foo' => $_GET['a'] ] ) ); // Safe
+		// Check $options special handling
+		$db->selectSQLText( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRowCount( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRowCount( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRowCount( 'safe', 'safe' ); // Safe
+		// Check $options special handling
+		$db->selectRowCount( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRowCount( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRowCount( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->selectRow( $_GET['a'], '', [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', $_GET['a'], [] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->selectRow( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		echo $db->selectRow( 'safe', 'safe', [] ); // @phan-suppress-current-line SecurityCheck-XSS
+		// Check $options special handling
+		$db->selectRow( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$db->selectRow( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$db->selectRow( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
 
 		$db->delete( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
 		$db->delete( '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
@@ -330,6 +771,63 @@ class TaintCheckAnnotationsTest {
 		$db->query( $quoted );// Safe
 	}
 
+	function testISQLPlatform( ISQLPlatform $platform, IDatabase $dbForQueryCalls ) {
+		$platform->selectSQLText( $_GET['a'], '' ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( '', $_GET['a'] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( '', '', [ $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		echo $platform->selectSQLText( 'safe', 'safe' ); // @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $platform->selectSQLText( 'safe', 'safe' ) ); // Safe
+		// Check $options special handling
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'GROUP BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'ORDER BY' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ 'escaped' => $_GET['a'] ] ] ); // Safe
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'HAVING' => [ $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'USE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [ 'IGNORE INDEX' => $_GET['a'] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		// Check $join_conds special handling
+		$platform->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ $_GET['join_type'], '1=1' ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', $_GET['a'] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ $_GET['a'] ] ] ] ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->selectSQLText( 'safe', '*', [], '', [], [ 'sometable' => [ 'LEFT JOIN', [ 'escaped' => $_GET['a'] ] ] ] ); // Safe
+
+		$identQuoted = $platform->addIdentifierQuotes( $_GET['a'] );
+		echo $identQuoted;// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $identQuoted );// Safe
+
+		echo $platform->buildLike( $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $platform->buildLike( $_GET['a'] ) );// Safe
+		echo $platform->buildLike( '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $platform->buildLike( '', $_GET['a'] ) );// Safe
+		echo $platform->buildLike( '', '', '', '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $platform->buildLike( '', '', '', '', '', $_GET['a'] ) );// Safe
+
+		echo $platform->makeList( [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $platform->makeList( $_GET['a'] ) );// Safe
+		echo $platform->makeList( [] );// Safe
+		// Check special handling
+		$platform->makeList( $_GET['a'] ); // Safe
+		$platform->makeList( $_GET['a'], IDatabase::LIST_COMMA ); // Safe
+		$platform->makeList( $_GET['a'], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ $_GET['a'] ], IDatabase::LIST_AND ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_AND ); // Safe
+		$platform->makeList( $_GET['a'], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ $_GET['a'] ], IDatabase::LIST_SET ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_SET ); // Safe
+		$platform->makeList( $_GET['a'], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_NAMES ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( $_GET['a'], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ $_GET['a'] ], IDatabase::LIST_OR ); // @phan-suppress-current-line SecurityCheck-SQLInjection
+		$platform->makeList( [ 'a' => $_GET['a'] ], IDatabase::LIST_OR ); // Safe
+	}
+
+	function testDbQuoter( DbQuoter $quoter, IDatabase $dbForQueryCalls ) {
+		$quoted = $quoter->addQuotes( $_GET['a'] );
+		echo $quoted;// @phan-suppress-current-line SecurityCheck-XSS
+		$dbForQueryCalls->query( $quoted );// Safe
+	}
+
 	function testSelectQueryBuilder( SelectQueryBuilder $sqb ) {
 		$sqb->table( $_GET['a'] );// @phan-suppress-current-line SecurityCheck-SQLInjection
 		$sqb->table( '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-SQLInjection
@@ -363,6 +861,26 @@ class TaintCheckAnnotationsTest {
 		echo $sqb->fetchField();// @phan-suppress-current-line SecurityCheck-XSS
 		echo $sqb->fetchFieldValues();// @phan-suppress-current-line SecurityCheck-XSS
 		echo $sqb->fetchRow();// @phan-suppress-current-line SecurityCheck-XSS
+	}
+
+	function testJoinGroupBase( JoinGroupBase $jgb ) {
+		$jgb->join( $_GET['a'], '', '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->join( '', $_GET['a'], '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->join( '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->join( '', '', [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->join( '', '', [ 'safe' => $_GET['a'] ] );// Safe
+
+		$jgb->leftJoin( $_GET['a'], '', '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->leftJoin( '', $_GET['a'], '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->leftJoin( '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->leftJoin( '', '', [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->leftJoin( '', '', [ 'safe' => $_GET['a'] ] );// Safe
+
+		$jgb->straightJoin( $_GET['a'], '', '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->straightJoin( '', $_GET['a'], '1=1' );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->straightJoin( '', '', $_GET['a'] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->straightJoin( '', '', [ $_GET['a'] ] );// @phan-suppress-current-line SecurityCheck-SQLInjection
+		$jgb->straightJoin( '', '', [ 'safe' => $_GET['a'] ] );// Safe
 	}
 
 	function testInsertQueryBuilder( InsertQueryBuilder $iqb ) {

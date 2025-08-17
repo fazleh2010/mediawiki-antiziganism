@@ -25,6 +25,7 @@ namespace MediaWiki\Api;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Preferences\PreferencesFactory;
 use MediaWiki\User\Options\UserOptionsManager;
+use MediaWiki\User\User;
 use Wikimedia\ParamValidator\ParamValidator;
 
 /**
@@ -40,20 +41,31 @@ class ApiOptions extends ApiOptionsBase {
 		?UserOptionsManager $userOptionsManager = null,
 		?PreferencesFactory $preferencesFactory = null
 	) {
-		/**
-		 * This class is extended by GlobalPreferences extension.
-		 * So it falls back to the global state.
-		 */
-		$services = MediaWikiServices::getInstance();
-		$userOptionsManager ??= $services->getUserOptionsManager();
-		$preferencesFactory ??= $services->getPreferencesFactory();
+		if ( $userOptionsManager === null || $preferencesFactory === null ) {
+			wfDeprecatedMsg(
+				__METHOD__ . ': calling without $userOptionsManager and $preferencesFactory is deprecated',
+				'1.45'
+			);
+			$services = MediaWikiServices::getInstance();
+			$userOptionsManager ??= $services->getUserOptionsManager();
+			$preferencesFactory ??= $services->getPreferencesFactory();
+		}
 		parent::__construct( $main, $action, $userOptionsManager, $preferencesFactory );
 	}
 
+	/**
+	 * @param User $user
+	 * @param array $changes
+	 * @param string[] $resetKinds
+	 */
 	protected function runHook( $user, $changes, $resetKinds ) {
 		$this->getHookRunner()->onApiOptions( $this, $user, $changes, $resetKinds );
 	}
 
+	/**
+	 * @param string $key
+	 * @return bool
+	 */
 	protected function shouldIgnoreKey( $key ) {
 		$user = $this->getUserForUpdates();
 		$manager = $this->getUserOptionsManager();
@@ -70,11 +82,16 @@ class ApiOptions extends ApiOptionsBase {
 		$this->getUserOptionsManager()->resetOptionsByName( $this->getUserForUpdates(), $optionNames );
 	}
 
+	/**
+	 * @param string $preference
+	 * @param mixed $value
+	 */
 	protected function setPreference( $preference, $value ) {
 		$globalUpdateType = [
 			'ignore' => UserOptionsManager::GLOBAL_IGNORE,
 			'update' => UserOptionsManager::GLOBAL_UPDATE,
-			'override' => UserOptionsManager::GLOBAL_OVERRIDE
+			'override' => UserOptionsManager::GLOBAL_OVERRIDE,
+			'create' => UserOptionsManager::GLOBAL_CREATE,
 		][ $this->getGlobalParam() ];
 
 		$this->getUserOptionsManager()->setOption(
@@ -93,11 +110,13 @@ class ApiOptions extends ApiOptionsBase {
 		$this->getUserForUpdates()->saveSettings();
 	}
 
-	public function getHelpUrls() {
+	/** @codeCoverageIgnore Merely declarative */
+	public function getHelpUrls(): string {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Options';
 	}
 
-	protected function getExamplesMessages() {
+	/** @codeCoverageIgnore Merely declarative */
+	protected function getExamplesMessages(): array {
 		return [
 			'action=options&reset=&token=123ABC'
 				=> 'apihelp-options-example-reset',
@@ -109,10 +128,11 @@ class ApiOptions extends ApiOptionsBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return parent::getAllowedParams() + [
 			'global' => [
-				ParamValidator::PARAM_TYPE => [ 'ignore', 'update', 'override' ],
+				ParamValidator::PARAM_TYPE => [ 'ignore', 'update', 'override', 'create' ],
 				ParamValidator::PARAM_DEFAULT => 'ignore'
 			]
 		];

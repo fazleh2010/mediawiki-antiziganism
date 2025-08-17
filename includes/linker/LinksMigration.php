@@ -50,15 +50,12 @@ class LinksMigration {
 			'deprecated_configs' => [],
 		],
 		'pagelinks' => [
-			'config' => MainConfigNames::PageLinksSchemaMigrationStage,
+			'config' => -1,
 			'page_id' => 'pl_from',
 			'ns' => 'pl_namespace',
 			'title' => 'pl_title',
 			'target_id' => 'pl_target_id',
-			'deprecated_configs' => [
-				SCHEMA_COMPAT_WRITE_OLD,
-				SCHEMA_COMPAT_READ_OLD
-			],
+			'deprecated_configs' => [],
 		],
 		'categorylinks' => [
 			'config' => MainConfigNames::CategoryLinksSchemaMigrationStage,
@@ -68,6 +65,16 @@ class LinksMigration {
 			'target_id' => 'cl_target_id',
 			'deprecated_configs' => [],
 		],
+		'existencelinks' => [
+			'config' => -1,
+			'page_id' => 'exl_from',
+			// Fake field just for phan
+			'ns' => 'exl_namespace',
+			// Fake field just for phan
+			'title' => 'exl_title',
+			'target_id' => 'exl_target_id',
+			'deprecated_configs' => [],
+		],
 	];
 
 	/** @var string[] */
@@ -75,6 +82,7 @@ class LinksMigration {
 		'tl' => 'templatelinks',
 		'pl' => 'pagelinks',
 		'cl' => 'categorylinks',
+		'exl' => 'existencelinks',
 	];
 
 	public function __construct( Config $config, LinkTargetLookup $linktargetLookup ) {
@@ -149,7 +157,7 @@ class LinksMigration {
 		}
 	}
 
-	public function getTitleFields( $table ) {
+	public function getTitleFields( string $table ): array {
 		$this->assertMapping( $table );
 
 		if ( $this->isMigrationReadNew( $table ) ) {

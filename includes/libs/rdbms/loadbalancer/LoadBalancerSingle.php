@@ -68,17 +68,17 @@ class LoadBalancerSingle extends LoadBalancer {
 	/**
 	 * @param IDatabase $db Live connection handle
 	 * @param array $params Parameter map to LoadBalancerSingle::__constructs()
-	 * @return LoadBalancerSingle
 	 * @since 1.28
 	 */
-	public static function newFromConnection( IDatabase $db, array $params = [] ) {
-		return new static( array_merge(
-			[ 'localDomain' => $db->getDomainID() ],
-			$params,
-			[ 'connection' => $db ]
-		) );
+	public static function newFromConnection( IDatabase $db, array $params = [] ): static {
+		return new static( [
+			'localDomain' => $db->getDomainID(),
+			...$params,
+			'connection' => $db,
+		] );
 	}
 
+	/** @inheritDoc */
 	protected function sanitizeConnectionFlags( $flags, $domain ) {
 		// There is only one underlying connection handle. Also, this class is only meant to
 		// be used during situations like site installation, where there should be no contenting
@@ -88,6 +88,7 @@ class LoadBalancerSingle extends LoadBalancer {
 		return $flags;
 	}
 
+	/** @inheritDoc */
 	protected function reallyOpenConnection( $i, DatabaseDomain $domain, array $lbInfo ) {
 		foreach ( $lbInfo as $k => $v ) {
 			$this->conn->setLBInfo( $k, $v );

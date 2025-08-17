@@ -118,7 +118,7 @@ class WrapSectionsState {
 					// comes from the current page. But, legacy parser returns 'false'
 					// for this, so we'll return null as well instead of current title.
 					$metadata->fromTitle = null;
-				} elseif ( !empty( $p0->href ) ) {
+				} elseif ( $p0->href !== null ) {
 					// Pick template title, but strip leading "./" prefix
 					$tplHref = Utils::decodeURIComponent( $p0->href );
 					$metadata->fromTitle = PHPUtils::stripPrefix( $tplHref, './' );
@@ -302,7 +302,7 @@ class WrapSectionsState {
 
 			// Track entry into templated and extension output
 			if ( !$this->tplInfo && WTUtils::isFirstEncapsulationWrapperNode( $node ) ) {
-				DOMUtils::assertElt( $node );
+				'@phan-var Element $node'; // @var Element $node
 				$this->tplInfo = $tplInfo = new WrapSectionsTplInfo;
 				$tplInfo->first = $node;
 				$about = DOMCompat::getAttribute( $node, 'about' );
@@ -354,7 +354,7 @@ class WrapSectionsState {
 			}
 
 			if ( DOMUtils::isHeading( $node ) ) {
-				DOMUtils::assertElt( $node ); // headings are elements
+				'@phan-var Element $node'; // @var Element $node // headings are elements
 				$level = (int)DOMCompat::nodeName( $node )[1];
 
 				$dp = DOMDataUtils::getDataParsoid( $node );
@@ -472,6 +472,7 @@ class WrapSectionsState {
 		} while ( $n && !self::isParsoidSection( $n ) );
 
 		Assert::invariant( $n instanceof Element, "Expected to find Parsoid-section ancestor" );
+		'@phan-var Element $n'; // @var Element $n
 		return $n;
 	}
 
@@ -508,7 +509,7 @@ class WrapSectionsState {
 			} elseif ( $c instanceof Comment ) {
 				$offset += WTUtils::decodedCommentLength( $c );
 			} else {
-				DOMUtils::assertElt( $c );
+				'@phan-var Element $c'; // @var Element $c
 				$ret = $this->getDSR( $c, $start );
 				return $ret === null ? null : $ret + ( $start ? -$offset : $offset );
 			}
@@ -602,7 +603,7 @@ class WrapSectionsState {
 			$dataMw = new DataMw( [] );
 			$dataMw->parts = $parts;
 			DOMDataUtils::setDataMw( $wrapper, $dataMw );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			// We don't have accurate template wrapping information.
 			// Set typeof to 'mw:Placeholder' since 'mw:Transclusion'
 			// typeof is not actionable without valid data-mw.
@@ -726,7 +727,7 @@ class WrapSectionsState {
 		}
 	}
 
-	private function convertTOCOffsets() {
+	private function convertTOCOffsets(): void {
 		// Create reference array from all the codepointOffsets
 		$offsets = [];
 		foreach ( $this->env->getTOCData()->getSections() as $section ) {

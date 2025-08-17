@@ -33,6 +33,7 @@ use MediaWiki\Page\WikiPage;
 use MediaWiki\Status\Status;
 use MediaWiki\Title\Title;
 use MediaWiki\User\Options\UserOptionsLookup;
+use MediaWiki\Watchlist\WatchedItemStoreInterface;
 use MediaWiki\Watchlist\WatchlistManager;
 use StatusValue;
 use Wikimedia\ParamValidator\ParamValidator;
@@ -55,6 +56,7 @@ class ApiDelete extends ApiBase {
 		string $moduleName,
 		RepoGroup $repoGroup,
 		WatchlistManager $watchlistManager,
+		WatchedItemStoreInterface $watchedItemStore,
 		UserOptionsLookup $userOptionsLookup,
 		DeletePageFactory $deletePageFactory
 	) {
@@ -67,6 +69,7 @@ class ApiDelete extends ApiBase {
 		$this->watchlistMaxDuration =
 			$this->getConfig()->get( MainConfigNames::WatchlistExpiryMaxDuration );
 		$this->watchlistManager = $watchlistManager;
+		$this->watchedItemStore = $watchedItemStore;
 		$this->userOptionsLookup = $userOptionsLookup;
 	}
 
@@ -130,7 +133,7 @@ class ApiDelete extends ApiBase {
 			$watch = $params['watchlist'];
 		}
 
-		$watchlistExpiry = $this->getExpiryFromParams( $params );
+		$watchlistExpiry = $this->getExpiryFromParams( $params, $titleObj, $user );
 		$this->setWatch( $watch, $titleObj, $user, 'watchdeletion', $watchlistExpiry );
 
 		$r = [
@@ -260,14 +263,17 @@ class ApiDelete extends ApiBase {
 		);
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$params = [
 			'title' => null,
@@ -299,10 +305,12 @@ class ApiDelete extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		$title = Title::newMainPage()->getPrefixedText();
 		$mp = rawurlencode( $title );
@@ -315,6 +323,7 @@ class ApiDelete extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Delete';
 	}

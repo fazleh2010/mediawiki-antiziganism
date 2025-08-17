@@ -97,6 +97,7 @@ ChangesListWrapperWidget.prototype.onModelInvalidate = function () {
 ChangesListWrapperWidget.prototype.onModelUpdate = function (
 	$changesListContent, $fieldset, noResultsDetails, isInitialDOM, from
 ) {
+	mw.hook( 'rcfilters.changeslistwrapperwidget.updated' ).fire( this );
 	const $message = $( '<div>' )
 			.addClass( 'mw-rcfilters-ui-changesListWrapperWidget-results' ),
 		isEmpty = $changesListContent === 'NO_RESULTS',
@@ -142,7 +143,7 @@ ChangesListWrapperWidget.prototype.onModelUpdate = function (
 			// eslint-disable-next-line mediawiki/class-doc
 			this.$element.removeClass( ( elementIndex, allClasses ) => allClasses
 				.split( ' ' )
-				.filter( ( className ) => className.indexOf( 'mw-changeslist-' ) === 0 )
+				.filter( ( className ) => className.startsWith( 'mw-changeslist-' ) )
 				.join( ' ' ) );
 		}
 

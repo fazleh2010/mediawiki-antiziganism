@@ -71,6 +71,7 @@ class FindMissingActors extends Maintenance {
 			'img_actor' => [ 'image', 'img_actor', 'img_name' ],
 			'oi_actor' => [ 'oldimage', 'oi_actor', 'oi_archive_name' ], // no index on oi_archive_name!
 			'fa_actor' => [ 'filearchive', 'fa_actor', 'fa_id' ],
+			'fr_actor' => [ 'filerevision', 'fr_actor', 'fr_id' ],
 			'rc_actor' => [ 'recentchanges', 'rc_actor', 'rc_id' ],
 			'log_actor' => [ 'logging', 'log_actor', 'log_id' ],
 			'rev_actor' => [ 'revision', 'rev_actor', 'rev_id' ],
@@ -121,7 +122,7 @@ class FindMissingActors extends Maintenance {
 
 		try {
 			$actorId = $this->actorNormalization->acquireActorId( $user, $dbw );
-		} catch ( CannotCreateActorException $e ) {
+		} catch ( CannotCreateActorException ) {
 			$this->fatalError( "Failed to acquire an actor ID for user '$user'" );
 		}
 

@@ -99,11 +99,12 @@ class NewPagesPager extends ReverseChronologicalPager {
 		$this->tagsCache = new MapCacheLRU( 50 );
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$rcQuery = RecentChange::getQueryInfo();
 
 		$conds = [];
-		$conds['rc_new'] = 1;
+		$conds['rc_source'] = RecentChange::SRC_NEW;
 
 		$username = $this->opts->getValue( 'username' );
 		$user = Title::makeTitleSafe( NS_USER, $username );
@@ -179,8 +180,7 @@ class NewPagesPager extends ReverseChronologicalPager {
 		return $info;
 	}
 
-	// Based on ContribsPager.php
-	private function getNamespaceCond() {
+	private function getNamespaceCond(): array {
 		$namespace = $this->opts->getValue( 'namespace' );
 		if ( $namespace === 'all' || $namespace === '' ) {
 			return [];
@@ -205,10 +205,12 @@ class NewPagesPager extends ReverseChronologicalPager {
 		return [ $dbr->expr( 'rc_namespace', $eq_op, $namespaces ) ];
 	}
 
+	/** @inheritDoc */
 	public function getIndexField() {
 		return [ [ 'rc_timestamp', 'rc_id' ] ];
 	}
 
+	/** @inheritDoc */
 	public function formatRow( $row ) {
 		$title = Title::newFromRow( $row );
 

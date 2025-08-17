@@ -80,6 +80,7 @@ class ApiQueryAllImages extends ApiQueryGeneratorBase {
 		$this->run();
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode( $params ) {
 		return 'public';
 	}
@@ -308,8 +309,8 @@ class ApiQueryAllImages extends ApiQueryGeneratorBase {
 
 			if ( $resultPageSet === null ) {
 				$file = $repo->newFileFromRow( $row );
-				$info = array_merge( [ 'name' => $row->img_name ],
-					ApiQueryImageInfo::getInfo( $file, $prop, $result ) );
+				$info = ApiQueryImageInfo::getInfo( $file, $prop, $result ) +
+					[ 'name' => $row->img_name ];
 				self::addTitleInfo( $info, $file->getTitle() );
 
 				$fit = $result->addValue( [ 'query', $this->getModuleName() ], null, $info );
@@ -333,6 +334,7 @@ class ApiQueryAllImages extends ApiQueryGeneratorBase {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$ret = [
 			'sort' => [
@@ -414,6 +416,7 @@ class ApiQueryAllImages extends ApiQueryGeneratorBase {
 
 	private const PROPERTY_FILTER = [ 'archivename', 'thumbmime', 'uploadwarning' ];
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=query&list=allimages&aifrom=B'
@@ -429,6 +432,7 @@ class ApiQueryAllImages extends ApiQueryGeneratorBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Allimages';
 	}

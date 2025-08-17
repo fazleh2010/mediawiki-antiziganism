@@ -21,7 +21,9 @@
  * @ingroup Maintenance
  */
 
+use MediaWiki\MainConfigNames;
 use MediaWiki\Maintenance\Maintenance;
+use Wikimedia\Rdbms\RawSQLExpression;
 
 // @codeCoverageIgnoreStart
 require_once __DIR__ . '/Maintenance.php';
@@ -131,15 +133,32 @@ TEXT
 		}
 	}
 
-	protected function doWork( string $mode ) {
+	protected function doWork( string $mode ): int|false {
 		$this->output( "Finding up to {$this->getBatchSize()} drifted rows " .
 			"greater than cat_id {$this->minimumId}...\n" );
 
 		$dbr = $this->getDB( DB_REPLICA, 'vslow' );
-		$queryBuilder = $dbr->newSelectQueryBuilder()
-			->select( 'COUNT(*)' )
-			->from( 'categorylinks' )
-			->where( 'cl_to = cat_title' );
+
+		$migrationStage = $this->getServiceContainer()->getMainConfig()->get(
+			MainConfigNames::CategoryLinksSchemaMigrationStage
+		);
+
+		if ( $migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+			$queryBuilder = $dbr->newSelectQueryBuilder()
+				->select( 'COUNT(*)' )
+				->from( 'categorylinks' )
+				->where( 'cl_to = cat_title' );
+		} else {
+			$queryBuilder = $dbr->newSelectQueryBuilder()
+				->select( 'COUNT(*)' )
+				->from( 'categorylinks' )
+				->join( 'linktarget', null, 'cl_target_id = lt_id' )
+				->where( [
+					new RawSQLExpression( 'lt_title = cat_title' ),
+					'lt_namespace' => NS_CATEGORY,
+				] );
+		}
+
 		if ( $mode === 'subcats' ) {
 			$queryBuilder->andWhere( [ 'cl_type' => 'subcat' ] );
 		} elseif ( $mode === 'files' ) {

@@ -57,6 +57,7 @@ class SpecialTags extends SpecialPage {
 		$this->changeTagsStore = $changeTagsStore;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->setHeaders();
 		$this->outputHeader();
@@ -115,7 +116,7 @@ class SpecialTags extends SpecialPage {
 				->setAction( $this->getPageTitle( 'create' )->getLocalURL() )
 				->setWrapperLegendMsg( 'tags-create-heading' )
 				->setHeaderHtml( $this->msg( 'tags-create-explanation' )->parseAsBlock() )
-				->setSubmitCallback( [ $this, 'processCreateTagForm' ] )
+				->setSubmitCallback( $this->processCreateTagForm( ... ) )
 				->setSubmitTextMsg( 'tags-create-submit' )
 				->show();
 
@@ -305,7 +306,7 @@ class SpecialTags extends SpecialPage {
 		return Html::rawElement( 'tr', [], $newRow ) . "\n";
 	}
 
-	public function processCreateTagForm( array $data, HTMLForm $form ) {
+	private function processCreateTagForm( array $data, HTMLForm $form ): bool {
 		$context = $form->getContext();
 		$out = $context->getOutput();
 
@@ -347,6 +348,9 @@ class SpecialTags extends SpecialPage {
 		}
 	}
 
+	/**
+	 * @param string $tag
+	 */
 	protected function showDeleteTagForm( $tag ) {
 		$authority = $this->getAuthority();
 		if ( !$authority->isAllowed( 'deletechangetags' ) ) {
@@ -409,6 +413,10 @@ class SpecialTags extends SpecialPage {
 			->show();
 	}
 
+	/**
+	 * @param string $tag
+	 * @param bool $activate
+	 */
 	protected function showActivateDeactivateForm( $tag, $activate ) {
 		$actionStr = $activate ? 'activate' : 'deactivate';
 
@@ -518,6 +526,7 @@ class SpecialTags extends SpecialPage {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'changes';
 	}

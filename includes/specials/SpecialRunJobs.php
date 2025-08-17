@@ -25,6 +25,7 @@ use MediaWiki\Deferred\TransactionRoundDefiningUpdate;
 use MediaWiki\JobQueue\JobRunner;
 use MediaWiki\Json\FormatJson;
 use MediaWiki\MainConfigNames;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\SpecialPage\UnlistedSpecialPage;
 use Wikimedia\Http\HttpStatus;
 use Wikimedia\Rdbms\ReadOnlyMode;
@@ -50,12 +51,15 @@ class SpecialRunJobs extends UnlistedSpecialPage {
 		$this->readOnlyMode = $readOnlyMode;
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->getOutput()->disable();
+		ContentSecurityPolicy::sendRestrictiveHeader();
 
 		if ( $this->readOnlyMode->isReadOnly() ) {
 			wfHttpError( 423, 'Locked', 'Wiki is in read-only mode.' );
@@ -69,9 +73,16 @@ class SpecialRunJobs extends UnlistedSpecialPage {
 		}
 
 		// Validate request parameters
-		$optional = [ 'maxjobs' => 0, 'maxtime' => 30, 'type' => false,
-			'async' => true, 'stats' => false ];
-		$required = array_fill_keys( [ 'title', 'tasks', 'signature', 'sigexpiry' ], true );
+		$optional = [
+			'maxjobs' => 0,
+			'maxtime' => 30,
+			'type' => false,
+			'async' => true,
+			'stats' => false,
+			// Ignored, only for signature calculation
+			'tasks' => 'jobs'
+		];
+		$required = array_fill_keys( [ 'title', 'signature', 'sigexpiry' ], true );
 		$params = array_intersect_key( $this->getRequest()->getValues(), $required + $optional );
 		$missing = array_diff_key( $required, $params );
 		if ( count( $missing ) ) {
@@ -125,7 +136,7 @@ class SpecialRunJobs extends UnlistedSpecialPage {
 		}
 	}
 
-	protected function doRun( array $params ) {
+	protected function doRun( array $params ): array {
 		return $this->jobRunner->run( [
 			'type'     => $params['type'],
 			'maxJobs'  => $params['maxjobs'] ?: 1,

@@ -21,6 +21,7 @@
 namespace MediaWiki\JobQueue;
 
 use InvalidArgumentException;
+use LogicException;
 use MediaWiki\Deferred\DeferredUpdates;
 use MediaWiki\Deferred\JobQueueEnqueueUpdate;
 use MediaWiki\JobQueue\Exceptions\JobQueueError;
@@ -278,36 +279,6 @@ class JobQueueGroup {
 	}
 
 	/**
-	 * Register the "root job" of a given job into the queue for de-duplication.
-	 * This should only be called right *after* all the new jobs have been inserted.
-	 *
-	 * @deprecated since 1.40
-	 * @param RunnableJob $job
-	 * @return bool
-	 */
-	public function deduplicateRootJob( RunnableJob $job ) {
-		wfDeprecated( __METHOD__, '1.40' );
-		return true;
-	}
-
-	/**
-	 * Wait for any replica DBs or backup queue servers to catch up.
-	 *
-	 * This does nothing for certain queue classes.
-	 *
-	 * @deprecated since 1.41, use JobQueue::waitForBackups() instead.
-	 *
-	 * @return void
-	 */
-	public function waitForBackups() {
-		wfDeprecated( __METHOD__, '1.41' );
-		// Try to avoid doing this more than once per queue storage medium
-		foreach ( $this->jobTypeConfiguration as $type => $conf ) {
-			$this->get( $type )->waitForBackups();
-		}
-	}
-
-	/**
 	 * Get the list of queue types
 	 *
 	 * @warning May not be called on foreign wikis!
@@ -316,7 +287,7 @@ class JobQueueGroup {
 	 */
 	public function getQueueTypes() {
 		if ( !$this->localJobClasses ) {
-			throw new JobQueueError( 'Cannot inspect job queue from foreign wiki' );
+			throw new LogicException( 'Cannot inspect job queue from foreign wiki' );
 		}
 		return array_keys( $this->localJobClasses );
 	}

@@ -1,4 +1,7 @@
 <?php
+
+// @phan-file-suppress PhanTypeComparisonFromArray It's unclear whether exec() can return false
+
 /**
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,7 +40,6 @@ use Wikimedia\ArrayUtils\ArrayUtils;
  *
  * @ingroup Cache
  * @ingroup Redis
- * @phan-file-suppress PhanTypeComparisonFromArray It's unclear whether exec() can return false
  */
 class RedisBagOStuff extends MediumSpecificBagOStuff {
 	/** @var RedisConnectionPool */
@@ -102,6 +104,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		$this->attrMap[self::ATTR_DURABILITY] = self::QOS_DURABILITY_DISK;
 	}
 
+	/** @inheritDoc */
 	protected function doGet( $key, $flags = 0, &$casToken = null ) {
 		$getToken = ( $casToken === self::PASS_BY_REF );
 		$casToken = null;
@@ -137,6 +140,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $value;
 	}
 
+	/** @inheritDoc */
 	protected function doSet( $key, $value, $exptime = 0, $flags = 0 ) {
 		$conn = $this->getConnection( $key );
 		if ( !$conn ) {
@@ -166,6 +170,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doDelete( $key, $flags = 0 ) {
 		$conn = $this->getConnection( $key );
 		if ( !$conn ) {
@@ -188,6 +193,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doGetMulti( array $keys, $flags = 0 ) {
 		$blobsFound = [];
 
@@ -242,6 +248,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doSetMulti( array $data, $exptime = 0, $flags = 0 ) {
 		$ttl = $this->getExpirationAsTTL( $exptime );
 		$op = $ttl ? 'setex' : 'set';
@@ -287,6 +294,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doDeleteMulti( array $keys, $flags = 0 ) {
 		[ $keysByServer, $connByServer, $result ] = $this->getConnectionsForKeys( $keys );
 		foreach ( $keysByServer as $server => $batchKeys ) {
@@ -320,6 +328,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	public function doChangeTTLMulti( array $keys, $exptime, $flags = 0 ) {
 		$relative = $this->isRelativeExpiration( $exptime );
 		$op = ( $exptime == self::TTL_INDEFINITE )
@@ -362,6 +371,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doAdd( $key, $value, $exptime = 0, $flags = 0 ) {
 		$conn = $this->getConnection( $key );
 		if ( !$conn ) {
@@ -390,6 +400,7 @@ class RedisBagOStuff extends MediumSpecificBagOStuff {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doIncrWithInit( $key, $exptime, $step, $init, $flags ) {
 		$conn = $this->getConnection( $key );
 		if ( !$conn ) {
@@ -423,6 +434,7 @@ LUA;
 		return $result;
 	}
 
+	/** @inheritDoc */
 	protected function doChangeTTL( $key, $exptime, $flags ) {
 		$conn = $this->getConnection( $key );
 		if ( !$conn ) {

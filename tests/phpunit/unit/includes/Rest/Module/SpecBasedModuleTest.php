@@ -72,7 +72,8 @@ class SpecBasedModuleTest extends \MediaWikiUnitTestCase {
 			'validator' => $validator
 		] );
 
-		$responseFactory = new ResponseFactory( [] );
+		$formatter = $this->getDummyTextFormatter( true );
+		$responseFactory = new ResponseFactory( [ 'qqx' => $formatter ] );
 		$responseFactory->setShowExceptionDetails( true );
 
 		$module = new SpecBasedModule(
@@ -215,11 +216,17 @@ class SpecBasedModuleTest extends \MediaWikiUnitTestCase {
 	}
 
 	public function testOpenApiInfo() {
-		$request = new RequestData( [ 'uri' => new Uri( '/rest/test.v1/ModuleTest/throwWrapped' ) ] );
+		$request = new RequestData( [ 'uri' => new Uri( '/rest/test.v1/ModuleTest/hello/world' ) ] );
 		$module = $this->createOpenApiModule( $request );
 
 		$info = $module->getOpenApiInfo();
 		$this->assertSame( 'test', $info['title'] );
 		$this->assertSame( '1.0', $info['version'] );
+
+		$handler = $module->getHandlerForPath( '/ModuleTest/hello/world', $request );
+		$oas = $handler->getOpenApiSpec( 'GET' );
+
+		$this->assertSame( 'hello summary', $oas['summary'] );
+		$this->assertSame( '<message key="rest-endpoint-desc-mock-desc"></message>', $oas['description'] );
 	}
 }

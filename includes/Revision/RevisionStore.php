@@ -38,8 +38,6 @@ use MediaWiki\Exception\MWUnknownContentModelException;
 use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\Linker\LinkTarget;
-use MediaWiki\MainConfigNames;
-use MediaWiki\MediaWikiServices;
 use MediaWiki\Page\LegacyArticleIdAccess;
 use MediaWiki\Page\PageIdentity;
 use MediaWiki\Page\PageIdentityValue;
@@ -1277,14 +1275,13 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 	 * @return RevisionRecord|null
 	 */
 	public function getRevisionByTitle( $page, $revId = 0, $flags = 0 ) {
-		$conds = [
-			'page_namespace' => $page->getNamespace(),
-			'page_title' => $page->getDBkey()
-		];
-
-		if ( $page instanceof LinkTarget ) {
-			// Only resolve LinkTarget to a Title when operating in the context of the local wiki (T248756)
-			$page = $this->wikiId === WikiAwareEntity::LOCAL ? Title::castFromLinkTarget( $page ) : null;
+		$conds = $this->getPageConditions( $page );
+		if ( !$conds ) {
+			return null;
+		}
+		if ( !( $page instanceof PageIdentity ) ) {
+			wfDeprecated( __METHOD__ . ' with a LinkTarget', '1.45' );
+			$page = null;
 		}
 
 		if ( $revId ) {
@@ -1367,20 +1364,18 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 		string $timestamp,
 		int $flags = IDBAccessObject::READ_NORMAL
 	): ?RevisionRecord {
-		if ( $page instanceof LinkTarget ) {
-			// Only resolve LinkTarget to a Title when operating in the context of the local wiki (T248756)
-			$page = $this->wikiId === WikiAwareEntity::LOCAL ? Title::castFromLinkTarget( $page ) : null;
+		$conds = $this->getPageConditions( $page );
+		if ( !$conds ) {
+			return null;
 		}
+		if ( !( $page instanceof PageIdentity ) ) {
+			wfDeprecated( __METHOD__ . ' with a LinkTarget', '1.45' );
+			$page = null;
+		}
+
 		$db = $this->getDBConnectionRefForQueryFlags( $flags );
-		return $this->newRevisionFromConds(
-			[
-				'rev_timestamp' => $db->timestamp( $timestamp ),
-				'page_namespace' => $page->getNamespace(),
-				'page_title' => $page->getDBkey()
-			],
-			$flags,
-			$page
-		);
+		$conds['rev_timestamp'] = $db->timestamp( $timestamp );
+		return $this->newRevisionFromConds( $conds, $flags, $page );
 	}
 
 	/**
@@ -1397,10 +1392,6 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 			return $this->constructSlotRecords( $revId, $res, $queryFlags, $page );
 		}
 
-		$ttl = MediaWikiServices::getInstance()
-			->getMainConfig()
-			->get( MainConfigNames::RevisionSlotsCacheExpiry );
-
 		// TODO: These caches should not be needed. See T297147#7563670
 		$res = $this->localCache->getWithSetCallback(
 			$this->localCache->makeKey(
@@ -1409,8 +1400,8 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 				$page->getId( $page->getWikiId() ),
 				$revId
 			),
-			$ttl['local'] ?? $this->localCache::TTL_UNCACHEABLE,
-			function () use ( $revId, $queryFlags, $page, $ttl ) {
+			$this->localCache::TTL_HOUR,
+			function () use ( $revId, $queryFlags, $page ) {
 				return $this->cache->getWithSetCallback(
 					$this->cache->makeKey(
 						'revision-slots',
@@ -1418,7 +1409,7 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 						$page->getId( $page->getWikiId() ),
 						$revId
 					),
-					$ttl['WAN'] ?? WANObjectCache::TTL_UNCACHEABLE,
+					WANObjectCache::TTL_DAY,
 					function () use ( $revId, $queryFlags, $page ) {
 						$res = $this->loadSlotRecordsFromDb( $revId, $queryFlags, $page );
 						if ( !$res ) {
@@ -2024,8 +2015,8 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 
 		// which method to use for creating RevisionRecords
 		$newRevisionRecord = $archiveMode
-			? [ $this, 'newRevisionFromArchiveRowAndSlots' ]
-			: [ $this, 'newRevisionFromRowAndSlots' ];
+			? $this->newRevisionFromArchiveRowAndSlots( ... )
+			: $this->newRevisionFromRowAndSlots( ... );
 
 		if ( !isset( $options['slots'] ) ) {
 			$result->setResult(
@@ -2174,7 +2165,7 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 			foreach ( $options['slots'] as $slot ) {
 				try {
 					$slotIds[] = $this->slotRoleStore->getId( $slot );
-				} catch ( NameTableAccessException $exception ) {
+				} catch ( NameTableAccessException ) {
 					// Do not fail when slot has no id (unused slot)
 					// This also means for this slot are never data in the database
 				}
@@ -2476,9 +2467,7 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 
 		if ( in_array( 'user', $options, true ) ) {
 			$ret['tables'][] = 'user';
-			$ret['fields'] = array_merge( $ret['fields'], [
-				'user_name',
-			] );
+			$ret['fields'][] = 'user_name';
 			$ret['joins']['user'] = [
 				'LEFT JOIN',
 				[ 'actor_rev_user.actor_user != 0', 'user_id = actor_rev_user.actor_user' ]
@@ -3023,29 +3012,16 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 		$page,
 		int $flags = IDBAccessObject::READ_NORMAL
 	): ?RevisionRecord {
-		if ( $page instanceof LinkTarget ) {
-			// Only resolve LinkTarget to a Title when operating in the context of the local wiki (T248756)
-			$page = $this->wikiId === WikiAwareEntity::LOCAL ? Title::castFromLinkTarget( $page ) : null;
-		}
-
-		if ( $page && !$page->exists() ) {
-			// Protect against T380677#10461083:
-			// During a page move, we are creating a new page with the name of a
-			// page that we just renamed. If we look up revisions by name on a
-			// stale replica/snapshot, we may find the revisions of the old page,
-			// while the new page doesn't exist yet.
-			// This is a work-around. Ideally, we'd just do the lookup based on page ID,
-			// or make sure we are not running into replication lag or stale snapshots.
+		$conds = $this->getPageConditions( $page );
+		if ( !$conds ) {
 			return null;
 		}
+		if ( !( $page instanceof PageIdentity ) ) {
+			wfDeprecated( __METHOD__ . ' with a LinkTarget', '1.45' );
+			$page = null;
+		}
 
-		return $this->newRevisionFromConds(
-			[
-				'page_namespace' => $page->getNamespace(),
-				'page_title' => $page->getDBkey()
-			],
-			$flags,
-			$page,
+		return $this->newRevisionFromConds( $conds, $flags, $page,
 			[
 				'ORDER BY' => [ 'rev_timestamp ASC', 'rev_id ASC' ],
 				'IGNORE INDEX' => [ 'revision' => 'rev_timestamp' ], // See T159319
@@ -3089,6 +3065,25 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 					"Revision {$rev->getId( $this->wikiId )} doesn't belong to page {$pageId}"
 				);
 			}
+		}
+	}
+
+	/**
+	 * @param LinkTarget|PageIdentity $page Calling with LinkTarget is deprecated since 1.36
+	 * @return array|null
+	 */
+	private function getPageConditions( object $page ): ?array {
+		if ( $page instanceof PageIdentity ) {
+			return $page->exists() ? [ 'page_id' => $page->getId( $this->wikiId ) ] : null;
+		} else {
+			// Only resolve LinkTarget when operating in the context of the local wiki (T248756)
+			if ( $this->wikiId !== WikiAwareEntity::LOCAL ) {
+				throw new InvalidArgumentException( 'Cannot use non-local LinkTarget' );
+			}
+			return [
+				'page_namespace' => $page->getNamespace(),
+				'page_title' => $page->getDBkey(),
+			];
 		}
 	}
 
@@ -3366,13 +3361,11 @@ class RevisionStore implements RevisionFactory, RevisionLookup, LoggerAwareInter
 		}
 
 		$dbr = $this->getReplicaConnection();
-		$conds = array_merge(
-			[
-				'rev_page' => $pageId,
-				$dbr->bitAnd( 'rev_deleted', RevisionRecord::DELETED_TEXT ) . " = 0"
-			],
-			$this->getRevisionLimitConditions( $dbr, $old, $new, $options )
-		);
+		$conds = [
+			'rev_page' => $pageId,
+			$dbr->bitAnd( 'rev_deleted', RevisionRecord::DELETED_TEXT ) . ' = 0',
+			...$this->getRevisionLimitConditions( $dbr, $old, $new, $options ),
+		];
 		if ( $max !== null ) {
 			return $dbr->newSelectQueryBuilder()
 				->select( '1' )

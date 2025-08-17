@@ -5,6 +5,9 @@
  * used where further processing on the token stream is needed.
  */
 {
+declare( strict_types = 1 );
+namespace Wikimedia\Parsoid\Wt2Html;
+
 	use Wikimedia\Assert\UnreachableException;
 	use Wikimedia\JsonCodec\JsonCodec;
 	use Wikimedia\Parsoid\Config\Env;
@@ -15,6 +18,7 @@
 	use Wikimedia\Parsoid\NodeData\TempData;
 	use Wikimedia\Parsoid\Tokens\CommentTk;
 	use Wikimedia\Parsoid\Tokens\EOFTk;
+	use Wikimedia\Parsoid\Tokens\EmptyLineTk;
 	use Wikimedia\Parsoid\Tokens\EndTagTk;
 	use Wikimedia\Parsoid\Tokens\KV;
 	use Wikimedia\Parsoid\Tokens\KVSourceRange;
@@ -194,7 +198,7 @@ start "start" =
 generic_newline_attributes "generic_newline_attributes" = generic_newline_attribute*
 
 table_attributes "table_attributes" =
-	(table_attribute / optionalSpaceToken b:broken_table_attribute_name_char { return $b; })*
+	(table_attribute / optional_spaces @broken_table_attribute_name_char)*
 
 /*
  * This rule exists to support tokenizing the document in chunks.
@@ -213,7 +217,7 @@ start_async =
 				}
 				return true;
 			}
-			t:tlb
+			@tlb
 			& {
 				if ( $this->env->profiling() ) {
 					$profile = $this->env->getCurrentProfile();
@@ -222,14 +226,7 @@ start_async =
 				}
 				return true;
 			}
-		) { return $t; }
-		/ newlineToken* &{
-			// "tlb" matches "block" matches "sol" matches "newlineToken"
-			// But, "tlb" is prefixed with a !eof clause, so, we should only
-			// get here on eof. So, safe to unconditionally terminate the
-			// generator loop here.
-			return false;
-		}
+		)
 	)*
 
 /*
@@ -297,7 +294,7 @@ redirect =
 redirect_word =
 	$(
 		[ \t\n\r\0\x0b]*
-		rw:$(!space_or_newline ![:\[] .)+
+		rw:$([^ \t\n\r\x0c:\[]+)
 		& {
 			return preg_match( $this->env->getSiteConfig()->getMagicWordMatcher( 'redirect' ), $rw );
 		}
@@ -326,13 +323,13 @@ block =
  * may not have started with a <td>. The block_lines rule above does allow
  * SOLs to be matched when required for lists, headings, hrs, and fresh table lines.
  */
-	/ ( &<tableCaption> / &<fullTable> / !<tableDataBlock> ) s:sol !sof !inline_breaks { return $s; }
+	/ ( &<tableCaption> / &<fullTable> / !<tableDataBlock> ) @sol !sof !inline_breaks notempty
 
 /*
  * A block nested in other constructs. Avoid eating end delimiters for other
  * constructs by checking against inline_breaks first.
  */
-nested_block = !inline_breaks b:block { return $b; }
+nested_block = !inline_breaks @block
 
 /*
  * The same, but suitable for use inside a table construct.
@@ -341,6 +338,9 @@ nested_block = !inline_breaks b:block { return $b; }
  * table_start_tag (for nested tables).
  */
 nested_block_in_table =
+	// nested_block starts with !inline_breaks so test it early here as
+	// an optimization
+	!inline_breaks<tableDataBlock>
 	// XXX: don't rely on a lame look-ahead like this; use syntax stops
 	// instead, so that multi-line th content followed by a line prefixed with
 	// a comment is also handled. Alternatively, implement a sol look-behind
@@ -354,7 +354,7 @@ nested_block_in_table =
 		return $b;
 	}
 
-nested_inlineline = !inline_breaks i:inlineline { return $i; }
+nested_inlineline = !inline_breaks @inlineline
 
 /*
  * Line-based block constructs.
@@ -390,7 +390,7 @@ block_line =
 	heading
 	/ list_item
 	/ hr
-	/ &[ \t<{}|!] tl:table_line { return $tl; }
+	/ &[ \t<{}|!] @table_line
 
 br =
 	s:optionalSpaceToken &newline {
@@ -401,14 +401,13 @@ br =
 		] );
 	}
 
-inline_breaks =
+inline_breaks [cache=false] =
 	& [=|!{}:;\r\n[\]\-]
 	(
-		annOrExtTag: <annOrExtTag>
+		tagType: <tagType>
 		h: <h>
 		extlink: <extlink>
-		intemplate: <intemplate>
-		preproc: <preproc>
+		preproc: <&preproc>
 		equal: <equal>
 		table: <table>
 		templateArg: <templateArg>
@@ -417,13 +416,12 @@ inline_breaks =
 		arrow: <arrow>
 		linkdesc: <linkdesc>
 		colon: <colon>
-		th: <th>
+		th: <&th>
 		& {
 			return TokenizerUtils::inlineBreaks( $this->input, $this->endOffset(), [
-				'annOrExtTag' => $annOrExtTag,
+				'tagType' => $tagType,
 				'h' => $h,
 				'extlink' => $extlink,
-				'intemplate' => $intemplate,
 				'preproc' => $preproc,
 				'equal' => $equal,
 				'table' => $table,
@@ -441,22 +439,21 @@ inline_breaks =
 inlineline =
 	c:(
 		urltext
-		/ !inline_breaks
-		r:( inline_element / !newline s:. { return $s; }) { return $r; }
+		/ !inline_breaks @( inline_element / !newline @.)
 	)+ {
 		return TokenizerUtils::flattenStringlist( $c );
 	}
 
-html_tag = xmlish_tag<annOrExtTag=false>
+html_tag = xmlish_tag<tagType="html">
 
 // Doesn't use wellformed_extension_tag because html_tag is permissible
 angle_bracket_markup =
 	annotation_tag / maybe_extension_tag / include_limits / html_tag / comment
 
 inline_element =
-	& '<' r:angle_bracket_markup { return $r; }
-	/ & '{' r:tplarg_or_template { return $r; }
-	/ & "-{" r:lang_variant_or_tpl { return $r; }
+	& '<' @angle_bracket_markup
+	/ & '{' @tplarg_or_template
+	/ & "-{" @lang_variant_or_tpl
 	// FIXME: The old parser's handleInternalLinks2 splits on [[, resulting
 	// in sequences with odd number of brackets parsing as text, and sequences
 	// with even number of brackets having its innermost pair parse as a
@@ -464,22 +461,22 @@ inline_element =
 	// wikitext, the language, shouldn't be defined by odd tokenizing behaviour
 	// in the old parser.  Flagging this for a future cleanup.
 	/ $('[[' &'[')+
-	/ & '[' r:( wikilink / extlink ) { return $r; }
-	/ & "'" r:quote { return $r; }
+	/ & '[' @( wikilink / extlink )
+	/ & "'" @quote
 
 /* Headings  */
 
 heading =
 	& "=" // guard, to make sure '='+ will match.
 	// XXX: Also check to end to avoid inline parsing?
-	r:(
+	@(
 		s:$'='+ // moved in here to make s accessible to inner action
 		ce:(
 			(ill:inlineline<h>? { return $ill ?: []; })
 			$'='+
 		)?
 		& { return $ce || strlen( $s ) > 2; }
-		endTPos:("" { return $this->endOffset(); })
+		endTPos:POSITION
 		spc:( space / sol_transparent )*
 		&eolf
 		{
@@ -553,7 +550,7 @@ heading =
 			PHPUtils::pushArray( $res, $spc );
 			return $res;
 		}
-	) { return $r; }
+	)
 
 
 
@@ -589,17 +586,17 @@ autolink =
 	! <extlink>
 	// this must be a word boundary, so previous character must be non-word
 	! { return Utils::isUniWord(Utils::lastUniChar( $this->input, $this->endOffset() ) ); }
-	r:(
+	@(
 		autourl
 		/ autoref
 		/ isbn
-	) { return $r; }
+	)
 
 extlink "extlink" =
 	! <extlink> // extlink cannot be nested
-	r:(
+	@(
 		"["
-		p0:( "" { return $this->endOffset(); })
+		p0:POSITION
 		flat:(
 			addr:(url_protocol ipv6urladdr / "")
 			target:(extlink_nonipv6url<extlink> / "")
@@ -615,11 +612,11 @@ extlink "extlink" =
 			}
 			return Utils::isProtocolValid( substr( $flat, 0, -1 ), $this->env );
 		}
-		p1:( "" { return $this->endOffset(); })
+		p1:POSITION
 		sp:$( space / unispace )*
-		p2:( "" { return $this->endOffset(); })
+		p2:POSITION
 		content:inlineline<extlink>?
-		p3:( "" { return $this->endOffset(); })
+		p3:POSITION
 		"]" {
 			$tsr1 = new SourceRange( $p0, $p1 );
 			$tsr2 = new SourceRange( $p2, $p3 );
@@ -637,14 +634,10 @@ extlink "extlink" =
 					$dp
 				)
 			]; }
-	) { return $r; }
+	)
 
-RFC = &{ return $this->siteConfig->magicLinkEnabled("RFC"); } 'RFC' {
-	return 'RFC';
-}
-PMID = &{ return $this->siteConfig->magicLinkEnabled("PMID"); } 'PMID' {
-	return 'PMID';
-}
+RFC = &{ return $this->siteConfig->magicLinkEnabled("RFC"); } @'RFC'
+PMID = &{ return $this->siteConfig->magicLinkEnabled("PMID"); } @'PMID'
 
 autoref =
 	ref:(RFC / PMID) sp:space_or_nbsp+ identifier:$[0-9]+ end_of_word
@@ -738,17 +731,17 @@ url =
 	proto:url_protocol
 	addr:(ipv6urladdr / "")
 	path:(
-		!inline_breaks c:(
+		!inline_breaks @(
 			no_punctuation_char
 			/ comment
 			/ tplarg_or_template
 			/ ['{]
 			/ ! ( "&" ( [lL][tT] / [gG][tT] ) ";" )
-				r:(
-					& "&" he:htmlentity { return $he; }
+				@(
+					& "&" @htmlentity
 					/ "&"
-				) { return $r; }
-		) { return $c; }
+				)
+		)
 	)*
 	// Must be at least one character after the protocol
 	& { return $addr !== '' || count( $path ) > 0; }
@@ -767,18 +760,18 @@ autourl =
 		proto:url_protocol
 		addr:(ipv6urladdr / "")
 		path:(
-			!inline_breaks c:(
+			!inline_breaks @(
 				no_punctuation_char
 				/ comment
 				/ tplarg_or_template
 				/ $("'" !"'") // single quotes are ok, double quotes are bad
 				/ "{"
 				/ ! ( rhe:raw_htmlentity &{ return $rhe === '<' || $rhe === '>' || $rhe === "\u{A0}"; } )
-					r:(
-						& "&" he:htmlentity { return $he; }
+					@(
+						& "&" @htmlentity
 						/ "&"
-					) { return $r; }
-			) { return $c; }
+					)
+			)
 		)*
 		{
 			// as in Parser.php::makeFreeExternalLink, we're going to
@@ -832,15 +825,12 @@ ipv6urladdr =
  */
 tplarg_or_template =
 	&'{{'
-	t:tplarg_or_template_guarded<intemplate=true> {
-		return $t;
-	}
-
-tplarg_or_template_guarded =
-	&('{{' &('{{{'+ !'{') tplarg) a:(template/broken_template) { return $a; }
-	/ a:$('{' &('{{{'+ !'{'))? b:tplarg { return [ $a, $b ]; }
-	/ a:$('{' &('{{' !'{'))? b:template { return [ $a, $b ]; }
-	/ broken_template
+	@(
+		&('{{' &('{{{'+ !'{') tplarg) @(template/broken_template)
+		/ @$('{' &('{{{'+ !'{'))? @tplarg
+		/ @$('{' &('{{' !'{'))? @template
+		/ broken_template
+	)
 
 tplarg_or_template_or_bust =
 	r:(tplarg_or_template / .)+ { return TokenizerUtils::flattenIfArray( $r ); }
@@ -891,10 +881,10 @@ template_preproc =
 	target:(inlineline_in_tpls / parsoid_fragment_marker )
 	params:(
 		nl_comment_space* "|"
-		r:(
-			p0:("" { return $this->endOffset(); })
+		@(
+			p0:POSITION
 			v:nl_comment_space*
-			p1:("" { return $this->endOffset(); })
+			p1:POSITION
 			&("|" / "}}")
 			{
 				// empty argument
@@ -902,7 +892,7 @@ template_preproc =
 				return new KV( '', TokenizerUtils::flattenIfArray( $v ), $tsr0->expandTsrV() );
 			}
 			/ template_param
-		) { return $r; }
+		)
 	)*
 	nl_comment_space*
 	inline_breaks "}}"
@@ -927,21 +917,21 @@ tplarg =
 
 tplarg_preproc =
 	"{{{" nl_comment_space*
-	p:("" { return $this->endOffset(); })
+	p:POSITION
 	target:inlineline_in_tpls?
 	params:(
 		nl_comment_space* "|"
-		r:(
-			p0:("" { return $this->endOffset(); })
+		@(
+			p0:POSITION
 			v:nl_comment_space*
-			p1:("" { return $this->endOffset(); })
+			p1:POSITION
 			&("|" / "}}}")
 			{
 				// empty argument
 				return [ 'tokens' => $v, 'srcOffsets' => new SourceRange( $p0, $p1 ) ];
 			}
 			/ template_param_value
-		) { return $r; }
+		)
 	)*
 	nl_comment_space*
 	inline_breaks "}}}"
@@ -971,37 +961,30 @@ tplarg_preproc =
 template_param =
 	name:template_param_name
 	val:(
-		kEndPos:("" { return $this->endOffset(); })
+		kEndPos:POSITION
 		// no optionalSpaceToken here, it's eaten by template_param_name
 		"="
-		vStartPos:("" { return $this->endOffset(); })
+		vStartPos:POSITION
 		optSp:optionalSpaceToken
 		tpv:template_param_value? {
 			return [
 				'kEndPos' => $kEndPos,
 				'vStartPos' => $vStartPos,
-				'value' => TokenizerUtils::flattenString( [ $optSp, $tpv['tokens'] ?? [] ] ),
+				'value' => ( $tpv === null ) ? '' :
+					TokenizerUtils::flattenString( [ $optSp, $tpv['tokens'] ] ),
 			];
 		}
 	)? {
 		if ( $val !== null ) {
-			if ( $val['value'] !== null ) {
-				$so = new KVSourceRange(
-					$this->startOffset(), $val['kEndPos'],
-					$val['vStartPos'], $this->endOffset()
-				);
-				return new KV(
-					$name,
-					TokenizerUtils::flattenIfArray( $val['value'] ),
-					$so
-				);
-			} else {
-				return new KV(
-					TokenizerUtils::flattenIfArray( $name ),
-					'',
-					$so
-				);
-			}
+			$so = new KVSourceRange(
+				$this->startOffset(), $val['kEndPos'],
+				$val['vStartPos'], $this->endOffset()
+			);
+			return new KV(
+				$name,
+				TokenizerUtils::flattenIfArray( $val['value'] ),
+				$so
+			);
 		} else {
 			$so = new SourceRange( $this->startOffset(), $this->endOffset() );
 			return new KV(
@@ -1018,7 +1001,7 @@ template_param =
 	}
 
 template_param_name =
-	template_param_text<equal> / (&'=' { return ''; })
+	template_param_text<equal> / (&'=' @"")
 
 template_param_value =
 	tpt:template_param_text<equal=false>
@@ -1058,10 +1041,10 @@ inlineline_in_tpls =
 // -{{{{ is (since {{{ has precedence over {{).
 
 lang_variant_or_tpl =
-	&('-{' &('{{{'+ !'{') tplarg) a:lang_variant { return $a; }
-	/ a:$('-' &('{{{'+ !'{')) b:tplarg { return [ $a, $b ]; }
-	/ a:$('-' &('{{' '{{{'* !'{')) b:template { return [ $a, $b ]; }
-	/ &'-{' a:lang_variant { return $a; }
+	&('-{' &('{{{'+ !'{') tplarg) @lang_variant
+	/ @$('-' &('{{{'+ !'{')) @tplarg
+	/ @$('-' &('{{' '{{{'* !'{')) @template
+	/ &'-{' @lang_variant
 
 broken_lang_variant =
 	r:"-{"
@@ -1100,10 +1083,10 @@ lang_variant_preproc =
 		lv:lang_variant_text { return [ [ 'text' => $lv ] ]; }
 		/
 		&{ return !$f['raw']; }
-		lv:lang_variant_option_list { return $lv; }
+		@lang_variant_option_list
 	)
 	inline_breaks
-	lv1:("}-" { return $this->endOffset(); })
+	lv1:("}-" @POSITION)
 	{
 		if ( !$this->env->langConverterEnabled() ) {
 			return [ '-{', $ts[0]['text']['tokens'], '}-' ];
@@ -1151,7 +1134,7 @@ lang_variant_preproc =
 	}
 
 opt_lang_variant_flags =
-	f:( ff:lang_variant_flags "|" { return $ff; } )?
+	f:( @lang_variant_flags "|" )?
 	{
 		// Collect & separate flags and variants into a hashtable (by key) and ordered list
 		$flags = [];
@@ -1251,7 +1234,7 @@ lang_variant_name =
 	/ nowiki_text
 
 lang_variant_option_list =
-	o:lang_variant_option rest:( ";" oo:lang_variant_option { return $oo; })*
+	o:lang_variant_option rest:( ";" @lang_variant_option)*
 	tr:( ";" $bogus_lang_variant_option )* // optional trailing crap
 	{
 		array_unshift( $rest, $o );
@@ -1332,7 +1315,7 @@ lang_variant_text_no_semi_or_arrow =
 wikilink_content =
 	(
 		p:pipe
-		startPos:("" { return $this->endOffset(); })
+		startPos:POSITION
 		lt:link_text? {
 			$tsr = new SourceRange( $startPos, $this->endOffset() );
 			$maybeContent = new KV( 'mw:maybeContent', $lt ?? [], $tsr->expandTsrV() );
@@ -1359,9 +1342,9 @@ broken_wikilink =
 
 wikilink_preproc =
 	"[["
-	spos:("" { return $this->endOffset(); })
+	spos:POSITION
 	target:wikilink_preprocessor_text?
-	tpos:("" { return $this->endOffset(); })
+	tpos:POSITION
 	lcs:(
 	  l:wikilink_content inline_breaks { return [$l,null]; }
 	  / l:inlineline { return [null,$l]; }
@@ -1427,7 +1410,7 @@ link_text_parameterized =
 		/ urltext
 		/ (
 			!inline_breaks
-			r:( inline_element / '[' text_char+ ']' $(&(!']' / ']]')) / . ) { return $r; }
+			@( inline_element / '[' text_char+ ']' $(&(!']' / ']]')) / . )
 		)
 	)+ {
 		return TokenizerUtils::flattenStringlist( $c );
@@ -1479,7 +1462,10 @@ quote =
 // In coordination with language team, get rid of this hack once all old uses
 // are migrated to new syntax (T274881).
 tvar_old_syntax_closing_HACK =
-	!<annOrExtTag>
+	tagType: <tagType>
+	& {
+		return $tagType !== 'anno';
+	}
 	"</>"
 	& { return $this->env->hasAnnotations && $this->siteConfig->isAnnotationTag( 'tvar' ); }
 	{
@@ -1490,7 +1476,10 @@ tvar_old_syntax_closing_HACK =
 	}
 
 annotation_check =
-	!<annOrExtTag>
+	tagType: <tagType>
+	& {
+		return $tagType !== 'anno';
+	}
 	start:xmlish_start
 	&{
 		list(,$name) = $start;
@@ -1501,7 +1490,7 @@ annotation_tag =
 	& { return $this->annotationsEnabledOnWiki; /* short-circuit! */ }
 	tag:( tvar_old_syntax_closing_HACK / (
 		&annotation_check
-		t:xmlish_tag<annOrExtTag>
+		t:xmlish_tag<tagType="anno">
 		{
 			$end = ( $t instanceof EndTagTk );
 			$attribs = $t->attribs;
@@ -1551,8 +1540,14 @@ annotation_tag =
 		}
 	}
 
+html_or_empty =
+	tagType: <tagType>
+	& {
+		return ( $tagType === 'html' || $tagType === '' );
+	}
+
 extension_check =
-	!<annOrExtTag>
+	html_or_empty
 	start:xmlish_start
 	&{
 		list(,$name) = $start;
@@ -1566,7 +1561,7 @@ extension_check =
 
 maybe_extension_tag =
 	&extension_check
-	t:xmlish_tag<annOrExtTag>
+	t:xmlish_tag<tagType="ext">
 	{
 		$tagName = mb_strtolower( $t->getName() );
 		$dp = $t->dataParsoid;
@@ -1685,7 +1680,7 @@ wellformed_extension_tag =
 	{ return $extToken; }
 
 nowiki_check =
-	!<annOrExtTag>
+	html_or_empty
 	start:xmlish_start
 	&{
 		list(,$name) = $start;
@@ -1694,8 +1689,7 @@ nowiki_check =
 
 nowiki =
 	&nowiki_check
-	ext:wellformed_extension_tag
-	{ return $ext; }
+	@wellformed_extension_tag
 
 // Used by lang_variant productions to protect special language names or
 // conversion strings.
@@ -1723,18 +1717,18 @@ tag_name = $[^\t\n\v />\0]+
 // the inclusion of solidus to match where the spec would ignore those
 // characters.  In particular, it does not belong in between attribute name
 // and value.
-space_or_newline_or_solidus = space_or_newline / (s:"/" !">" { return $s; })
+space_or_newline_or_solidus = space_or_newline / (@"/" !">")
 
-xmlish_start = "<" end:"/"? name:tag_name { return [ $end, $name ]; }
+xmlish_start = "<" @"/"? @tag_name
 
 xmlish_tag =
-	annOrExtTag: <annOrExtTag>
+	tagType: <tagType>
 	start:xmlish_start
 	& {
 		// Only enforce ascii alpha first char for non-extension tags.
 		// See tag_name above for the details.
 		list(,$name) = $start;
-		return $annOrExtTag ||
+		return $tagType !== 'html' ||
 			( preg_match( '/^[A-Za-z]/', $name ) && $this->isXMLTag( $name ) );
 	}
 	// By the time we get to `doTableStuff` in the old parser, we've already
@@ -1750,7 +1744,7 @@ xmlish_tag =
 
 		// Extension tags don't necessarily have the same semantics as html tags,
 		// so don't treat them as void elements.
-		$isVoidElt = Utils::isVoidElement( $lcName ) && !$annOrExtTag;
+		$isVoidElt = Utils::isVoidElement( $lcName ) && $tagType === 'html';
 
 		// Support </br>
 		if ( $lcName === 'br' && $end ) {
@@ -1775,10 +1769,10 @@ xmlish_tag =
 // A generic attribute that can span multiple lines.
 generic_newline_attribute =
 	space_or_newline_or_solidus*
-	namePos0:("" { return $this->endOffset(); })
+	namePos0:POSITION
 	name:generic_attribute_name
-	namePos1:("" { return $this->endOffset(); })
-	vd:(space_or_newline* "=" v:generic_att_value? { return $v; })?
+	namePos1:POSITION
+	vd:(space_or_newline* "=" @generic_att_value?)?
 {
 	// NB: Keep in sync w/ table_attibute
 	$res = null;
@@ -1801,11 +1795,11 @@ generic_newline_attribute =
 
 // A single-line attribute.
 table_attribute =
-	s:optionalSpaceToken
-	namePos0:("" { return $this->endOffset(); })
+	optional_spaces
+	namePos0:POSITION
 	name:table_attribute_name
-	namePos1:("" { return $this->endOffset(); })
-	vd:(optionalSpaceToken "=" v:table_att_value? { return $v; })?
+	namePos1:POSITION
+	vd:(optional_spaces "=" @table_att_value?)?
 {
 	// NB: Keep in sync w/ generic_newline_attribute
 	$res = null;
@@ -1830,32 +1824,30 @@ table_attribute =
 // be found anywhere in xmlish tags.  This is a divergence from html5 tokenizing
 // which happily permits it in attribute positions.  Extension tags being the
 // exception, since they're stripped beforehand.
-less_than =
-	$(
-		&<annOrExtTag>
-		"<"
-	)
+less_than = !html_or_empty @"<"
 
 // The arrangement of chars is to emphasize the split between what's disallowed
 // by html5 and what's necessary to give directive a chance.
 // See: http://www.w3.org/TR/html5/syntax.html#attributes-0
 generic_attribute_name =
-	q:$(["'=]?) // From #before-attribute-name-state, < is omitted for directive
-	r:(
-		$[^ \t\r\n\0/=><&{}\-!|]+
-		/ !inline_breaks
-		// \0/=> is the html5 attribute name set we do not want.
-		t:(
-			directive
-			/ less_than
-			/ $( !( space_or_newline / [\0/=><] ) . )
-		) { return $t; }
-	)*
-	& { return count( $r ) > 0 || $q !== ''; }
+	first:(
+	  // From #before-attribute-name-state, < is omitted for directive
+	  $(["'=]) // add a double quote to fix syntax highlighting: "
+	  / generic_attribute_name_piece
+	) rest:generic_attribute_name_piece*
 	{
-		array_unshift( $r, $q );
-		return TokenizerUtils::flattenString( $r );
+		array_unshift( $rest, $first );
+		return TokenizerUtils::flattenString( $rest );
 	}
+generic_attribute_name_piece [inline] =
+	$[^ \t\r\n\0/=><&{}\-!|]+
+	/ !inline_breaks
+	// \0/=> is the html5 attribute name set we do not want.
+	@(
+		directive
+		/ less_than
+		/ $( !( space_or_newline / [\0/=><] ) . )
+	)
 
 // Also accept these chars in a wikitext table or tr attribute name position.
 // They are normally not matched by the table_attribute_name.
@@ -1865,26 +1857,28 @@ broken_table_attribute_name_char = c:[\0/=>] { return new KV( $c, '' ); }
 // (That doesn't make sense (ie. match the old parser) in the generic case.)
 // We also give a chance to break on \[ (see T2553).
 table_attribute_name =
-	q:$(["'=]?) // From #before-attribute-name-state, < is omitted for directive
-	r:(
-		$[^ \t\r\n\0/=><&{}\-!|\[]+
-		/ !inline_breaks
-		// \0/=> is the html5 attribute name set we do not want.
-		t:(
-			$wikilink
-			/ directive
-			// Accept tags-inside-attributes as attribute names.
-			// The sanitizer will strip and shadow them for roundtripping.
-			// Example: <hiddentext>generated with.. </hiddentext>
-			/ &'<' x:html_tag ill:inlineline? { return array_merge( [$x], $ill ?: [] ); }
-			/ $( !( space_or_newline / [\0/=>] ) . )
-		) { return $t; }
-	)*
-	& { return count( $r ) > 0 || $q !== ''; }
+	first:(
+	  // From #before-attribute-name-state, < is omitted for directive
+	  $(["'=]) // add a double quote to fix syntax highlighting: "
+	  / table_attribute_name_piece
+	) rest:table_attribute_name_piece*
 	{
-		array_unshift( $r, $q );
-		return TokenizerUtils::flattenString( $r );
+		array_unshift( $rest, $first );
+		return TokenizerUtils::flattenString( $rest );
 	}
+table_attribute_name_piece =
+	$[^ \t\r\n\0/=><&{}\-!|\[]+
+	/ !inline_breaks
+	// \0/=> is the html5 attribute name set we do not want.
+	@(
+		$wikilink
+		/ directive
+		// Accept tags-inside-attributes as attribute names.
+		// The sanitizer will strip and shadow them for roundtripping.
+		// Example: <hiddentext>generated with.. </hiddentext>
+		/ &'<' x:html_tag ill:inlineline? { return array_merge( [$x], $ill ?: [] ); }
+		/ $( !( space_or_newline / [\0/=>] ) . )
+	)
 
 // Attribute value, quoted variants can span multiple lines.
 // Missing end quote: accept /> look-ahead as heuristic.
@@ -1957,13 +1951,13 @@ hacky_dl_uses =
 	return array_merge( [ $li ], $sc, $tbl );
 }
 
-dtdd_colon = c:inlineline_break_on_colon? cpos:(":" { return $this->endOffset(); })
+dtdd_colon = c:inlineline_break_on_colon? cpos:(":" @POSITION)
 {
 	return [ $c, $cpos ];
 }
 
 dtdd =
-	bullets:(!(";" !list_char) lc:list_char { return $lc; })*
+	bullets:(!(";" !list_char) @list_char)*
 	";"
 	colons:dtdd_colon*
 	d:inlineline?
@@ -2101,9 +2095,10 @@ table_content_line =
 
 table_start_tag "table_start_tag" =
 	b:"{" p:pipe
+	attrStartPos:POSITION
 	// ok to normalize away stray |} on rt (see T59360)
-	ta:(table_attributes<table=false> / &{ $this->unreachable(); })
-	tsEndPos:("" { return $this->endOffset(); })
+	ta:(table_attributes<table=false> / unreachable)
+	tsEndPos:POSITION
 	s2:space*
 	{
 		$coms = TokenizerUtils::popComments( $ta );
@@ -2117,6 +2112,9 @@ table_start_tag "table_start_tag" =
 			// Variation from default
 			$dp->startTagSrc = $b . $p;
 		}
+		$dp->getTemp()->attrSrc = substr(
+			$this->input, $attrStartPos, $tsEndPos - $attrStartPos
+		);
 
 		return array_merge(
 			[ new TagTk( 'table', $ta, $dp ) ],
@@ -2125,13 +2123,15 @@ table_start_tag "table_start_tag" =
 		);
 	}
 
+unreachable [unreachable] = &{ $this->unreachable(); } ""
+
 // FIXME: Not sure if we want to support it, but this should allow columns.
 table_caption_tag =
 	// avoid recursion via nested_block_in_table
 	! <tableDataBlock>
 	p:pipe "+"
 	args:row_syntax_table_args?
-	tagEndPos:("" { return $this->endOffset(); })
+	tagEndPos:POSITION
 	c:nested_block_in_table<tableCaption>* {
 		$tsr = new SourceRange( $this->startOffset(), $tagEndPos );
 		return TokenizerUtils::buildTableTokens(
@@ -2143,8 +2143,9 @@ table_row_tag =
 	// avoid recursion via nested_block_in_table
 	! <tableDataBlock>
 	p:pipe dashes:$"-"+
-	a:(table_attributes<table=false> / &{ $this->unreachable(); })
-	tagEndPos:("" { return $this->endOffset(); })
+	attrStartPos:POSITION
+	a:(table_attributes<table=false> / unreachable)
+	tagEndPos:POSITION
 	s2:space*
 	{
 		$coms = TokenizerUtils::popComments( $a );
@@ -2155,6 +2156,9 @@ table_row_tag =
 		$da = new DataParsoid;
 		$da->tsr = new SourceRange( $this->startOffset(), $tagEndPos );
 		$da->startTagSrc = $p . $dashes;
+		$da->getTemp()->attrSrc = substr(
+			$this->input, $attrStartPos, $tagEndPos - $attrStartPos
+		);
 
 		// We rely on our tree builder to close the row as needed. This is
 		// needed to support building tables from fragment templates with
@@ -2181,13 +2185,13 @@ table_heading_tags_parameterized =
 
 table_heading_tag =
 	arg:row_syntax_table_args?
-	tagEndPos:("" { return $this->endOffset(); })
+	tagEndPos:POSITION
 	c:(
 		th:<&th>
 		d:nested_block_in_table {
 			// Ignore newlines found in transclusions!
 			// This is not perfect (since {{..}} may not always tokenize to transclusions).
-			if ( $th !== false && strpos( preg_replace( "/{{[\s\S]+?}}/", "", $this->text() ), "\n" ) !== false ) {
+			if ( $th !== false && str_contains( preg_replace( "/{{[\s\S]+?}}/", "", $this->text() ), "\n" ) ) {
 				// There's been a newline. Remove the break and continue
 				// tokenizing nested_block_in_tables.
 				$th = false;
@@ -2242,7 +2246,7 @@ table_data_tag =
 	! "}"
 	arg:row_syntax_table_args?
 	// use inline_breaks to break on tr etc
-	tagEndPos:("" { return $this->endOffset(); })
+	tagEndPos:POSITION
 	td:nested_block_in_table*
 	{
 		$tagStart = $this->startOffset();
@@ -2290,7 +2294,7 @@ table_end_tag =
  * match if followed by double pipe (row-based syntax).
  */
 row_syntax_table_args =
-	as:table_attributes<tableCellArg> s:optional_spaces p:pipe !pipe {
+	as:table_attributes<tableCellArg> s:$optional_spaces p:pipe !pipe {
 		return [ $as, $s, $p ];
 	}
 
@@ -2355,15 +2359,17 @@ urltext =
 				return false;
 			}
 		}
-		'' {
+		notempty {
 			$this->currPos += strlen( $this->urltextPlainSegment );
 			return $this->urltextPlainSegment;
 		}
-		/ & { return $this->urltextFoundAutolink; } al:autolink { return $al; }
-		/ & "&" he:htmlentity { return $he; }
-		/ & ('__') bs:behavior_switch { return $bs; }
+		/ & { return $this->urltextFoundAutolink; } @autolink
+		/ & "&" @htmlentity
+		/ & ('__') @behavior_switch
 		/ text_char
 	)+
+
+notempty [empty=false,cache=false] = ""
 
 raw_htmlentity =
 	m:$("&" [#0-9a-zA-Zרלמرلم]+ ";") {
@@ -2407,7 +2413,7 @@ htmlentity =
  */
 
 include_check =
-	!<annOrExtTag>
+	html_or_empty
 	start:xmlish_start
 	&{
 		list(,$name) = $start;
@@ -2416,7 +2422,7 @@ include_check =
 
 include_limits =
 	&include_check
-	t:xmlish_tag<annOrExtTag> {
+	t:xmlish_tag<tagType="inc"> {
 		$tagName = mb_strtolower( $t->getName() );
 		switch ( $tagName ) {
 			case 'includeonly':
@@ -2529,15 +2535,14 @@ directive =
 	/ annotation_tag
 	/ wellformed_extension_tag
 	/ tplarg_or_template
-	/ & "-{" v:lang_variant_or_tpl { return $v; }
-	/ & "&" e:htmlentity { return $e; }
+	/ & "-{" @lang_variant_or_tpl
+	/ & "&" @htmlentity
 	/ include_limits
 
 wikilink_preprocessor_text =
 	r:(
 		t:$[^<[{\n\r\t|!\]}{ &\-]+
-		/ !inline_breaks !pipe wr:( directive / $( !"]]" ( text_char / [!<\-\}\]\n\r] ) ) )
-		{ return $wr; }
+		/ !inline_breaks !pipe @( directive / $( !"]]" ( text_char / [!<\-\}\]\n\r] ) ) )
 	)+ {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2552,7 +2557,7 @@ extlink_nonipv6url =
 extlink_nonipv6url_parameterized =
 	r:(
 		$[^<[{\n\r|!\]}\-\t&="' \u00A0\u1680\u180E\u2000-\u200A\u202F\u205F\u3000]+
-		/ !inline_breaks s:( directive / [&|{\-!}=] ) { return $s; }
+		/ !inline_breaks @( directive / [&|{\-!}=] )
 		/ $(['] ![']) // single quotes are ok, double quotes are bad
 	)+ {
 		return TokenizerUtils::flattenString( $r );
@@ -2570,7 +2575,7 @@ attribute_preprocessor_text =
 		$[^{}&<\-|/ \t\n\r\x0c>]+
 		/ !inline_breaks
 		!'/>'
-		s:( directive / less_than / [{}&\-|/] ) { return $s; }
+		@( directive / less_than / [{}&\-|/] )
 	)+ {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2581,7 +2586,7 @@ attribute_preprocessor_text_single =
 		$[^{}&<\-|/'>]+
 		/ !inline_breaks
 		!'/>'
-		s:( directive / less_than / [{}&\-|/] ) { return $s; }
+		@( directive / less_than / [{}&\-|/] )
 	)* {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2592,7 +2597,7 @@ attribute_preprocessor_text_double =
 		$[^{}&<\-|/">]+
 		/ !inline_breaks
 		!'/>'
-		s:( directive / less_than / [{}&\-|/] ) { return $s; }
+		@( directive / less_than / [{}&\-|/] )
 	)* {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2609,7 +2614,7 @@ attribute_preprocessor_text_double =
 table_attribute_preprocessor_text =
 	r:(
 		$[^{}&<\-!\[ \t\n\r\x0c|]+
-		/ !inline_breaks s:( directive / [{}&<\-!\[] ) { return $s; }
+		/ !inline_breaks @( directive / [{}&<\-!\[] )
 	)+ {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2618,7 +2623,7 @@ table_attribute_preprocessor_text =
 table_attribute_preprocessor_text_single =
 	r:(
 		$[^{}&<\-!\['\r\n|]+
-		/ !inline_breaks s:( directive / [{}&<\-!\[] ) { return $s; }
+		/ !inline_breaks @( directive / [{}&<\-!\[] )
 	)* {
 		return TokenizerUtils::flattenString( $r );
 	}
@@ -2627,32 +2632,34 @@ table_attribute_preprocessor_text_single =
 table_attribute_preprocessor_text_double =
 	r:(
 		$[^{}&<\-!\["\r\n|]+
-		/ !inline_breaks s:( directive / [{}&<\-!\[] ) { return $s; }
+		/ !inline_breaks @( directive / [{}&<\-!\[] )
 	)* {
 		return TokenizerUtils::flattenString( $r );
 	}
 
 // Special-case support for those pipe templates
-pipe = "|" / "{{!}}"
+pipe [inline] = "|" / "{{!}}"
 
 // SSS FIXME: what about |{{!}} and {{!}}|
-pipe_pipe = "||" / "{{!}}{{!}}"
+pipe_pipe [inline] = "||" / "{{!}}{{!}}"
 
-space = [ \t]
+space [inline] = [ \t]
 
-optional_spaces = $[ \t]*
+optional_spaces [inline] = [ \t]*
 
 // Start of file
-sof = & { return $this->endOffset() === 0 && !$this->pipelineOffset; }
+sof [inline] = & { return $this->endOffset() === 0 && !$this->pipelineOffset; }
 
 // End of file
-eof = & { return $this->endOffset() === $this->inputLength; }
+eof [inline] = & { return $this->endOffset() === $this->inputLength; }
 
-newline = '\n' / '\r\n'
+newline [inline] = '\n' / '\r\n'
 
-newlineToken = newline { return [ new NlTk( $this->tsrOffsets() ) ]; }
+newlineToken [inline] = newline { return [ new NlTk( $this->tsrOffsets() ) ]; }
 
-eolf = newline / eof
+eolf [inline] = newline / eof
+
+POSITION [cache=false] = "" { return $this->endOffset(); }
 
 // The old parser does a straight str.replace(/<!--((?!-->).)*-->/g, "")
 // but, as always, things around here are a little more complicated.
@@ -2672,12 +2679,12 @@ comment =
 		return [ new CommentTk( $data, $dp ) ];
 	}
 
-space_or_comment = space / comment
+space_or_comment [inline] = space / comment
 
-nl_comment_space = newlineToken / space_or_comment
+nl_comment_space [inline] = newlineToken / space_or_comment
 
-optionalSpaceToken =
-	s:optional_spaces {
+optionalSpaceToken [inline] =
+	s:$optional_spaces {
 		if ( $s !== '' ) {
 			return [ $s ];
 		} else {
@@ -2691,40 +2698,43 @@ optionalSpaceToken =
  * of Perl, which PHP inherited via the PCRE (Perl-Compatible Regular
  * Expressions) library.
  */
-space_or_newline = [ \t\n\r\x0c]
+space_or_newline [inline] = [ \t\n\r\x0c]
 
 /* This rule corresponds to \b in the PHP preg_* functions,
  * after a word character.  That is, it's a zero-width lookahead that
  * the next character is not a word character.
  */
-end_of_word = eof / ![A-Za-z0-9_]
+end_of_word [inline] = eof / ![A-Za-z0-9_]
 
 // Unicode "separator, space" category.  It covers the \u0020 space as well
 // as \u3000 IDEOGRAPHIC SPACE (see bug 19052).  In PHP this is \p{Zs}.
 // Keep this up-to-date with the characters tagged ;Zs; in
 // http://www.unicode.org/Public/UNIDATA/UnicodeData.txt
-unispace = [ \u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]
+unispace [inline] = [ \u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]
 
 // Non-newline whitespace, including non-breaking spaces.  Used for magic links.
-space_or_nbsp =
+space_or_nbsp [inline] =
 	space // includes \t
 	/ unispace
 	/ & "&" he:htmlentity &{ return is_array( $he ) && $he[ 1 ] === "\u{A0}"; }
 	{ return $he; }
 
 // Used within ISBN magic links
-space_or_nbsp_or_dash =
+space_or_nbsp_or_dash [inline] =
 	space_or_nbsp / "-"
 
 // Elements that do not break beginning or end of line for blocks (headers for instance)
 sol_transparent = comment / include_limits / annotation_tag / behavior_switch
 
-sol = sp:sol_prefix elc:empty_lines_with_comments? st:sol_transparent* {
+sol [inline] =
+  // optimization: fail fast before putting more entries in the backtracking cache
+  &{ return $this->endOffset() === 0 || strspn($this->input, "\r\n", $this->currPos, 1) > 0; }
+    sp:sol_prefix elc:empty_lines_with_comments? st:sol_transparent* {
 	$this->hasSOLTransparentAtStart = ( count( $st ) > 0 );
 	return [ $sp, $elc ?? [], $st ];
 }
 
-sol_prefix =
+sol_prefix [inline] =
 	newlineToken
 	/ & {
 		// Use the sol flag only at the start of the input
@@ -2736,11 +2746,8 @@ sol_prefix =
 // This rule requires at least one comment to be matched
 // This matches a run of empty lines with comments
 empty_lines_with_comments =
-	p:("" { return $this->endOffset(); }) c:(space* comment space_or_comment* newline)+ {
+	p:POSITION c:(space* comment space_or_comment* newline)+ {
 		$dp = new DataParsoid;
 		$dp->tsr = new SourceRange( $p, $this->endOffset() );
-		$dp->tokens = TokenizerUtils::flattenIfArray( $c );
-		return [
-			new SelfclosingTagTk( 'meta', [ new KV( 'typeof', 'mw:EmptyLine' ) ], $dp )
-		];
+		return [ new EmptyLineTk( TokenizerUtils::flattenIfArray( $c ), $dp ) ];
 	}

@@ -88,6 +88,7 @@ class ApiFeedRecentChanges extends ApiBase {
 		}
 
 		$feedClasses = $config->get( MainConfigNames::FeedClasses );
+		'@phan-var array<string,class-string<ChannelFeed>> $feedClasses';
 		if ( !isset( $feedClasses[$this->params['feedformat']] ) ) {
 			$this->dieWithError( 'feed-invalid' );
 		}
@@ -161,6 +162,7 @@ class ApiFeedRecentChanges extends ApiBase {
 		return $feedObj;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$config = $this->getConfig();
 		$feedFormatNames = array_keys( $config->get( MainConfigNames::FeedClasses ) );
@@ -218,6 +220,7 @@ class ApiFeedRecentChanges extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=feedrecentchanges'
@@ -227,6 +230,7 @@ class ApiFeedRecentChanges extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Feedrecentchanges';
 	}

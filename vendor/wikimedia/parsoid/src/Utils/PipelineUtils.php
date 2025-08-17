@@ -6,16 +6,16 @@ namespace Wikimedia\Parsoid\Utils;
 use Wikimedia\Assert\Assert;
 use Wikimedia\Assert\UnreachableException;
 use Wikimedia\Parsoid\Config\Env;
+use Wikimedia\Parsoid\Core\DomSourceRange;
 use Wikimedia\Parsoid\DOM\Comment;
 use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
 use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
-use Wikimedia\Parsoid\DOM\NodeList;
 use Wikimedia\Parsoid\DOM\Text;
+use Wikimedia\Parsoid\Ext\ParsoidExtensionAPI;
 use Wikimedia\Parsoid\Fragments\PFragment;
 use Wikimedia\Parsoid\Fragments\WikitextPFragment;
-use Wikimedia\Parsoid\NodeData\DataMw;
 use Wikimedia\Parsoid\NodeData\DataParsoid;
 use Wikimedia\Parsoid\NodeData\TempData;
 use Wikimedia\Parsoid\Tokens\CommentTk;
@@ -79,7 +79,7 @@ class PipelineUtils {
 	): SelfclosingTagTk {
 		$token = $opts['token'];
 		return new SelfclosingTagTk( 'mw:dom-fragment-token', [
-			new KV( 'contextTok', $token, $token->dataParsoid->tsr->expandTsrV() ),
+			new KV( 'contextTokName', $token->getName() ),
 			new KV( 'content', $content, $srcOffsets->expandTsrV() ),
 			new KV( 'inlineContext', ( $opts['inlineContext'] ?? false ) ? "1" : "0" ),
 			new KV( 'inPHPBlock', ( $opts['inPHPBlock'] ?? false ) ? "1" : "0" ),
@@ -109,6 +109,7 @@ class PipelineUtils {
 	 *          source text that $content corresponds to
 	 *    - bool   sol Whether tokens should be processed in start-of-line context.
 	 *    - bool   toplevel Whether the pipeline is considered atTopLevel
+	 *    - stdClass   tplInfo Template info for pipelines created when DOM processing
 	 * @return array<Token|string>|DocumentFragment (depending on pipeline type)
 	 */
 	public static function processContentInPipeline(
@@ -123,6 +124,7 @@ class PipelineUtils {
 		$pipeline->init( [
 			// NOTE: some pipelines force toplevel to true
 			'toplevel' => $opts['toplevel'] ?? false,
+			'tplInfo' => $opts['tplInfo'] ?? null,
 			'frame' => $frame,
 			'tplArgs' => $opts['tplArgs'] ?? null,
 			'srcText' => $opts['srcText'] ?? $frame->getSrcText(),
@@ -367,22 +369,75 @@ class PipelineUtils {
 		Env $env, Frame $frame, array $v, bool $expandTemplates, bool $inTemplate
 	): array {
 		if ( is_array( $v['html'] ?? null ) ) {
-			// Set up pipeline options
-			$opts = [
-				'pipelineType' => 'expanded-tokens-to-fragment',
-				'pipelineOpts' => [
-					'attrExpansion' => true,
-					'inlineContext' => true,
-					'expandTemplates' => $expandTemplates,
-					'inTemplate' => $inTemplate
-				],
-				'srcOffsets' => $v['srcOffsets'],
-				'sol' => true
-			];
-			$content = array_merge( $v['html'], [ new EOFTk() ] );
-			$domFragment = self::processContentInPipeline(
-				$env, $frame, $content, $opts
-			);
+			$attrCache = null;
+			$cacheKey = null;
+			$domFragment = null;
+			$isCacheable = false;
+			$vSrcOffsets = $v['srcOffsets'];
+			$tsrStart = $vSrcOffsets->start;
+
+			if ( $tsrStart >= 0 && $vSrcOffsets->length() > 0 ) {
+				$vSrc = $vSrcOffsets->substr( $frame->getSrcText() );
+				$attrCache = $env->getCache(
+					"AttributeExpansion",
+					[
+						"repeatThreshold" => 4,
+						"cloneValue" => static function ( array $value ) {
+							$value['fragment'] = DOMDataUtils::cloneNode( $value['fragment'], true );
+							return $value;
+						}
+					]
+				);
+
+				if ( strlen( $vSrc ) > 0 ) {
+					$isCacheable = true;
+					// $expandTemplates & $inTemplate are pipeline options below
+					// and should be part of the cache key
+					$cacheKey = ( $expandTemplates ? 'e1-' : 'e0-' ) .
+						( $inTemplate ? 't1-' : 't0-' ) . $vSrc;
+				}
+			}
+
+			if ( $isCacheable ) {
+				$cachedOutput = $attrCache->lookup( $cacheKey );
+				if ( $cachedOutput !== null ) {
+					$offset = $tsrStart - $cachedOutput['start'];
+					$domFragment = $cachedOutput['fragment'];
+					ContentUtils::shiftDSR(
+						$env, $domFragment,
+						static function ( DomSourceRange $dsr ) use ( $offset ) {
+							return $dsr->offset( $offset );
+						},
+						new ParsoidExtensionAPI( $env )
+					);
+				}
+			}
+
+			if ( $domFragment === null ) {
+				$domFragment = self::processContentInPipeline(
+					$env,
+					$frame,
+					array_merge( $v['html'], [ new EOFTk() ] ),
+					[
+						'pipelineType' => 'expanded-tokens-to-fragment',
+						'pipelineOpts' => [
+							'attrExpansion' => true,
+							'inlineContext' => true,
+							'expandTemplates' => $expandTemplates,
+							'inTemplate' => $inTemplate
+						],
+						'srcOffsets' => $vSrcOffsets,
+						'sol' => true
+					]
+				);
+				if ( $isCacheable ) {
+					$attrCache->cache( $cacheKey, [
+						'start' => $tsrStart,
+						'fragment' => $domFragment
+					] );
+				}
+			}
+
 			// Since we aren't at the top level, data attrs
 			// were not applied in cleanup.  However, tmp
 			// was stripped.
@@ -412,7 +467,8 @@ class PipelineUtils {
 	 *    (usually false for nested templates since they are never directly editable).
 	 * @param bool $inTemplate
 	 *    Unexpanded templates can occur in the content of extension tags.
-	 * @return array
+	 *
+	 * @return list<array>
 	 */
 	public static function expandAttrValuesToDOM(
 		Env $env, $frame, array $vals, bool $expandTemplates, bool $inTemplate
@@ -430,7 +486,8 @@ class PipelineUtils {
 	 *
 	 * @param Element $node
 	 * @param array<string,string> $attrs
-	 * @return array{attrs:KV[],dataParsoid:?DataParsoid,dataMw:?DataMw}
+	 *
+	 * @return array{attrs: list<KV>, dataParsoid: DataParsoid, dataMw: ?\Wikimedia\Parsoid\NodeData\DataMw}
 	 */
 	private static function domAttrsToTagAttrs( Element $node, array $attrs ): array {
 		$out = [];
@@ -457,7 +514,7 @@ class PipelineUtils {
 	private static function convertDOMtoTokens( Node $node, array $tokBuf ): array {
 		if ( $node instanceof Element ) {
 			$nodeName = DOMCompat::nodeName( $node );
-			$attrInfo = self::domAttrsToTagAttrs( $node, DOMUtils::attributes( $node ) );
+			$attrInfo = self::domAttrsToTagAttrs( $node, DOMCompat::attributes( $node ) );
 
 			if ( Utils::isVoidElement( $nodeName ) ) {
 				$tokBuf[] = new SelfclosingTagTk(
@@ -548,7 +605,7 @@ class PipelineUtils {
 			// FIXME(arlolra): Do we need a mechanism to specify content
 			// categories?
 		} else {
-			foreach ( $domFragment->childNodes as $n ) {
+			foreach ( DOMUtils::childNodes( $domFragment ) as $n ) {
 				if (
 					DOMUtils::isWikitextBlockNode( $n ) ||
 					DOMUtils::hasBlockElementDescendant( $n )
@@ -559,7 +616,6 @@ class PipelineUtils {
 			}
 		}
 
-		$wrapperName = null;
 		if ( $wrapperType === 'BLOCK' && !DOMUtils::isWikitextBlockNode( $node ) ) {
 			$wrapperName = 'div';
 		} elseif ( DOMCompat::nodeName( $node ) === 'a' ) {
@@ -599,7 +655,7 @@ class PipelineUtils {
 				$workNode = $node->ownerDocument->createElement( $wrapperName );
 
 				// Copy over attributes
-				foreach ( DOMUtils::attributes( $node ) as $name => $value ) {
+				foreach ( DOMCompat::attributes( $node ) as $name => $value ) {
 					// "typeof" is ignored since it'll be removed below.
 					if ( $name !== 'typeof' ) {
 						$workNode->setAttribute( $name, $value );
@@ -623,6 +679,9 @@ class PipelineUtils {
 				}
 				if ( isset( $nodeData->parsoid->tmp->endTSR ) ) {
 					unset( $nodeData->parsoid->tmp->endTSR );
+				}
+				if ( isset( $nodeData->parsoid->html ) ) {
+					unset( $nodeData->parsoid->html );
 				}
 
 				// The "in transclusion" flag was set on the first child for template
@@ -673,13 +732,14 @@ class PipelineUtils {
 	 * of the HTML DOM for the purposes of additional token transformations
 	 * that will be applied to them.
 	 *
+	 * The DOMProcessorPipeline will unpack the fragment and insert the HTML
+	 * back into the DOM.
+	 *
 	 * @param Env $env
 	 *    The active environment/context.
 	 * @param Token $token
 	 *    The token that generated the DOM.
-	 * @param array $expansion
-	 *    - string html HTML of the expansion.
-	 *    - DocumentFragment domFragment Outermost nodes of the HTML.
+	 * @param DocumentFragment $domFragment Outermost nodes of the HTML
 	 * @param array $opts
 	 *    - SourceRange tsr
 	 *            The TSR to set on the generated tokens. This TSR is
@@ -697,21 +757,25 @@ class PipelineUtils {
 	 *    - string wrapperName
 	 * @return array<Token|string>
 	 */
-	public static function encapsulateExpansionHTML(
-		Env $env, Token $token, array $expansion, array $opts
+	public static function tunnelDOMThroughTokens(
+		Env $env, Token $token, DocumentFragment $domFragment, array $opts
 	): array {
 		$opts['unpackOutput'] ??= true; // Default
 		// Get placeholder tokens to get our subdom through the token processing
 		// stages. These will be finally unwrapped on the DOM.
-		$toks = self::getWrapperTokens( $expansion['domFragment'], $opts );
+		$toks = self::getWrapperTokens( $domFragment, $opts );
 		$firstWrapperToken = $toks[0];
 
 		// Add the DOMFragment type so that we get unwrapped later.
 		$fragmentType = 'mw:DOMFragment' . ( !$opts['unpackOutput'] ? '/sealed/' . $opts['wrapperName'] : '' );
 		$firstWrapperToken->setAttribute( 'typeof', $fragmentType );
 
-		// Assign the HTML fragment to the data-parsoid.html on the first wrapper token.
-		$firstWrapperToken->dataParsoid->html = $expansion['html'];
+		// Assign the HTML fragment to the data-mw.html on the first wrapper token.
+		Assert::invariant(
+			!isset( $firstWrapperToken->dataParsoid->html ),
+			"Overwriting existing DOMFragment"
+		);
+		$firstWrapperToken->dataParsoid->html = $domFragment;
 
 		// Pass through setDSR flag
 		if ( !empty( $opts['setDSR'] ) ) {
@@ -764,30 +828,20 @@ class PipelineUtils {
 	 * Wrap text and comment nodes in a node list into spans, so that all
 	 * top-level nodes are elements.
 	 *
-	 * @param NodeList $nodes List of DOM nodes to wrap, mix of node types.
+	 * @param list<Node> $nodes List of DOM nodes to wrap, mix of node types.
 	 * @param ?Node $startAt
 	 * @param ?Node $stopAt
 	 */
 	public static function addSpanWrappers(
-		$nodes,
+		array $nodes,
 		?Node $startAt = null,
 		?Node $stopAt = null
 	): void {
 		$textCommentAccum = [];
-		$doc = $nodes->item( 0 )->ownerDocument;
-
-		// Build a real array out of nodes.
-		//
-		// Operating directly on DOM child-nodes array
-		// and manipulating them by adding span wrappers
-		// changes the traversal itself
-		$nodeBuf = [];
-		foreach ( $nodes as $node ) {
-			$nodeBuf[] = $node;
-		}
+		$doc = $nodes[0]->ownerDocument;
 
 		$start = ( $startAt === null );
-		foreach ( $nodeBuf as $node ) {
+		foreach ( $nodes as $node ) {
 			if ( !$start ) {
 				if ( $startAt !== $node ) {
 					continue;
@@ -807,121 +861,6 @@ class PipelineUtils {
 		if ( count( $textCommentAccum ) ) {
 			self::wrapAccum( $doc, $textCommentAccum );
 		}
-	}
-
-	/**
-	 * Convert a HTML5 DOM into a mw:DOMFragment and generate appropriate
-	 * tokens to insert into the token stream for further processing.
-	 *
-	 * The DOMProcessorPipeline will unpack the fragment and insert the HTML
-	 * back into the DOM.
-	 *
-	 * @param Env $env
-	 *    The active environment/context.
-	 * @param Token $token
-	 *    The token that generated the DOM.
-	 * @param DocumentFragment $domFragment
-	 *    The DOM that the token expanded to.
-	 * @param array $opts
-	 *    Options to be passed onto the encapsulation code
-	 *    See encapsulateExpansionHTML's doc. for more info about these options.
-	 * @return array<Token|string>
-	 */
-	public static function tunnelDOMThroughTokens(
-		Env $env, Token $token, DocumentFragment $domFragment, array $opts
-	): array {
-		// Get placeholder tokens to get our subdom through the token processing
-		// stages. These will be finally unwrapped on the DOM.
-		$expansion = self::makeExpansion( $env, $domFragment );
-		return self::encapsulateExpansionHTML( $env, $token, $expansion, $opts );
-	}
-
-	public static function makeExpansion(
-		Env $env, DocumentFragment $domFragment
-	): array {
-		$fragmentId = $env->newFragmentId();
-		$env->setDOMFragment( $fragmentId, $domFragment );
-		return [ 'domFragment' => $domFragment, 'html' => $fragmentId ];
-	}
-
-	private static function doExtractExpansions( Env $env, array &$expansions, Node $node ): void {
-		$nodes = null;
-		$expAccum = null;
-		while ( $node ) {
-			if ( $node instanceof Element ) {
-				if ( DOMUtils::matchTypeOf( $node, '#^mw:(Transclusion$|Extension/)#' ) &&
-						$node->hasAttribute( 'about' )
-					) {
-					$dp = DOMDataUtils::getDataParsoid( $node );
-					$about = DOMCompat::getAttribute( $node, 'about' );
-					$nodes = WTUtils::getAboutSiblings( $node, $about );
-					$key = null;
-					if ( DOMUtils::hasTypeOf( $node, 'mw:Transclusion' ) ) {
-						$expAccum = $expansions['transclusions'];
-						$key = $dp->src;
-					} elseif ( DOMUtils::matchTypeOf( $node, '#^mw:Extension/#' ) ) {
-						$expAccum = $expansions['extensions'];
-						$key = $dp->src;
-					} else {
-						$expAccum = $expansions['media'];
-						// XXX gwicke: use proper key that is not
-						// source-based? This also needs to work for
-						// transclusion output.
-						$key = null;
-					}
-
-					if ( $key ) {
-						throw new UnreachableException( 'Callsite was not ported!' );
-						// FIXME: makeExpansion return type changed
-						// $expAccum[$key] = self::makeExpansion( $env, $nodes );
-					}
-
-					$node = end( $nodes );
-				} else {
-					self::doExtractExpansions( $env, $expansions, $node->firstChild );
-				}
-			}
-			$node = $node->nextSibling;
-		}
-	}
-
-	/**
-	 * Extract transclusion and extension expansions from a DOM, and return
-	 * them in a structure like this:
-	 *     {
-	 *         transclusions: {
-	 *             'key1': {
-	 *                  html: 'html1',
-	 *                  nodes: [<node1>, <node2>]
-	 *             }
-	 *         },
-	 *         extensions: {
-	 *             'key2': {
-	 *                  html: 'html2',
-	 *                  nodes: [<node1>, <node2>]
-	 *             }
-	 *         },
-	 *         files: {
-	 *             'key3': {
-	 *                  html: 'html3',
-	 *                  nodes: [<node1>, <node2>]
-	 *             }
-	 *         }
-	 *     }
-	 *
-	 * @param Env $env
-	 * @param Element $body
-	 * @return array
-	 */
-	public static function extractExpansions( Env $env, Element $body ): array {
-		$expansions = [
-			'transclusions' => [],
-			'extensions' => [],
-			'media' => []
-		];
-		// Kick off the extraction
-		self::doExtractExpansions( $env, $expansions, $body->firstChild );
-		return $expansions;
 	}
 
 	/**

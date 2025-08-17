@@ -7,12 +7,16 @@ use Wikimedia\Assert\Assert;
 use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
+use Wikimedia\Parsoid\Tokens\CommentTk;
+use Wikimedia\Parsoid\Tokens\EmptyLineTk;
 use Wikimedia\Parsoid\Tokens\EndTagTk;
 use Wikimedia\Parsoid\Tokens\EOFTk;
-use Wikimedia\Parsoid\Tokens\SelfClosingTagTk;
+use Wikimedia\Parsoid\Tokens\NlTk;
+use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\SourceRange;
 use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\DiffDOMUtils;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 use Wikimedia\Parsoid\Utils\DOMUtils;
@@ -109,7 +113,7 @@ class WikitextEscapeHandlers {
 		// Those newline separators can prevent unnecessary <nowiki/> protection
 		// if the string begins with one or more newlines before a leading quote.
 		$origText = $node->textContent;
-		if ( substr( $origText, 0, 1 ) === "'" ) {
+		if ( str_starts_with( $origText, "'" ) ) {
 			$prev = DiffDOMUtils::previousNonDeletedSibling( $node );
 			if ( !$prev ) {
 				$prev = $node->parentNode;
@@ -136,7 +140,7 @@ class WikitextEscapeHandlers {
 		// Those newline separators can prevent unnecessary <nowiki/> protection
 		// if the string ends with a trailing quote and then one or more newlines.
 		$origText = $node->textContent;
-		if ( substr( $origText, -1 ) === "'" ) {
+		if ( str_ends_with( $origText, "'" ) ) {
 			$next = DiffDOMUtils::nextNonDeletedSibling( $node );
 			if ( !$next ) {
 				$next = $node->parentNode;
@@ -391,7 +395,9 @@ class WikitextEscapeHandlers {
 			$t = $tokens[$i];
 			if ( is_string( $t ) ) {
 				$buf = $t . $buf;
-			} elseif ( $t->getName() === 'wikilink' ) {
+			} elseif ( $t instanceof CommentTk ) {
+				$buf = WTSUtils::commentWT( $t->value ) . $buf;
+			} elseif ( $t instanceof XMLTagTk && $t->getName() === 'wikilink' ) {
 				$target = $t->getAttributeV( 'href' );
 				if ( is_array( $target ) ) {
 					// FIXME: Can lead to false negatives.
@@ -407,7 +413,7 @@ class WikitextEscapeHandlers {
 				// Assumes 'src' will always be present which it seems to be.
 				// Tests will fail if anything changes in the tokenizer.
 				$buf = $t->dataParsoid->src . $buf;
-			} elseif ( $t->getName() === 'extlink' ) {
+			} elseif ( $t instanceof XMLTagTk && $t->getName() === 'extlink' ) {
 				// Check if the extlink came from a template which in the end
 				// would not really parse as an extlink.
 
@@ -485,7 +491,7 @@ class WikitextEscapeHandlers {
 
 		$tokens = $this->tokenizeStr( $text, $sol );
 
-		// If the token stream has a TagTk, SelfclosingTagTk, EndTagTk or CommentTk
+		// If the token stream has a XmlTagTk or CommentTk
 		// then this text needs escaping!
 		$numEntities = 0;
 		foreach ( $tokens as $t ) {
@@ -720,16 +726,19 @@ class WikitextEscapeHandlers {
 
 			// Now put back the escaping we removed above
 			$tSrc = WTSUtils::escapeNowikiTags( $tsr->substr( $text ) );
-			switch ( $t->getType() ) {
-				case 'NlTk':
-					$buf .= $tSrc;
-					$sol = true;
-					break;
-				case 'CommentTk':
+			switch ( true ) {
+				case $t instanceof CommentTk:
 					// Comments are sol-transparent
 					$buf .= $tSrc;
 					break;
-				case 'TagTk':
+				case $t instanceof EmptyLineTk:
+					$sol = true;
+					break;
+				case $t instanceof NlTk:
+					$buf .= $tSrc;
+					$sol = true;
+					break;
+				case $t instanceof TagTk:
 					// Treat tokens with missing tags as self-closing tokens
 					// for the purpose of minimal nowiki escaping
 					self::nowikiWrap(
@@ -741,17 +750,13 @@ class WikitextEscapeHandlers {
 					);
 					$sol = false;
 					break;
-				case 'EndTagTk':
+				case $t instanceof EndTagTk:
 					self::nowikiWrap( $tSrc, true, $inNowiki, $nowikisAdded, $buf );
 					$sol = false;
 					break;
-				case 'SelfclosingTagTk':
-					if ( $t->getName() !== 'meta' ||
-						!TokenUtils::hasTypeOf( $t, 'mw:EmptyLine' )
-					) {
-						// Don't bother with marker or empty-line metas
-						self::nowikiWrap( $tSrc, true, $inNowiki, $nowikisAdded, $buf );
-					}
+				case $t instanceof SelfclosingTagTk:
+					// Don't bother with marker metas
+					self::nowikiWrap( $tSrc, true, $inNowiki, $nowikisAdded, $buf );
 					$sol = false;
 					break;
 			}
@@ -964,7 +969,7 @@ class WikitextEscapeHandlers {
 			// - the text will get parsed as a link in
 			$env->trace( 'wt-escape', '---Links: complex single-line test---' );
 			return $this->escapedText( $state, $sol, $text );
-		} elseif ( !empty( $opts['isLastChild'] ) && substr( $text, -1 ) === '=' ) {
+		} elseif ( !empty( $opts['isLastChild'] ) && str_ends_with( $text, '=' ) ) {
 			// 1. we have an open heading char, and
 			// - text ends in a '='
 			// - text comes from the last child
@@ -1091,6 +1096,8 @@ class WikitextEscapeHandlers {
 		$buf .= $str;
 	}
 
+	// phpcs:disable Generic.Files.LineLength.TooLong
+
 	/**
 	 * General strategy:
 	 *
@@ -1108,10 +1115,10 @@ class WikitextEscapeHandlers {
 	 *    the entire DOM range they span in the end.
 	 *
 	 * @param string $arg
-	 * @param array $opts [ 'serializeAsNamed' => bool,  'numPositionalArgs' => int,
-	 * 'argPositionalIndex' => int, 'type' => string, 'numArgs' => int, 'argIndex' => int ]
-	 * @return array
+	 * @param array{serializeAsNamed:bool,numPositionalArgs:int,argPositionalIndex:int,type:string,numArgs:int,argIndex:int} $opts
+	 * @return array{serializeAsNamed: bool, v: string}
 	 */
+	// phpcs:enable Generic.Files.LineLength.TooLong
 	public function escapeTplArgWT( string $arg, array $opts ): array {
 		$env = $this->env;
 		$serializeAsNamed = $opts['serializeAsNamed'];
@@ -1193,11 +1200,12 @@ class WikitextEscapeHandlers {
 				continue;
 			}
 
-			switch ( $t->getType() ) {
-				case 'TagTk':
-				case 'EndTagTk':
-				case 'NlTk':
-				case 'CommentTk':
+			switch ( true ) {
+				case $t instanceof TagTk:
+				case $t instanceof EmptyLineTk:
+				case $t instanceof EndTagTk:
+				case $t instanceof NlTk:
+				case $t instanceof CommentTk:
 					$da = $t->dataParsoid;
 					if ( empty( $da->tsr ) ) {
 						$errors = [ 'Missing tsr for: ' . PHPUtils::jsonEncode( $t ) ];
@@ -1218,7 +1226,7 @@ class WikitextEscapeHandlers {
 						$opts
 					);
 					break;
-				case 'SelfclosingTagTk':
+				case $t instanceof SelfclosingTagTk:
 					$da = $t->dataParsoid;
 					if ( empty( $da->tsr ) ) {
 						$errors = [ 'Missing tsr for: ' . PHPUtils::jsonEncode( $t ) ];
@@ -1277,7 +1285,7 @@ class WikitextEscapeHandlers {
 						);
 					}
 					break;
-				case 'EOFTk':
+				case $t instanceof EOFTk:
 					break;
 			}
 		}

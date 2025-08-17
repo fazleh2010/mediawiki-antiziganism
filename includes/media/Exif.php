@@ -108,6 +108,13 @@ class Exif {
 	 *   Possibly should treat 0/0 = 0. need to read exif spec on that.
 	 */
 	public function __construct( $file, $byteOrder = '' ) {
+		if ( !function_exists( 'exif_read_data' ) ) {
+			throw new ConfigException(
+				"Internal error: exif_read_data not present. " .
+				"\$wgShowEXIF may be incorrectly set or not checked by an extension."
+			);
+		}
+
 		/**
 		 * Page numbers here refer to pages in the Exif 2.2 standard
 		 *
@@ -411,14 +418,11 @@ class Exif {
 		}
 
 		$this->debugFile( __FUNCTION__, true );
-		if ( function_exists( 'exif_read_data' ) ) {
-			AtEase::suppressWarnings();
-			$data = exif_read_data( $this->file, '', true );
-			AtEase::restoreWarnings();
-		} else {
-			throw new ConfigException( "Internal error: exif_read_data not present. " .
-				"\$wgShowEXIF may be incorrectly set or not checked by an extension." );
-		}
+
+		AtEase::suppressWarnings();
+		$data = exif_read_data( $this->file, '', true );
+		AtEase::restoreWarnings();
+
 		/**
 		 * exif_read_data() will return false on invalid input, such as
 		 * when somebody uploads a file called something.jpeg
@@ -647,15 +651,21 @@ class Exif {
 		$dir = $this->mFilteredExifData[$prop . 'Ref'] ?? null;
 		$res = false;
 
-		if ( $loc !== null && ( $dir === 'N' || $dir === 'S' || $dir === 'E' || $dir === 'W' ) ) {
-			[ $num, $denom ] = explode( '/', $loc[0], 2 );
-			$res = (int)$num / (int)$denom;
-			[ $num, $denom ] = explode( '/', $loc[1], 2 );
-			$res += ( (int)$num / (int)$denom ) * ( 1 / 60 );
-			[ $num, $denom ] = explode( '/', $loc[2], 2 );
-			$res += ( (int)$num / (int)$denom ) * ( 1 / 3600 );
+		if ( $loc !== null && in_array( $dir, [ 'N', 'S', 'E', 'W' ] ) ) {
+			if ( is_array( $loc ) && count( $loc ) === 3 ) {
+				[ $num, $denom ] = explode( '/', $loc[0], 2 );
+				$res = (int)$num / (int)$denom;
+				[ $num, $denom ] = explode( '/', $loc[1], 2 );
+				$res += ( (int)$num / (int)$denom ) * ( 1 / 60 );
+				[ $num, $denom ] = explode( '/', $loc[2], 2 );
+				$res += ( (int)$num / (int)$denom ) * ( 1 / 3600 );
+			} elseif ( is_string( $loc ) ) {
+				// This is non-standard, but occurs in the wild (T386208)
+				[ $num, $denom ] = explode( '/', $loc, 2 );
+				$res = (int)$num / (int)$denom;
+			}
 
-			if ( $dir === 'S' || $dir === 'W' ) {
+			if ( $res && ( $dir === 'S' || $dir === 'W' ) ) {
 				// make negative
 				$res *= -1;
 			}

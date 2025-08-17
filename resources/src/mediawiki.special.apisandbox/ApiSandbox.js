@@ -303,13 +303,13 @@ const ApiSandbox = {
 			if ( params.format === undefined ) {
 				// While not required by the API, the sandbox UI makes the 'format' parameter required.
 				// If we reach this point without any value for it, that's a bug, so stop here
-				// (it would result in incorrect formatting on the results panel).
+				// (it would result in incorrect formatting on the results panel) (T395063).
 				throw new Error( "'format' parameter is required" );
 			}
 			if ( params.action === undefined ) {
 				// While not required by the API, the sandbox UI makes the 'action' parameter required.
 				// If we reach this point without any value for it, that's a bug, so stop here
-				// (it would result in dumping the entire HTML help output on the results panel).
+				// (it would result in dumping the entire HTML help output on the results panel) (T395063).
 				throw new Error( "'action' parameter is required" );
 			}
 
@@ -322,7 +322,7 @@ const ApiSandbox = {
 				if ( Object.prototype.hasOwnProperty.call( ApiSandbox.availableFormats, params.format + 'fm' ) ) {
 					params.format = params.format + 'fm';
 				}
-				if ( params.format.slice( -2 ) === 'fm' ) {
+				if ( params.format.endsWith( 'fm' ) ) {
 					params.wrappedhtml = 1;
 				}
 			}

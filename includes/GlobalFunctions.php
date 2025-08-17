@@ -28,6 +28,7 @@ use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Message\Message;
 use MediaWiki\Registration\ExtensionRegistry;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\Request\WebRequest;
 use MediaWiki\Shell\Shell;
 use MediaWiki\Title\Title;
@@ -401,7 +402,7 @@ function wfCgiToArray( $query ) {
 		if ( $bit === '' ) {
 			continue;
 		}
-		if ( strpos( $bit, '=' ) === false ) {
+		if ( !str_contains( $bit, '=' ) ) {
 			// Pieces like &qwerty become 'qwerty' => '' (at least this is what php does)
 			$key = $bit;
 			$value = '';
@@ -410,7 +411,7 @@ function wfCgiToArray( $query ) {
 		}
 		$key = urldecode( $key );
 		$value = urldecode( $value );
-		if ( strpos( $key, '[' ) !== false ) {
+		if ( str_contains( $key, '[' ) ) {
 			$keys = array_reverse( explode( '[', $key ) );
 			$key = array_pop( $keys );
 			$temp = $value;
@@ -452,7 +453,7 @@ function wfAppendQuery( $url, $query ) {
 		}
 
 		// Add parameter
-		if ( strpos( $url, '?' ) === false ) {
+		if ( !str_contains( $url, '?' ) ) {
 			$url .= '?';
 		} else {
 			$url .= '&';
@@ -517,7 +518,7 @@ function wfGetUrlUtils(): UrlUtils {
  *
  * Parent references (/../) in the path are resolved (as in UrlUtils::removeDotSegments()).
  *
- * @deprecated since 1.39, use UrlUtils::expand()
+ * @deprecated since 1.39, use UrlUtils::expand(); hard-deprecated since 1.45
  * @param string $url An URL; can be absolute (e.g. http://example.com/foo/bar),
  *    protocol-relative (//example.com/foo/bar) or domain-relative (/foo/bar).
  * @param string|int|null $defaultProto One of the PROTO_* constants, as described above.
@@ -525,6 +526,8 @@ function wfGetUrlUtils(): UrlUtils {
  *    no valid URL can be constructed
  */
 function wfExpandUrl( $url, $defaultProto = PROTO_CURRENT ) {
+	wfDeprecated( __FUNCTION__, '1.39' );
+
 	return wfGetUrlUtils()->expand( (string)$url, $defaultProto ) ?? false;
 }
 
@@ -550,7 +553,7 @@ function wfGetServerUrl( $proto ) {
  * This is the basic structure used (brackets contain keys for $urlParts):
  * [scheme][delimiter][user]:[pass]@[host]:[port][path]?[query]#[fragment]
  *
- * @deprecated since 1.39, use UrlUtils::assemble(); hard-deprecated since 1.44
+ * @deprecated since 1.39, use UrlUtils::assemble(); hard-deprecated since 1.45
  * @since 1.19
  * @param array $urlParts URL parts, as output from wfParseUrl
  * @return string URL assembled from its component parts
@@ -599,7 +602,7 @@ function wfUrlProtocolsWithoutProtRel() {
  * 4) Rejects some invalid URLs that parse_url doesn't, e.g. the empty string or URLs starting with
  *    a line feed character.
  *
- * @deprecated since 1.39, use UrlUtils::parse()
+ * @deprecated since 1.39, use UrlUtils::parse(); hard-deprecated since 1.45
  * @param string $url A URL to parse
  * @return string[]|false Bits of the URL in an associative array, or false on failure.
  *   Possible fields:
@@ -616,6 +619,8 @@ function wfUrlProtocolsWithoutProtRel() {
  *   - fragment: the part after #, can be missing.
  */
 function wfParseUrl( $url ) {
+	wfDeprecated( __FUNCTION__, '1.39' );
+
 	return wfGetUrlUtils()->parse( (string)$url ) ?? false;
 }
 
@@ -1097,7 +1102,7 @@ function wfClientAcceptsGzip( $force = false ) {
 function wfEscapeWikiText( $input ): string {
 	global $wgEnableMagicLinks;
 	static $repl = null, $repl2 = null, $repl3 = null, $repl4 = null;
-	if ( $repl === null || defined( 'MW_PARSER_TEST' ) || defined( 'MW_PHPUNIT_TEST' ) ) {
+	if ( $repl === null || defined( 'MW_PHPUNIT_TEST' ) ) {
 		// Tests depend upon being able to change $wgEnableMagicLinks, so don't cache
 		// in those situations
 		$repl = [
@@ -1250,6 +1255,7 @@ function wfHttpError( $code, $label, $desc ) {
 
 	\MediaWiki\Request\HeaderCallback::warnIfHeadersSent();
 	header( 'Content-type: text/html; charset=utf-8' );
+	ContentSecurityPolicy::sendRestrictiveHeader();
 	ob_start();
 	print '<!DOCTYPE html>' .
 		'<html><head><title>' .
@@ -1570,7 +1576,7 @@ function wfShellExec( $cmd, &$retval = null, $environ = [],
 			// For b/c
 			->restrict( Shell::RESTRICT_NONE )
 			->execute();
-	} catch ( ProcOpenError $ex ) {
+	} catch ( ProcOpenError ) {
 		$retval = -1;
 		return '';
 	}
@@ -1925,7 +1931,7 @@ function wfShorthandToInteger( ?string $string = '', int $default = -1 ): int {
 	if ( $string === '' ) {
 		return $default;
 	}
-	$last = $string[strlen( $string ) - 1];
+	$last = substr( $string, -1 );
 	$val = intval( $string );
 	switch ( $last ) {
 		case 'g':

@@ -175,7 +175,7 @@ class HookContainer implements SalvageableService {
 	/**
 	 * Clear handlers of the given hook.
 	 * This is intended for use while testing and will fail if MW_PHPUNIT_TEST
-	 * and MW_PARSER_TEST are not defined.
+	 * is not defined.
 	 *
 	 * @param string $hook Name of hook to clear
 	 *
@@ -183,7 +183,7 @@ class HookContainer implements SalvageableService {
 	 * @codeCoverageIgnore
 	 */
 	public function clear( string $hook ): void {
-		if ( !defined( 'MW_PHPUNIT_TEST' ) && !defined( 'MW_PARSER_TEST' ) ) {
+		if ( !defined( 'MW_PHPUNIT_TEST' ) ) {
 			throw new LogicException( 'Cannot reset hooks in operation.' );
 		}
 
@@ -357,12 +357,8 @@ class HookContainer implements SalvageableService {
 		if ( is_object( $handler[0] ) && is_string( $handler[1] ?? false ) && array_key_exists( 2, $handler ) ) {
 			$obj = $handler[0];
 			if ( !$obj instanceof Closure ) {
-				// @phan-suppress-next-line PhanTypePossiblyInvalidDimOffset
 				$method = $handler[1];
-				$handler = array_merge(
-					[ [ $obj, $method ] ],
-					array_slice( $handler, 2 )
-				);
+				$handler = [ [ $obj, $method ], ...array_slice( $handler, 2 ) ];
 				$msg = self::callableToString( $handler[1] );
 				wfDeprecatedMsg( "Deprecated handler style for hook '$hook': callable array with extra data ($msg)" );
 			}

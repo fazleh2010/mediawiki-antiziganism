@@ -71,8 +71,8 @@ class TokenizerUtils {
 
 	/**
 	 * FIXME: document
-	 * @param mixed $c
-	 * @return mixed
+	 * @param array $c
+	 * @return non-empty-string|list<non-empty-string|Token>
 	 */
 	public static function flattenString( $c ) {
 		$out = self::flattenStringlist( $c );
@@ -85,8 +85,10 @@ class TokenizerUtils {
 
 	/**
 	 * FIXME: document
+	 *
 	 * @param array $c
-	 * @return array
+	 *
+	 * @return list<non-empty-string|Token>
 	 */
 	public static function flattenStringlist( array $c ): array {
 		$out = [];
@@ -113,10 +115,11 @@ class TokenizerUtils {
 	}
 
 	/**
-	 * @param mixed $value
+	 * @phan-template T
+	 * @param T $value
 	 * @param int $start start of TSR range
 	 * @param int $end end of TSR range
-	 * @return array
+	 * @return array{value: T, srcOffsets: SourceRange}
 	 */
 	public static function getAttrVal( $value, int $start, int $end ): array {
 		return [ 'value' => $value, 'srcOffsets' => new SourceRange( $start, $end ) ];
@@ -177,11 +180,9 @@ class TokenizerUtils {
 
 		$a = [];
 		if ( $attrInfo ) {
-			if ( $tagName !== 'caption' ) {
-				$dp->getTemp()->attrSrc = substr(
-					$pegSource, $tsr->start, $tsr->end - $tsr->start - strlen( $attrInfo[2] )
-				);
-			}
+			$dp->getTemp()->attrSrc = substr(
+				$pegSource, $tsr->start, $tsr->end - $tsr->start - strlen( $attrInfo[2] )
+			);
 			$a = $attrInfo[0];
 			if ( !$a ) {
 				$dp->startTagSrc = $wtChar . $attrInfo[1];
@@ -192,7 +193,7 @@ class TokenizerUtils {
 				// 2. Not "|"
 				$dp->attrSepSrc = $attrInfo[2];
 			}
-		} elseif ( $tagName !== 'caption' ) {
+		} else {
 			$dp->getTemp()->attrSrc = '';
 		}
 
@@ -243,7 +244,6 @@ class TokenizerUtils {
 	public static function buildXMLTag( string $name, string $lcName, array $attribs, $endTag,
 		bool $selfClose, SourceRange $tsr
 	): Token {
-		$tok = null;
 		$da = new DataParsoid;
 		$da->tsr = $tsr;
 		$da->stx = 'html';
@@ -305,7 +305,8 @@ class TokenizerUtils {
 				return false;
 
 			case '|':
-				return !$stops['annOrExtTag'] && (
+				$htmlOrEmpty = ( $stops['tagType'] === 'html' || $stops['tagType'] === '' );
+				return $htmlOrEmpty && (
 					$stops['templateArg']
 					|| $stops['tableCellArg']
 					|| $stops['linkdesc']
@@ -316,7 +317,7 @@ class TokenizerUtils {
 
 			case '!':
 				return $stops['th']
-					&& !$stops['intemplate']
+					&& $stops['preproc'] !== '}}'
 					&& $c2 === '!';
 
 			case '{':
@@ -336,9 +337,11 @@ class TokenizerUtils {
 			case ':':
 				return $stops['colon']
 					&& !$stops['extlink']
-					&& !$stops['intemplate']
 					&& !$stops['linkdesc']
-					&& !( $stops['preproc'] === '}-' );
+					// ':' inside -{ .. }- or {{ .. }} should
+					// not trigger the colon break
+					&& $stops['preproc'] !== '}-'
+					&& $stops['preproc'] !== '}}';
 
 			case ';':
 				return $stops['semicolon'];
@@ -402,8 +405,9 @@ class TokenizerUtils {
 
 	/**
 	 * Pop off the end comments, if any.
+	 *
 	 * @param array &$attrs
-	 * @return array|null
+	 * @return ?array{buf: array, commentStartPos: int}
 	 */
 	public static function popComments( array &$attrs ): ?array {
 		$buf = [];
@@ -454,9 +458,9 @@ class TokenizerUtils {
 
 	/**
 	 * @param Env $env
-	 * @param mixed $token
+	 * @param Token|string $token
 	 */
-	public static function enforceParserResourceLimits( Env $env, $token ) {
+	public static function enforceParserResourceLimits( Env $env, $token ): void {
 		if ( $token instanceof TagTk || $token instanceof SelfclosingTagTk ) {
 			$resource = null;
 			switch ( $token->getName() ) {

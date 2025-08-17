@@ -4,12 +4,18 @@ declare( strict_types = 1 );
 namespace Wikimedia\Parsoid\Wt2Html;
 
 use Generator;
+use Wikimedia\Assert\UnreachableException;
 use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\Config\Profile;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Utils\PHPUtils;
+use Wikimedia\Parsoid\Wt2Html\TT\LineBasedHandler;
+use Wikimedia\Parsoid\Wt2Html\TT\LineBasedHandlerTraceProxy;
 use Wikimedia\Parsoid\Wt2Html\TT\TokenHandler;
-use Wikimedia\Parsoid\Wt2Html\TT\TraceProxy;
+use Wikimedia\Parsoid\Wt2Html\TT\UniversalTokenHandler;
+use Wikimedia\Parsoid\Wt2Html\TT\UniversalTokenHandlerTraceProxy;
+use Wikimedia\Parsoid\Wt2Html\TT\XMLTagBasedHandler;
+use Wikimedia\Parsoid\Wt2Html\TT\XMLTagBasedHandlerTraceProxy;
 
 /**
  * Token transformation manager. Individual transformations
@@ -74,12 +80,22 @@ class TokenHandlerPipeline extends PipelineStage {
 	 */
 	public function addTransformer( TokenHandler $t ): void {
 		if ( $this->traceEnabled ) {
-			$this->transformers[] = new TraceProxy( $this, $this->options, $this->traceType, $t );
-		} else {
-			$this->transformers[] = $t;
+			if ( $t instanceof XMLTagBasedHandler ) {
+				$t = new XMLTagBasedHandlerTraceProxy( $this, $this->options, $this->traceType, $t );
+			} elseif ( $t instanceof LineBasedHandler ) {
+				$t = new LineBasedHandlerTraceProxy( $this, $this->options, $this->traceType, $t );
+			} elseif ( $t instanceof UniversalTokenHandler ) {
+				$t = new UniversalTokenHandlerTraceProxy( $this, $this->options, $this->traceType, $t );
+			} else {
+				throw new UnreachableException( "THP: Got unknown token handler type: " . get_class( $t ) );
+			}
 		}
+		$this->transformers[] = $t;
 	}
 
+	/**
+	 * @return list{SelfclosingTagTk}
+	 */
 	public function shuttleTokensToEndOfStage( array $toks ): array {
 		$this->hasShuttleTokens = true;
 		$thpEnd = new SelfclosingTagTk( 'mw:thp-end' );
@@ -121,7 +137,7 @@ class TokenHandlerPipeline extends PipelineStage {
 		if ( $this->hasShuttleTokens ) {
 			$this->hasShuttleTokens = false;
 			$accum = [];
-			foreach ( $tokens as $i => $t ) {
+			foreach ( $tokens as $t ) {
 				if ( $t instanceof SelfclosingTagTk && $t->getName() === 'mw:thp-end' ) {
 					$toks = $t->dataParsoid->getTemp()->shuttleTokens;
 					PHPUtils::pushArray( $accum, $toks );
@@ -144,11 +160,11 @@ class TokenHandlerPipeline extends PipelineStage {
 	/**
 	 * @inheritDoc
 	 */
-	public function resetState( array $opts ): void {
+	public function resetState( array $options ): void {
 		$this->hasShuttleTokens = false;
-		parent::resetState( $opts );
+		parent::resetState( $options );
 		foreach ( $this->transformers as $transformer ) {
-			$transformer->resetState( $opts );
+			$transformer->resetState( $options );
 		}
 	}
 
@@ -158,25 +174,26 @@ class TokenHandlerPipeline extends PipelineStage {
 	 *
 	 * Process a chunk of tokens.
 	 *
-	 * @param array $tokens Array of tokens to process
-	 * @param array $opts
+	 * @param array $input Array of tokens to process
+	 * @param array $options
+	 *
 	 * @return array Returns the array of processed tokens
 	 */
-	public function process( $tokens, array $opts ): array {
-		return $this->processChunk( $tokens );
+	public function process( $input, array $options ): array {
+		return $this->processChunk( $input );
 	}
 
 	/**
 	 * @inheritDoc
 	 */
-	public function processChunkily( $input, array $opts ): Generator {
+	public function processChunkily( $input, array $options ): Generator {
 		if ( $this->prevStage ) {
-			foreach ( $this->prevStage->processChunkily( $input, $opts ) as $chunk ) {
+			foreach ( $this->prevStage->processChunkily( $input, $options ) as $chunk ) {
 				'@phan-var array $chunk'; // @var array $chunk
 				yield $this->processChunk( $chunk );
 			}
 		} else {
-			yield $this->process( $input, $opts );
+			yield $this->process( $input, $options );
 		}
 	}
 }

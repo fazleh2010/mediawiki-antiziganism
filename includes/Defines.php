@@ -34,7 +34,7 @@ use Wikimedia\Rdbms\IDatabase;
  *
  * @since 1.35 (also backported to 1.33.3 and 1.34.1)
  */
-define( 'MW_VERSION', '1.44.0' );
+define( 'MW_VERSION', '1.45.0-alpha' );
 
 /** @{
  * Obsolete IDatabase::makeList() constants
@@ -251,6 +251,8 @@ define( 'CONTENT_MODEL_JAVASCRIPT', 'javascript' );
 define( 'CONTENT_MODEL_CSS', 'css' );
 define( 'CONTENT_MODEL_TEXT', 'text' );
 define( 'CONTENT_MODEL_JSON', 'json' );
+/** @since 1.45 */
+define( 'CONTENT_MODEL_VUE', 'vue' );
 define( 'CONTENT_MODEL_UNKNOWN', 'unknown' );
 /** @} */
 
@@ -267,6 +269,8 @@ define( 'CONTENT_FORMAT_WIKITEXT', 'text/x-wiki' );
 define( 'CONTENT_FORMAT_JAVASCRIPT', 'text/javascript' );
 /** For CSS pages */
 define( 'CONTENT_FORMAT_CSS', 'text/css' );
+/** For Vue pages */
+define( 'CONTENT_FORMAT_VUE', 'application/vue+xml' );
 /** For future use, e.g. with some plain HTML messages. */
 define( 'CONTENT_FORMAT_TEXT', 'text/plain' );
 /** For future use, e.g. with some plain HTML messages. */

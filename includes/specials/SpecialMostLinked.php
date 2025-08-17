@@ -32,7 +32,7 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -57,14 +57,17 @@ class SpecialMostLinked extends QueryPage {
 		$this->linksMigration = $linksMigration;
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		[ $ns, $title ] = $this->linksMigration->getTitleFields( 'pagelinks' );
 		$queryInfo = $this->linksMigration->getQueryInfo( 'pagelinks' );
@@ -86,7 +89,7 @@ class SpecialMostLinked extends QueryPage {
 	/**
 	 * Pre-fill the link cache
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -138,6 +141,7 @@ class SpecialMostLinked extends QueryPage {
 		return $this->getLanguage()->specialList( $link, $wlh );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'highuse';
 	}

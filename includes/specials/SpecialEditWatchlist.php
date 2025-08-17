@@ -108,6 +108,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		$this->watchlistManager = $watchlistManager ?? $services->getWatchlistManager();
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -285,7 +286,11 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		return array_unique( $list );
 	}
 
-	public function submitRaw( $data ) {
+	/**
+	 * @param array $data
+	 * @return bool
+	 */
+	private function submitRaw( $data ) {
 		$wanted = $this->extractTitles( $data['Titles'] );
 		$current = $this->getWatchlist();
 
@@ -330,7 +335,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 	 * @param array $data
 	 * @return bool
 	 */
-	public function submitClear( $data ): bool {
+	private function submitClear( $data ): bool {
 		$this->clearUserWatchedItems( 'clear' );
 		return true;
 	}
@@ -624,7 +629,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 			if ( !$target instanceof LinkTarget ) {
 				try {
 					$target = $this->titleParser->parseTitle( $target, NS_MAIN );
-				} catch ( MalformedTitleException $e ) {
+				} catch ( MalformedTitleException ) {
 					continue;
 				}
 			}
@@ -639,7 +644,11 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		return $expandedTargets;
 	}
 
-	public function submitNormal( $data ) {
+	/**
+	 * @param array $data
+	 * @return bool
+	 */
+	private function submitNormal( $data ) {
 		$removed = [];
 
 		foreach ( $data as $titles ) {
@@ -748,7 +757,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		$form->setSubmitTooltip( 'watchlistedit-normal-submit' );
 		$form->setWrapperLegendMsg( 'watchlistedit-normal-legend' );
 		$form->addHeaderHtml( $this->msg( 'watchlistedit-normal-explain' )->parse() );
-		$form->setSubmitCallback( [ $this, 'submitNormal' ] );
+		$form->setSubmitCallback( $this->submitNormal( ... ) );
 
 		return $form;
 	}
@@ -836,7 +845,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		$form->setSubmitTooltip( 'watchlistedit-raw-submit' );
 		$form->setWrapperLegendMsg( 'watchlistedit-raw-legend' );
 		$form->addHeaderHtml( $this->msg( 'watchlistedit-raw-explain' )->parse() );
-		$form->setSubmitCallback( [ $this, 'submitRaw' ] );
+		$form->setSubmitCallback( $this->submitRaw( ... ) );
 
 		return $form;
 	}
@@ -854,7 +863,7 @@ class SpecialEditWatchlist extends UnlistedSpecialPage {
 		$form->setSubmitTooltip( 'watchlistedit-clear-submit' );
 		$form->setWrapperLegendMsg( 'watchlistedit-clear-legend' );
 		$form->addHeaderHtml( $this->msg( 'watchlistedit-clear-explain' )->parse() );
-		$form->setSubmitCallback( [ $this, 'submitClear' ] );
+		$form->setSubmitCallback( $this->submitClear( ... ) );
 		$form->setSubmitDestructive();
 
 		return $form;

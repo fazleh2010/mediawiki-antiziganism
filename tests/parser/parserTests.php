@@ -102,12 +102,17 @@ class ParserTestsMaintenance extends Maintenance {
 		$this->addOption( 'update-tests',
 			'Update parserTests.txt with results from wt2html fails.  Note that editTests.php exists ' .
 				'for finer grained editing of tests.' );
+		$this->addOption( 'update-unexpected',
+			'Update parserTests.txt with results from unexpected wt2html fails.'
+		);
+		$this->addOption( 'update-format', 'format with which to update tests; only useful in conjunction ' .
+			'with update-tests or update-unexpected and --parsoid. Values: raw, noDsr, actualNormalized.' );
 	}
 
 	public function finalSetup( SettingsBuilder $settingsBuilder ) {
 		// Some methods which are discouraged for normal code throw exceptions unless
 		// we declare this is just a test.
-		define( 'MW_PARSER_TEST', true );
+		define( 'MW_PHPUNIT_TEST', true );
 
 		parent::finalSetup( $settingsBuilder );
 		TestSetup::applyInitialConfig();
@@ -240,6 +245,7 @@ class ParserTestsMaintenance extends Maintenance {
 			'traceFlags' => $traceFlags,
 			'dumpFlags' => $dumpFlags,
 			'update-tests' => $this->hasOption( 'update-tests' ),
+			'update-unexpected' => $this->hasOption( 'update-unexpected' ),
 		] );
 
 		$ok = $tester->runTestsFromFiles( $files );

@@ -149,7 +149,7 @@ class SpecialExpandTemplates extends SpecialPage {
 	 * @param array $values The values submitted to the HTMLForm
 	 * @return Status
 	 */
-	public function onSubmitInput( array $values ) {
+	private function onSubmitInput( array $values ) {
 		$status = Status::newGood();
 		if ( $values['Input'] === '' ) {
 			$status = Status::newFatal( 'expand_templates_input_missing' );
@@ -205,7 +205,7 @@ class SpecialExpandTemplates extends SpecialPage {
 			->setSubmitTextMsg( 'expand_templates_ok' )
 			->setWrapperLegendMsg( 'expandtemplates' )
 			->setHeaderHtml( $this->msg( 'expand_templates_intro' )->parse() )
-			->setSubmitCallback( [ $this, 'onSubmitInput' ] )
+			->setSubmitCallback( $this->onSubmitInput( ... ) )
 			->showAlways();
 	}
 
@@ -222,7 +222,8 @@ class SpecialExpandTemplates extends SpecialPage {
 			'output',
 			$output,
 			[
-				'id' => 'output',
+				// #output is used by CodeMirror (T384148)
+				'id' => $heading === 'expand_templates_output' ? 'output' : $heading,
 				'cols' => 10,
 				'rows' => 10,
 				'readonly' => 'readonly',
@@ -276,6 +277,7 @@ class SpecialExpandTemplates extends SpecialPage {
 		$out->addCategoryLinks( $pout->getCategoryMap() );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'wiki';
 	}

@@ -75,11 +75,14 @@ class SpecialNewSection extends RedirectSpecialPage {
 			],
 		], $this->getContext(), 'newsection' );
 		$form->setSubmitTextMsg( 'newsection-submit' );
-		$form->setSubmitCallback( [ $this, 'onFormSubmit' ] );
+		$form->setSubmitCallback( $this->onFormSubmit( ... ) );
 		$form->show();
 	}
 
-	public function onFormSubmit( $formData ) {
+	/**
+	 * @param array $formData
+	 */
+	private function onFormSubmit( $formData ) {
 		$title = $formData['page'];
 		$page = Title::newFromTextThrow( $title );
 		$query = [ 'action' => 'edit', 'section' => 'new' ];
@@ -87,6 +90,7 @@ class SpecialNewSection extends RedirectSpecialPage {
 		$this->getOutput()->redirect( $url );
 	}
 
+	/** @inheritDoc */
 	public function isListed() {
 		return true;
 	}
@@ -103,6 +107,7 @@ class SpecialNewSection extends RedirectSpecialPage {
 		return $this->prefixSearchString( $search, $limit, $offset, $this->searchEngineFactory );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'redirects';
 	}

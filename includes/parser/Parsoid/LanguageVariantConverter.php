@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\Parser\Parsoid;
 
@@ -6,6 +7,7 @@ use MediaWiki\Language\LanguageCode;
 use MediaWiki\Languages\LanguageConverterFactory;
 use MediaWiki\Languages\LanguageFactory;
 use MediaWiki\Page\PageIdentity;
+use MediaWiki\Parser\ParserOptions;
 use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Parser\Parsoid\Config\PageConfigFactory;
 use MediaWiki\Rest\HttpException;
@@ -18,7 +20,7 @@ use Wikimedia\Bcp47Code\Bcp47CodeValue;
 use Wikimedia\Message\MessageValue;
 use Wikimedia\Parsoid\Config\PageConfig;
 use Wikimedia\Parsoid\Config\SiteConfig;
-use Wikimedia\Parsoid\Core\PageBundle;
+use Wikimedia\Parsoid\Core\HtmlPageBundle;
 use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\Parsoid;
 use Wikimedia\Parsoid\Utils\DOMCompat;
@@ -42,6 +44,9 @@ class LanguageVariantConverter {
 	 */
 	private ?Bcp47Code $pageLanguageOverride = null;
 	private bool $isFallbackLanguageConverterEnabled = true;
+
+	/** Hook for unit testing to supply mock for ParserOptions. */
+	private ?ParserOptions $parserOptionsForTest = null;
 
 	public function __construct(
 		PageIdentity $pageIdentity,
@@ -83,21 +88,21 @@ class LanguageVariantConverter {
 	}
 
 	/**
-	 * Perform variant conversion on a PageBundle object.
+	 * Perform variant conversion on a HtmlPageBundle object.
 	 *
-	 * @param PageBundle $pageBundle
+	 * @param HtmlPageBundle $pageBundle
 	 * @param Bcp47Code $targetVariant
 	 * @param ?Bcp47Code $sourceVariant
 	 *
-	 * @return PageBundle The converted PageBundle, or the object passed in as
+	 * @return HtmlPageBundle The converted HtmlPageBundle, or the object passed in as
 	 *         $pageBundle if the conversion is not supported.
 	 * @throws HttpException
 	 */
 	public function convertPageBundleVariant(
-		PageBundle $pageBundle,
+		HtmlPageBundle $pageBundle,
 		Bcp47Code $targetVariant,
 		?Bcp47Code $sourceVariant = null
-	): PageBundle {
+	): HtmlPageBundle {
 		[ $pageLanguage, $sourceVariant ] =
 			$this->getBaseAndSourceLanguage( $pageBundle, $sourceVariant );
 
@@ -159,7 +164,7 @@ class LanguageVariantConverter {
 			'@phan-var Element $docElt';
 			$docHtml = DOMCompat::getOuterHTML( $docElt );
 			$convertedHtml = preg_replace( "#</body>#", $docHtml, "$convertedHtml</body>" );
-			return new PageBundle(
+			return new HtmlPageBundle(
 				$convertedHtml, [], [], $pageBundle->version, $headers
 			);
 		}
@@ -198,10 +203,10 @@ class LanguageVariantConverter {
 		}
 
 		try {
-			$this->pageConfig = $this->pageConfigFactory->create(
+			$this->pageConfig = $this->pageConfigFactory->createFromParserOptions(
+				// Hook for unit testing: can supply a mock for parser options
+				$this->parserOptionsForTest ?? ParserOptions::newFromAnon(),
 				$this->pageIdentity,
-				null,
-				null,
 				null,
 				$pageLanguage
 			);
@@ -209,7 +214,7 @@ class LanguageVariantConverter {
 			if ( $sourceVariant ) {
 				$this->pageConfig->setVariantBcp47( $sourceVariant );
 			}
-		} catch ( RevisionAccessException $exception ) {
+		} catch ( RevisionAccessException ) {
 			// TODO: Throw a different exception, this class should not know
 			//       about HTTP status codes.
 			throw new LocalizedHttpException( new MessageValue( "rest-specified-revision-unavailable" ), 404 );
@@ -238,13 +243,13 @@ class LanguageVariantConverter {
 	 *
 	 * Finally, fall back to $this->pageTitle->getPageLanguage().
 	 *
-	 * @param PageBundle $pageBundle
+	 * @param HtmlPageBundle $pageBundle
 	 * @param Bcp47Code|null $default A default language, used after
 	 *   Content-Language but before PageConfig/Title lookup.
 	 *
 	 * @return Bcp47Code the page language; may be a variant.
 	 */
-	private function getPageLanguage( PageBundle $pageBundle, ?Bcp47Code $default = null ): Bcp47Code {
+	private function getPageLanguage( HtmlPageBundle $pageBundle, ?Bcp47Code $default = null ): Bcp47Code {
 		// If a language was set by calling setPageLanguageOverride(), always use it!
 		if ( $this->pageLanguageOverride ) {
 			return $this->pageLanguageOverride;
@@ -258,7 +263,7 @@ class LanguageVariantConverter {
 			return new Bcp47CodeValue( $pageBundleLanguage );
 		}
 
-		// NOTE: Use explicit default *before* we try PageBundle, because PageConfig::getPageLanguage()
+		// NOTE: Use explicit default *before* we try HtmlPageBundle, because PageConfig::getPageLanguage()
 		//       falls back to Title::getPageLanguage(). If we did that first, $default would never be used.
 		if ( $default ) {
 			return $default;
@@ -285,12 +290,12 @@ class LanguageVariantConverter {
 	 * It should always be a variant (or null to trigger auto-detection of
 	 * the source variant).
 	 *
-	 * @param PageBundle $pageBundle
+	 * @param HtmlPageBundle $pageBundle
 	 * @param ?Bcp47Code $sourceLanguage
 	 *
 	 * @return array{0:Bcp47Code,1:?Bcp47Code} [ Bcp47Code $pageLanguage, ?Bcp47Code $sourceLanguage ]
 	 */
-	private function getBaseAndSourceLanguage( PageBundle $pageBundle, ?Bcp47Code $sourceLanguage ): array {
+	private function getBaseAndSourceLanguage( HtmlPageBundle $pageBundle, ?Bcp47Code $sourceLanguage ): array {
 		// Try to determine the language code associated with the content of the page.
 		// The result may be a variant code.
 		$baseLanguage = $this->getPageLanguage( $pageBundle, $sourceLanguage );

@@ -256,7 +256,7 @@ class Parser {
 	// Initialised in constructor
 	/** @var string */
 	private string $mExtLinkBracketedRegex;
-	private UrlUtils $urlUtils;
+	private HookRunner $hookRunner;
 	private Preprocessor $mPreprocessor;
 
 	// Cleared with clearState():
@@ -375,34 +375,6 @@ class Parser {
 	private SectionProfiler $mProfiler;
 	private ?LinkRenderer $mLinkRenderer = null;
 
-	private MagicWordFactory $magicWordFactory;
-	private Language $contLang;
-	private LanguageConverterFactory $languageConverterFactory;
-	private LanguageNameUtils $languageNameUtils;
-	private ParserFactory $factory;
-	private SpecialPageFactory $specialPageFactory;
-	private TitleFormatter $titleFormatter;
-	/**
-	 * This is called $svcOptions instead of $options like elsewhere to avoid confusion with
-	 * $mOptions, which is public and widely used, and also with the local variable $options used
-	 * for ParserOptions throughout this file.
-	 */
-	private ServiceOptions $svcOptions;
-	private LinkRendererFactory $linkRendererFactory;
-	private NamespaceInfo $nsInfo;
-	private LoggerInterface $logger;
-	private BadFileLookup $badFileLookup;
-	private HookContainer $hookContainer;
-	private HookRunner $hookRunner;
-	private TidyDriverBase $tidy;
-	private WANObjectCache $wanCache;
-	private UserOptionsLookup $userOptionsLookup;
-	private UserFactory $userFactory;
-	private HttpRequestFactory $httpRequestFactory;
-	private TrackingCategories $trackingCategories;
-	private SignatureValidatorFactory $signatureValidatorFactory;
-	private UserNameUtils $userNameUtils;
-
 	/**
 	 * @internal For use by ServiceWiring
 	 */
@@ -416,6 +388,7 @@ class Parser {
 		MainConfigNames::ExtraInterlanguageLinkPrefixes,
 		MainConfigNames::FragmentMode,
 		MainConfigNames::Localtimezone,
+		MainConfigNames::MaxArticleSize,
 		MainConfigNames::MaxSigChars,
 		MainConfigNames::MaxTocLevel,
 		MainConfigNames::MiserMode,
@@ -429,7 +402,6 @@ class Parser {
 		MainConfigNames::StylePath,
 		MainConfigNames::TranscludeCacheExpiry,
 		MainConfigNames::PreprocessorCacheThreshold,
-		MainConfigNames::ParserEnableLegacyMediaDOM,
 		MainConfigNames::EnableParserLimitReporting,
 		MainConfigNames::ParserEnableUserLanguage,
 	];
@@ -437,53 +409,32 @@ class Parser {
 	/**
 	 * Constructing parsers directly is not allowed! Use a ParserFactory.
 	 * @internal
-	 *
-	 * @param ServiceOptions $svcOptions
-	 * @param MagicWordFactory $magicWordFactory
-	 * @param Language $contLang Content language
-	 * @param ParserFactory $factory
-	 * @param UrlUtils $urlUtils
-	 * @param SpecialPageFactory $spFactory
-	 * @param LinkRendererFactory $linkRendererFactory
-	 * @param NamespaceInfo $nsInfo
-	 * @param LoggerInterface $logger
-	 * @param BadFileLookup $badFileLookup
-	 * @param LanguageConverterFactory $languageConverterFactory
-	 * @param LanguageNameUtils $languageNameUtils
-	 * @param HookContainer $hookContainer
-	 * @param TidyDriverBase $tidy
-	 * @param WANObjectCache $wanCache
-	 * @param UserOptionsLookup $userOptionsLookup
-	 * @param UserFactory $userFactory
-	 * @param TitleFormatter $titleFormatter
-	 * @param HttpRequestFactory $httpRequestFactory
-	 * @param TrackingCategories $trackingCategories
-	 * @param SignatureValidatorFactory $signatureValidatorFactory
-	 * @param UserNameUtils $userNameUtils
 	 */
 	public function __construct(
-		ServiceOptions $svcOptions,
-		MagicWordFactory $magicWordFactory,
-		Language $contLang,
-		ParserFactory $factory,
-		UrlUtils $urlUtils,
-		SpecialPageFactory $spFactory,
-		LinkRendererFactory $linkRendererFactory,
-		NamespaceInfo $nsInfo,
-		LoggerInterface $logger,
-		BadFileLookup $badFileLookup,
-		LanguageConverterFactory $languageConverterFactory,
-		LanguageNameUtils $languageNameUtils,
-		HookContainer $hookContainer,
-		TidyDriverBase $tidy,
-		WANObjectCache $wanCache,
-		UserOptionsLookup $userOptionsLookup,
-		UserFactory $userFactory,
-		TitleFormatter $titleFormatter,
-		HttpRequestFactory $httpRequestFactory,
-		TrackingCategories $trackingCategories,
-		SignatureValidatorFactory $signatureValidatorFactory,
-		UserNameUtils $userNameUtils
+		// This is called $svcOptions instead of $options like elsewhere to avoid confusion with
+		// $mOptions, which is public and widely used, and also with the local variable $options used
+		// for ParserOptions throughout this file.
+		private ServiceOptions $svcOptions,
+		private MagicWordFactory $magicWordFactory,
+		private Language $contLang,
+		private UrlUtils $urlUtils,
+		private SpecialPageFactory $specialPageFactory,
+		private LinkRendererFactory $linkRendererFactory,
+		private NamespaceInfo $nsInfo,
+		private LoggerInterface $logger,
+		private BadFileLookup $badFileLookup,
+		private LanguageConverterFactory $languageConverterFactory,
+		private LanguageNameUtils $languageNameUtils,
+		private HookContainer $hookContainer,
+		private TidyDriverBase $tidy,
+		private WANObjectCache $wanCache,
+		private UserOptionsLookup $userOptionsLookup,
+		private UserFactory $userFactory,
+		private TitleFormatter $titleFormatter,
+		private HttpRequestFactory $httpRequestFactory,
+		private TrackingCategories $trackingCategories,
+		private SignatureValidatorFactory $signatureValidatorFactory,
+		private UserNameUtils $userNameUtils,
 	) {
 		$this->deprecateDynamicPropertiesAccess( '1.42', __CLASS__ );
 		$this->deprecatePublicProperty( 'ot', '1.35', __CLASS__ );
@@ -496,33 +447,13 @@ class Parser {
 			throw new BadMethodCallException( 'Direct construction of Parser not allowed' );
 		}
 		$svcOptions->assertRequiredOptions( self::CONSTRUCTOR_OPTIONS );
-		$this->svcOptions = $svcOptions;
 
-		$this->urlUtils = $urlUtils;
 		$this->mExtLinkBracketedRegex = '/\[(((?i)' . $this->urlUtils->validProtocols() . ')' .
 			self::EXT_LINK_ADDR .
 			self::EXT_LINK_URL_CLASS . '*)\p{Zs}*([^\]\\x00-\\x08\\x0a-\\x1F\\x{FFFD}]*)\]/Su';
 
-		$this->magicWordFactory = $magicWordFactory;
-
-		$this->contLang = $contLang;
-
-		$this->factory = $factory;
-		$this->specialPageFactory = $spFactory;
-		$this->linkRendererFactory = $linkRendererFactory;
-		$this->nsInfo = $nsInfo;
-		$this->logger = $logger;
-		$this->badFileLookup = $badFileLookup;
-
-		$this->languageConverterFactory = $languageConverterFactory;
-		$this->languageNameUtils = $languageNameUtils;
-
-		$this->hookContainer = $hookContainer;
 		$this->hookRunner = new HookRunner( $hookContainer );
 
-		$this->tidy = $tidy;
-
-		$this->wanCache = $wanCache;
 		$this->mPreprocessor = new Preprocessor_Hash(
 			$this,
 			$this->wanCache,
@@ -531,14 +462,6 @@ class Parser {
 				'disableLangConversion' => $languageConverterFactory->isConversionDisabled(),
 			]
 		);
-
-		$this->userOptionsLookup = $userOptionsLookup;
-		$this->userFactory = $userFactory;
-		$this->titleFormatter = $titleFormatter;
-		$this->httpRequestFactory = $httpRequestFactory;
-		$this->trackingCategories = $trackingCategories;
-		$this->signatureValidatorFactory = $signatureValidatorFactory;
-		$this->userNameUtils = $userNameUtils;
 
 		// These steps used to be done in "::firstCallInit()"
 		// (if you're chasing a reference from some old code)
@@ -747,9 +670,7 @@ class Parser {
 		}
 
 		# Information on limits, for the benefit of users who try to skirt them
-		if ( $this->svcOptions->get( MainConfigNames::EnableParserLimitReporting ) ) {
-			$this->makeLimitReport( $this->mOptions, $this->mOutput );
-		}
+		$this->makeLimitReport( $this->mOptions, $this->mOutput );
 
 		$this->mOutput->setFromParserOptions( $options );
 
@@ -773,6 +694,15 @@ class Parser {
 	public function makeLimitReport(
 		ParserOptions $parserOptions, ParserOutput $parserOutput
 	) {
+		if ( !$this->svcOptions->get( MainConfigNames::EnableParserLimitReporting ) ) {
+			return;
+		}
+		if ( $parserOptions->isMessage() ) {
+			// No need to include limit report information in
+			// user interface messages.
+			return;
+		}
+
 		$maxIncludeSize = $parserOptions->getMaxIncludeSize();
 
 		$cpuTime = $parserOutput->getTimeProfile( 'cpu' );
@@ -789,6 +719,11 @@ class Parser {
 
 		$parserOutput->setLimitReportData( 'limitreport-ppvisitednodes',
 			[ $this->mPPNodeCount, $parserOptions->getMaxPPNodeCount() ]
+		);
+		$revisionSize = $this->mInputSize !== false ? $this->mInputSize :
+			$this->getRevisionSize();
+		$parserOutput->setLimitReportData( 'limitreport-revisionsize',
+			[ $revisionSize ?? -1, $this->svcOptions->get( MainConfigNames::MaxArticleSize ) * 1024 ]
 		);
 		$parserOutput->setLimitReportData( 'limitreport-postexpandincludesize',
 			[ $this->mIncludeSizes['post-expand'], $maxIncludeSize ]
@@ -909,7 +844,7 @@ class Parser {
 	 * @return string
 	 * @return-taint escaped
 	 */
-	public function parseExtensionTagAsTopLevelDoc( $text ) {
+	public function parseExtensionTagAsTopLevelDoc( string $text ): string {
 		$text = $this->recursiveTagParse( $text );
 		$this->hookRunner->onParserAfterParse( $this, $text, $this->mStripState );
 		$text = $this->internalParseHalfParsed( $text, true );
@@ -1786,7 +1721,7 @@ class Parser {
 					[0-9Xx]                  #  check digit
 				)\b
 			)!xu",
-			[ $this, 'magicLinkCallback' ],
+			$this->magicLinkCallback( ... ),
 			$text
 		);
 		return $text;
@@ -1808,7 +1743,7 @@ class Parser {
 			return $this->makeFreeExternalLink( $m[0], strlen( $m[4] ) );
 		} elseif ( isset( $m[5] ) && $m[5] !== '' ) {
 			# RFC or PMID
-			if ( substr( $m[0], 0, 3 ) === 'RFC' ) {
+			if ( str_starts_with( $m[0], 'RFC' ) ) {
 				if ( !$this->mOptions->getMagicRFCLinks() ) {
 					return $m[0];
 				}
@@ -1817,7 +1752,7 @@ class Parser {
 				$cssClass = 'mw-magiclink-rfc';
 				$trackingCat = 'magiclink-tracking-rfc';
 				$id = $m[5];
-			} elseif ( substr( $m[0], 0, 4 ) === 'PMID' ) {
+			} elseif ( str_starts_with( $m[0], 'PMID' ) ) {
 				if ( !$this->mOptions->getMagicPMIDLinks() ) {
 					return $m[0];
 				}
@@ -1896,7 +1831,7 @@ class Parser {
 		# Move trailing punctuation to $trail
 		$sep = ',;\.:!?';
 		# If there is no left bracket, then consider right brackets fair game too
-		if ( strpos( $url, '(' ) === false ) {
+		if ( !str_contains( $url, '(' ) ) {
 			$sep .= ')';
 		}
 
@@ -2412,13 +2347,13 @@ class Parser {
 		if ( $imagesexception && is_array( $imagesfrom ) ) {
 			$imagematch = false;
 			foreach ( $imagesfrom as $match ) {
-				if ( strpos( $url, $match ) === 0 ) {
+				if ( str_starts_with( $url, $match ) ) {
 					$imagematch = true;
 					break;
 				}
 			}
 		} elseif ( $imagesexception ) {
-			$imagematch = ( strpos( $url, $imagesfrom ) === 0 );
+			$imagematch = str_starts_with( $url, $imagesfrom );
 		} else {
 			$imagematch = false;
 		}
@@ -2441,7 +2376,7 @@ class Parser {
 
 			foreach ( $whitelist as $entry ) {
 				# Sanitize the regex fragment, make it case-insensitive, ignore blank entries/comments
-				if ( strpos( $entry, '#' ) === 0 || $entry === '' ) {
+				if ( $entry === '' || str_starts_with( $entry, '#' ) ) {
 					continue;
 				}
 				// @phan-suppress-next-line SecurityCheck-ReDoS preg_quote is not wanted here
@@ -2564,7 +2499,7 @@ class Parser {
 					$m[3] = substr( $m[3], 1 );
 				}
 				# fix up urlencoded title texts
-				if ( strpos( $m[1], '%' ) !== false ) {
+				if ( str_contains( $m[1], '%' ) ) {
 					# Should anchors '#' also be rejected?
 					$m[1] = str_replace( [ '<', '>' ], [ '&lt;', '&gt;' ], rawurldecode( $m[1] ) );
 				}
@@ -2573,7 +2508,7 @@ class Parser {
 				# Invalid, but might be an image with a link in its caption
 				$might_be_img = true;
 				$text = $m[2];
-				if ( strpos( $m[1], '%' ) !== false ) {
+				if ( str_contains( $m[1], '%' ) ) {
 					$m[1] = str_replace( [ '<', '>' ], [ '&lt;', '&gt;' ], rawurldecode( $m[1] ) );
 				}
 				$trail = "";
@@ -2618,7 +2553,7 @@ class Parser {
 			$ns = $nt->getNamespace();
 			$iw = $nt->getInterwiki();
 
-			$noforce = ( substr( $origLink, 0, 1 ) !== ':' );
+			$noforce = !str_starts_with( $origLink, ':' );
 
 			if ( $might_be_img ) { # if this is actually an invalid link
 				if ( $ns === NS_FILE && $noforce ) { # but might be an image
@@ -3103,7 +3038,7 @@ class Parser {
 		if ( !$found && $args->getLength() == 0 ) {
 			$id = $this->mVariables->matchStartToEnd( $part1 );
 			if ( $id !== false ) {
-				if ( strpos( $part1, ':' ) !== false ) {
+				if ( str_contains( $part1, ':' ) ) {
 					wfDeprecatedMsg(
 						'Registering a magic variable with a name including a colon',
 						'1.39', false, false
@@ -3680,7 +3615,7 @@ class Parser {
 				// Self-transclusion; final result may change based on the new page version
 				try {
 					$sha1 = $revRecord->getSha1();
-				} catch ( RevisionAccessException $e ) {
+				} catch ( RevisionAccessException ) {
 					$sha1 = null;
 				}
 				$this->setOutputFlag( ParserOutputFlags::VARY_REVISION_SHA1, 'Self transclusion' );
@@ -4737,7 +4672,7 @@ class Parser {
 		# which may corrupt this parser instance via its wfMessage()->text() call-
 
 		# Signatures
-		if ( strpos( $text, '~~~' ) !== false ) {
+		if ( str_contains( $text, '~~~' ) ) {
 			$sigText = $this->getUserSig( $user );
 			$text = strtr( $text, [
 				'~~~~~' => $d,
@@ -4869,7 +4804,7 @@ class Parser {
 	/**
 	 * Clean up signature text
 	 *
-	 * 1) Strip 3, 4 or 5 tildes out of signatures @see cleanSigInSig
+	 * 1) Strip 3, 4 or 5 tildes out of signatures, see {@link cleanSigInSig}
 	 * 2) Substitute all transclusions
 	 *
 	 * @param string $text
@@ -4941,6 +4876,13 @@ class Parser {
 	 * @return string Result HTML
 	 */
 	public static function replaceTableOfContentsMarker( $text, $toc ) {
+		// Optimization: Avoid a potentially expensive Remex tokenization and reserialization
+		// if the content does not contain a TOC placeholder, such as during message parsing,
+		// which may occur hundreds of times per request (T394059).
+		if ( !str_contains( $text, 'mw:PageProp/toc' ) ) {
+			return $text;
+		}
+
 		$replaced = false;
 		return HtmlHelper::modifyElements(
 			$text,
@@ -5202,7 +5144,7 @@ class Parser {
 
 		try {
 			$ig = ImageGalleryBase::factory( $mode );
-		} catch ( ImageGalleryClassNotFoundException $e ) {
+		} catch ( ImageGalleryClassNotFoundException ) {
 			// If invalid type set, fallback to default.
 			$ig = ImageGalleryBase::factory();
 		}
@@ -5233,8 +5175,6 @@ class Parser {
 		}
 		$ig->setAdditionalOptions( $params );
 
-		$enableLegacyMediaDOM = $this->svcOptions->get( MainConfigNames::ParserEnableLegacyMediaDOM );
-
 		$lines = StringUtils::explode( "\n", $text );
 		foreach ( $lines as $line ) {
 			# match lines like these:
@@ -5246,7 +5186,7 @@ class Parser {
 				continue;
 			}
 
-			if ( strpos( $matches[0], '%' ) !== false ) {
+			if ( str_contains( $matches[0], '%' ) ) {
 				$matches[1] = rawurldecode( $matches[1] );
 			}
 			$title = Title::newFromText( $matches[1], NS_FILE );
@@ -5347,12 +5287,8 @@ class Parser {
 			}
 
 			// Match makeImage when !$hasVisibleCaption
-			if ( !$hasAlt ) {
-				if ( $label !== '' ) {
-					$alt = $this->stripAltText( $label, false );
-				} elseif ( $enableLegacyMediaDOM ) {
-					$alt = $title->getText();
-				}
+			if ( !$hasAlt && $label !== '' ) {
+				$alt = $this->stripAltText( $label, false );
 			}
 			$imageOptions['title'] = $this->stripAltText( $label, false );
 
@@ -5582,14 +5518,10 @@ class Parser {
 
 		$params['frame']['caption'] = $caption;
 
-		$enableLegacyMediaDOM = $this->svcOptions->get( MainConfigNames::ParserEnableLegacyMediaDOM );
-
 		# Will the image be presented in a frame, with the caption below?
 		// @phan-suppress-next-line PhanImpossibleCondition
 		$hasVisibleCaption = isset( $params['frame']['framed'] )
-			// @phan-suppress-next-line PhanImpossibleCondition
 			|| isset( $params['frame']['thumbnail'] )
-			// @phan-suppress-next-line PhanImpossibleCondition
 			|| isset( $params['frame']['manualthumb'] );
 
 		# In the old days, [[Image:Foo|text...]] would set alt text.  Later it
@@ -5606,29 +5538,12 @@ class Parser {
 		# named parameter entirely for images without a caption; adding an ex-
 		# plicit caption= parameter and preserving the old magic unnamed para-
 		# meter for BC; ...
-		if ( $hasVisibleCaption ) {
-			if (
-				// @phan-suppress-next-line PhanImpossibleCondition
-				$caption === '' && !isset( $params['frame']['alt'] ) &&
-				$enableLegacyMediaDOM
-			) {
-				# No caption or alt text, add the filename as the alt text so
-				# that screen readers at least get some description of the image
-				$params['frame']['alt'] = $link->getText();
-			}
-			# Do not set $params['frame']['title'] because tooltips are unnecessary
-			# for framed images, the caption is visible
-		} else {
+
+		if ( !$hasVisibleCaption ) {
 			// @phan-suppress-next-line PhanImpossibleCondition
-			if ( !isset( $params['frame']['alt'] ) ) {
+			if ( !isset( $params['frame']['alt'] ) && $caption !== '' ) {
 				# No alt text, use the "caption" for the alt text
-				if ( $caption !== '' ) {
-					$params['frame']['alt'] = $this->stripAltText( $caption, $holders );
-				} elseif ( $enableLegacyMediaDOM ) {
-					# No caption, fall back to using the filename for the
-					# alt text
-					$params['frame']['alt'] = $link->getText();
-				}
+				$params['frame']['alt'] = $this->stripAltText( $caption, $holders );
 			}
 			# Use the "caption" for the tooltip text
 			$params['frame']['title'] = $this->stripAltText( $caption, $holders );
@@ -5641,7 +5556,6 @@ class Parser {
 
 		# Linker does the rest
 		$time = $options['time'] ?? false;
-		// @phan-suppress-next-line PhanTypePossiblyInvalidDimOffset
 		$ret = Linker::makeImageLink( $this, $link, $file, $params['frame'], $params['handler'],
 			$time, $descQuery, $this->mOptions->getThumbSize() );
 
@@ -5714,7 +5628,7 @@ class Parser {
 			//
 			// Hence, double decoded is not an issue.  See the test,
 			// "Should not double decode the link option"
-			if ( strpos( $value, '%' ) !== false ) {
+			if ( str_contains( $value, '%' ) ) {
 				$value = rawurldecode( $value );
 			}
 			$linkTitle = Title::newFromText( $value );
@@ -6105,6 +6019,9 @@ class Parser {
 		if ( $this->mRevisionRecordObject ) {
 			return $this->mRevisionRecordObject;
 		}
+		if ( $this->mOptions->isMessage() ) {
+			return null;
+		}
 
 		// NOTE: try to get the RevisionRecord object even if mRevisionId is null.
 		// This is useful when parsing a revision that has not yet been saved.
@@ -6315,7 +6232,7 @@ class Parser {
 		$titleParser = MediaWikiServices::getInstance()->getTitleParser();
 		try {
 			$parts = $titleParser->splitTitleString( "#$text" );
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			return $text;
 		}
 		return $parts['fragment'];
@@ -6501,7 +6418,7 @@ class Parser {
 	 */
 	public static function stripOuterParagraph( $html ) {
 		$m = [];
-		if ( preg_match( '/^<p>(.*)\n?<\/p>\n?$/sU', $html, $m ) && strpos( $m[1], '</p>' ) === false ) {
+		if ( preg_match( '/^<p>(.*)\n?<\/p>\n?$/sU', $html, $m ) && !str_contains( $m[1], '</p>' ) ) {
 			$html = $m[1];
 		}
 
@@ -6535,9 +6452,23 @@ class Parser {
 	 * @unstable
 	 */
 	public static function extractBody( string $text ): string {
-		$text = preg_replace( '!^.*?<body[^>]*>!s', '', $text, 1 );
-		$text = preg_replace( '!</body>\s*</html>\s*$!', '', $text, 1 );
-		return $text;
+		$posStart = strpos( $text, '<body' );
+		if ( $posStart === false ) {
+			return $text;
+		}
+		$posStart = strpos( $text, '>', $posStart );
+		if ( $posStart === false ) {
+			return $text;
+		}
+		// Skip past the > character
+		$posStart += 1;
+		$posEnd = strrpos( $text, '</body>', $posStart );
+		if ( $posEnd === false ) {
+			// Strip <body> wrapper even if input was truncated (i.e. missing close tag)
+			return substr( $text, $posStart );
+		} else {
+			return substr( $text, $posStart, $posEnd - $posStart );
+		}
 	}
 
 	/**
@@ -6556,11 +6487,15 @@ class Parser {
 	/**
 	 * Sets the flag on the parser output but also does some debug logging.
 	 * Note that there is a copy of this method in CoreMagicVariables as well.
-	 * @param string $flag
+	 * @param ParserOutputFlags|string $flag
 	 * @param string $reason
 	 */
-	private function setOutputFlag( string $flag, string $reason ): void {
+	private function setOutputFlag( ParserOutputFlags|string $flag, string $reason ): void {
 		$this->mOutput->setOutputFlag( $flag );
+		if ( $flag instanceof ParserOutputFlags ) {
+			// Convert enumeration to string for logging.
+			$flag = $flag->value;
+		}
 		$name = $this->getTitle()->getPrefixedText();
 		$this->logger->debug( __METHOD__ . ": set $flag flag on '$name'; $reason" );
 	}

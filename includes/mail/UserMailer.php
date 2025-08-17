@@ -22,6 +22,12 @@
  * @author Luke Welling lwelling@wikimedia.org
  */
 
+namespace MediaWiki\Mail;
+
+use Exception;
+use Mail;
+use Mail_mime;
+use Mail_smtp;
 use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MainConfigNames;
@@ -30,6 +36,8 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Status\Status;
 use MediaWiki\Utils\MWTimestamp;
 use MediaWiki\WikiMap\WikiMap;
+use PEAR;
+use RuntimeException;
 
 /**
  * @defgroup Mail Mail
@@ -212,7 +220,6 @@ class UserMailer {
 		$services = MediaWikiServices::getInstance();
 		$mainConfig = $services->getMainConfig();
 		$smtp = $mainConfig->get( MainConfigNames::SMTP );
-		$enotifMaxRecips = $mainConfig->get( MainConfigNames::EnotifMaxRecips );
 		$additionalMailParams = $mainConfig->get( MainConfigNames::AdditionalMailParams );
 
 		$replyto = $options['replyTo'] ?? null;
@@ -350,7 +357,14 @@ class UserMailer {
 		}
 
 		if ( is_array( $smtp ) ) {
-			$recips = array_map( 'strval', $to );
+			$receips = array_map( 'strval', $to );
+
+			if ( count( $receips ) !== 1 ) {
+				throw new RuntimeException(
+					__METHOD__ . 'somehow called for multiple recipients, no longer supported.'
+				);
+			}
+			$recipient = $receips[0];
 
 			// Create the mail object using the Mail::factory method
 			$mail_object = Mail::factory( 'smtp', $smtp );
@@ -364,20 +378,12 @@ class UserMailer {
 
 			$headers['Subject'] = self::quotedPrintable( $subject );
 
-			// When sending only to one recipient, shows it its email using To:
-			if ( count( $recips ) == 1 ) {
-				$headers['To'] = $recips[0];
-			}
+			// Shows recipient its email using To:
+			$headers['To'] = $recipient;
 
-			// Split jobs since SMTP servers tends to limit the maximum
-			// number of possible recipients.
-			$chunks = array_chunk( $recips, $enotifMaxRecips );
-			foreach ( $chunks as $chunk ) {
-				$status = self::sendWithPear( $mail_object, $chunk, $headers, $body );
-				// FIXME : some chunks might be sent while others are not!
-				if ( !$status->isOK() ) {
-					return $status;
-				}
+			$status = self::sendWithPear( $mail_object, $recipient, $headers, $body );
+			if ( !$status->isOK() ) {
+				return $status;
 			}
 			return Status::newGood();
 		} else {
@@ -448,18 +454,6 @@ class UserMailer {
 	}
 
 	/**
-	 * Strips bad characters from a header value to prevent PHP mail header injection attacks
-	 * @param string $val String to be sanitized
-	 * @return string
-	 * @deprecated in 1.44. No replacement is provided as this
-	 * 	function is unused per codesearch.
-	 */
-	public static function sanitizeHeaderValue( $val ) {
-		wfDeprecated( __METHOD__, '1.44' );
-		return strtr( $val, [ "\r" => '', "\n" => '' ] );
-	}
-
-	/**
 	 * Converts a string into quoted-printable format
 	 * @since 1.17
 	 *
@@ -497,3 +491,6 @@ class UserMailer {
 		return $out;
 	}
 }
+
+/** @deprecated class alias since 1.45 */
+class_alias( UserMailer::class, 'UserMailer' );

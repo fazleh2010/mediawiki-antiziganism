@@ -774,10 +774,12 @@ abstract class File implements MediaHandlerState {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getHandlerState( string $key ) {
 		return $this->handlerState[$key] ?? null;
 	}
 
+	/** @inheritDoc */
 	public function setHandlerState( string $key, $value ) {
 		$this->handlerState[$key] = $value;
 	}
@@ -1404,20 +1406,13 @@ abstract class File implements MediaHandlerState {
 			$this->generateBucketsIfNeeded( $normalisedParams, $flags );
 		}
 
-		# T367110
-		# Calls to doTransform() can recur back on $this->transform()
-		# depending on implementation. One such example is PagedTiffHandler.
-		# TimingMetric->start() and stop() cannot be used in this situation
-		# so we will track the time manually.
-		$starttime = microtime( true );
+		$timer = $statsFactory->getTiming( 'media_thumbnail_generate_transform_seconds' )->start();
 
 		// Actually render the thumbnail...
 		$thumb = $handler->doTransform( $this, $tmpThumbPath, $thumbUrl, $transformParams );
 		$tmpFile->bind( $thumb ); // keep alive with $thumb
 
-		$statsFactory->getTiming( 'media_thumbnail_generate_transform_seconds' )
-			->copyToStatsdAt( 'media.thumbnail.generate.transform' )
-			->observe( ( microtime( true ) - $starttime ) * 1000 );
+		$timer->stop();
 
 		if ( !$thumb ) { // bad params?
 			$thumb = false;
@@ -2069,10 +2064,7 @@ abstract class File implements MediaHandlerState {
 		return (bool)$this->repo->getHashLevels();
 	}
 
-	/**
-	 * @return never
-	 */
-	protected function readOnlyError() {
+	protected function readOnlyError(): never {
 		throw new LogicException( static::class . ': write operations are not supported' );
 	}
 
@@ -2465,7 +2457,14 @@ abstract class File implements MediaHandlerState {
 	}
 
 	/**
-	 * @return string HTML
+	 * Long description. Shown under image on image description page surrounded by ().
+	 *
+	 * Until MediaWiki 1.45, the return value was poorly documented, and some handlers returned HTML
+	 * while others returned plain text. When calling this method, you should treat it as returning
+	 * unsafe HTML, and call `Sanitizer::removeSomeTags()` on the result.
+	 *
+	 * @return string HTML (possibly unsafe, call `Sanitizer::removeSomeTags()` on the result)
+	 * @return-taint tainted
 	 */
 	public function getLongDesc() {
 		$handler = $this->getHandler();
@@ -2477,7 +2476,14 @@ abstract class File implements MediaHandlerState {
 	}
 
 	/**
-	 * @return string HTML
+	 * Short description. Shown on Special:Search results.
+	 *
+	 * Until MediaWiki 1.45, the return value was poorly documented, and some handlers returned HTML
+	 * while others returned plain text. When calling this method, you should treat it as returning
+	 * unsafe HTML, and call `Sanitizer::removeSomeTags()` on the result.
+	 *
+	 * @return string HTML (possibly unsafe, call `Sanitizer::removeSomeTags()` on the result)
+	 * @return-taint tainted
 	 */
 	public function getShortDesc() {
 		$handler = $this->getHandler();

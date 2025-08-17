@@ -90,7 +90,7 @@ class ApiParseTest extends ApiTestCase {
 	 *   no warnings
 	 */
 	protected function assertParsedTo( $expected, array $res, $warnings = null ) {
-		$this->doAssertParsedTo( $expected, $res, $warnings, [ $this, 'assertSame' ] );
+		$this->doAssertParsedTo( $expected, $res, $warnings, $this->assertSame( ... ) );
 	}
 
 	/**
@@ -103,14 +103,14 @@ class ApiParseTest extends ApiTestCase {
 	 *   no warnings
 	 */
 	protected function assertParsedToRegExp( $expected, array $res, $warnings = null ) {
-		$this->doAssertParsedTo( $expected, $res, $warnings, [ $this, 'assertMatchesRegularExpression' ] );
+		$this->doAssertParsedTo( $expected, $res, $warnings, $this->assertMatchesRegularExpression( ... ) );
 	}
 
 	private function doAssertParsedTo( $expected, array $res, $warnings, callable $callback ) {
 		$html = $res[0]['parse']['text'];
 
 		$expectedStart = '<div class="mw-content-ltr mw-parser-output" lang="en" dir="ltr"';
-		$this->assertSame( $expectedStart, substr( $html, 0, strlen( $expectedStart ) ) );
+		$this->assertStringStartsWith( $expectedStart, $html );
 
 		$html = substr( $html, strlen( $expectedStart ) );
 

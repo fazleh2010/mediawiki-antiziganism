@@ -50,10 +50,16 @@ class SpecialRandomPage extends SpecialPage {
 		$this->namespaces = $nsInfo->getContentNamespaces();
 	}
 
+	/**
+	 * @return int[]
+	 */
 	public function getNamespaces() {
 		return $this->namespaces;
 	}
 
+	/**
+	 * @param int|false $ns
+	 */
 	public function setNamespace( $ns ) {
 		if ( !$this->isValidNS( $ns ) ) {
 			$ns = NS_MAIN;
@@ -68,11 +74,15 @@ class SpecialRandomPage extends SpecialPage {
 		return $ns !== false && $ns >= 0;
 	}
 
-	// select redirects instead of normal pages?
+	/**
+	 * select redirects instead of normal pages?
+	 * @return bool
+	 */
 	public function isRedirect() {
 		return $this->isRedir;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->parsePar( $par );
 
@@ -103,7 +113,7 @@ class SpecialRandomPage extends SpecialPage {
 		// the empty string to mean main namespace only.
 		if ( is_string( $par ) ) {
 			$ns = $this->getContentLanguage()->getNsIndex( $par );
-			if ( $ns === false && strpos( $par, ',' ) !== false ) {
+			if ( $ns === false && str_contains( $par, ',' ) ) {
 				$nsList = [];
 				// Comma separated list
 				$parSplit = explode( ',', $par );
@@ -185,15 +195,20 @@ class SpecialRandomPage extends SpecialPage {
 		return null;
 	}
 
+	/**
+	 * @param string $randstr
+	 * @return array
+	 */
 	protected function getQueryInfo( $randstr ) {
 		$dbr = $this->dbProvider->getReplicaDatabase();
 		$redirect = $this->isRedirect() ? 1 : 0;
 		$tables = [ 'page' ];
-		$conds = array_merge( [
+		$conds = [
 			'page_namespace' => $this->namespaces,
 			'page_is_redirect' => $redirect,
 			$dbr->expr( 'page_random', '>=', $randstr ),
-		], $this->extra );
+			...$this->extra,
+		];
 		$joinConds = [];
 
 		// Allow extensions to modify the query
@@ -226,6 +241,7 @@ class SpecialRandomPage extends SpecialPage {
 			->fetchRow();
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'redirects';
 	}

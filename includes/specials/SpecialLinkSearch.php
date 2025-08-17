@@ -21,6 +21,7 @@
 namespace MediaWiki\Specials;
 
 use MediaWiki\Cache\LinkBatchFactory;
+use MediaWiki\Deferred\LinksUpdate\ExternalLinksTable;
 use MediaWiki\ExternalLinks\LinkFilter;
 use MediaWiki\HTMLForm\HTMLForm;
 use MediaWiki\MainConfigNames;
@@ -31,8 +32,8 @@ use MediaWiki\Title\TitleValue;
 use MediaWiki\Utils\UrlUtils;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
 use Wikimedia\Rdbms\IExpression;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 use Wikimedia\Rdbms\LikeValue;
 
@@ -71,10 +72,12 @@ class SpecialLinkSearch extends QueryPage {
 		$this->urlUtils = $urlUtils;
 	}
 
+	/** @inheritDoc */
 	public function isCacheable() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->setHeaders();
 		$this->outputHeader();
@@ -164,6 +167,7 @@ class SpecialLinkSearch extends QueryPage {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function linkParameters() {
 		$params = [];
 		$params['target'] = $this->mProt . $this->mQuery;
@@ -174,8 +178,9 @@ class SpecialLinkSearch extends QueryPage {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
-		$dbr = $this->getDatabaseProvider()->getReplicaDatabase();
+		$dbr = $this->getDatabaseProvider()->getReplicaDatabase( ExternalLinksTable::VIRTUAL_DOMAIN );
 
 		$field = 'el_to_domain_index';
 		$extraFields = [
@@ -208,16 +213,15 @@ class SpecialLinkSearch extends QueryPage {
 
 		$retval = [
 			'tables' => [ 'page', 'externallinks' ],
-			'fields' => array_merge( [
+			'fields' => [
 				'namespace' => 'page_namespace',
 				'title' => 'page_title',
-			], $extraFields ),
-			'conds' => array_merge(
-				[
-					'page_id = el_from',
-				],
-				$this->mungedQuery
-			),
+				...$extraFields,
+			],
+			'conds' => [
+				'page_id = el_from',
+				...$this->mungedQuery,
+			],
 			'options' => [ 'ORDER BY' => $orderBy ]
 		];
 
@@ -231,7 +235,7 @@ class SpecialLinkSearch extends QueryPage {
 	/**
 	 * Pre-fill the link cache
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -262,6 +266,7 @@ class SpecialLinkSearch extends QueryPage {
 		return [];
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pages';
 	}
@@ -275,6 +280,14 @@ class SpecialLinkSearch extends QueryPage {
 	 */
 	protected function getMaxResults() {
 		return max( parent::getMaxResults(), 60000 );
+	}
+
+	/** @inheritDoc */
+	protected function getRecacheDB() {
+		return $this->getDatabaseProvider()->getReplicaDatabase(
+			ExternalLinksTable::VIRTUAL_DOMAIN,
+			'vslow'
+		);
 	}
 }
 

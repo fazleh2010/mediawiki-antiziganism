@@ -106,6 +106,7 @@ class BlockListPager extends TablePager {
 		$this->mDefaultDirection = IndexPager::DIR_DESCENDING;
 	}
 
+	/** @inheritDoc */
 	protected function getFieldNames() {
 		static $headers = null;
 
@@ -463,18 +464,17 @@ class BlockListPager extends TablePager {
 		);
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$db = $this->getDatabase();
 		$commentQuery = $this->commentStore->getJoin( 'bl_reason' );
 		$info = [
-			'tables' => array_merge(
-				[
-					'block',
-					'block_by_actor' => 'actor',
-					'block_target',
-				],
-				$commentQuery['tables']
-			),
+			'tables' => [
+				'block',
+				'block_by_actor' => 'actor',
+				'block_target',
+				...$commentQuery['tables'],
+			],
 			'fields' => [
 				// The target fields should be those accepted by BlockTargetFactory::newFromRowRedacted()
 				'bt_address',
@@ -532,18 +532,22 @@ class BlockListPager extends TablePager {
 		return $info;
 	}
 
+	/** @inheritDoc */
 	protected function getTableClass() {
 		return parent::getTableClass() . ' mw-blocklist';
 	}
 
+	/** @inheritDoc */
 	public function getIndexField() {
 		return [ [ 'bl_timestamp', 'bl_id' ] ];
 	}
 
+	/** @inheritDoc */
 	public function getDefaultSort() {
 		return '';
 	}
 
+	/** @inheritDoc */
 	protected function isFieldSortable( $name ) {
 		return false;
 	}

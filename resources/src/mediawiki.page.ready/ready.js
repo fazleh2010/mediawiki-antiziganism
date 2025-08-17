@@ -1,6 +1,8 @@
 const checkboxShift = require( './checkboxShift.js' );
 const config = require( './config.json' );
 const teleportTarget = require( './teleportTarget.js' );
+const enableSearchDialog = require( './enableSearchDialog.js' );
+const clearAddressBar = require( './clearAddressBar.js' );
 
 // Break out of framesets
 if ( mw.config.get( 'wgBreakFrames' ) ) {
@@ -246,12 +248,18 @@ function isSearchInput( element ) {
  */
 function loadSearchModule( moduleName ) {
 	function requestSearchModule() {
-		mw.loader.using( moduleName );
+		mw.loader.using( moduleName ).then( () => {
+			const { init } = require( moduleName );
+			// If it exports an init function execute that immediately.
+			if ( init ) {
+				init();
+			}
+		} );
 	}
 
 	// Load the module once a search input is focussed.
 	function eventListener( e ) {
-		if ( isSearchInput( e.target ) ) {
+		if ( e.target && e.target.nodeType === 1 && isSearchInput( e.target ) ) {
 			requestSearchModule();
 
 			document.removeEventListener( 'focusin', eventListener );
@@ -270,7 +278,7 @@ function loadSearchModule( moduleName ) {
 
 // Skins may decide to disable this behaviour or use an alternative module.
 if ( config.search ) {
-	loadSearchModule( 'mediawiki.searchSuggest' );
+	loadSearchModule( config.searchModule );
 }
 
 try {
@@ -285,6 +293,8 @@ try {
  * @exports mediawiki.page.ready
  */
 module.exports = {
+	clearAddressBar,
+	enableSearchDialog,
 	loadSearchModule,
 	/** @type {module:mediawiki.page.ready.CheckboxHack} */
 	checkboxHack: require( './checkboxHack.js' ),

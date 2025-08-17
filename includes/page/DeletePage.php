@@ -19,7 +19,6 @@ use MediaWiki\DomainEvent\DomainEventDispatcher;
 use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\JobQueue\JobQueueGroup;
-use MediaWiki\JobQueue\Jobs\DeletePageJob;
 use MediaWiki\Language\RawMessage;
 use MediaWiki\Logging\ManualLogEntry;
 use MediaWiki\MainConfigNames;
@@ -47,6 +46,7 @@ use Wikimedia\RequestTimeout\TimeoutException;
  * Backend logic for performing a page delete action.
  *
  * @since 1.37
+ * @ingroup Page
  */
 class DeletePage {
 	/**
@@ -637,7 +637,8 @@ class DeletePage {
 			[ PageDeletedEvent::FLAG_SUPPRESSED => $this->suppress ],
 			$logEntry->getTimestamp(),
 			$reason,
-			$archivedRevisionCount
+			$archivedRevisionCount,
+			$pageBeforeDelete->isRedirect() ? $this->redirectStore->getRedirectTarget( $page ) : null
 		), $this->lbFactory );
 
 		$dbw->endAtomic( __METHOD__ );
@@ -814,7 +815,7 @@ class DeletePage {
 			$countable = $pageBeforeDelete->isCountable();
 		} catch ( TimeoutException $e ) {
 			throw $e;
-		} catch ( Exception $ex ) {
+		} catch ( Exception ) {
 			// fallback for deleting broken pages for which we cannot load the content for
 			// some reason. Note that doDeleteArticleReal() already logged this problem.
 			$countable = false;

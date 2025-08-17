@@ -50,6 +50,7 @@ use RuntimeException;
 use WikiExporter;
 use Wikimedia\AtEase\AtEase;
 use XmlDumpWriter;
+use XMLParser;
 
 /**
  * @ingroup Maintenance
@@ -198,7 +199,7 @@ TEXT
 
 	public function execute() {
 		$this->processOptions();
-		$this->dump( true );
+		$this->dump( $this->history );
 	}
 
 	protected function processOptions() {
@@ -242,11 +243,13 @@ TEXT
 		}
 	}
 
+	/** @inheritDoc */
 	public function initProgress( $history = WikiExporter::FULL ) {
-		parent::initProgress();
+		parent::initProgress( $history );
 		$this->timeOfCheckpoint = $this->startTime;
 	}
 
+	/** @inheritDoc */
 	public function dump( $history, $text = WikiExporter::TEXT ) {
 		// Notice messages will foul up your XML output even if they're
 		// relatively harmless.
@@ -254,7 +257,7 @@ TEXT
 			ini_set( 'display_errors', 'stderr' );
 		}
 
-		$this->initProgress( $this->history );
+		$this->initProgress( $history );
 
 		$this->egress = new ExportProgressFilter( $this->sink, $this );
 
@@ -432,10 +435,10 @@ TEXT
 
 		xml_set_element_handler(
 			$parser,
-			[ $this, 'startElement' ],
-			[ $this, 'endElement' ]
+			$this->startElement( ... ),
+			$this->endElement( ... )
 		);
-		xml_set_character_data_handler( $parser, [ $this, 'characterData' ] );
+		xml_set_character_data_handler( $parser, $this->characterData( ... ) );
 
 		$offset = 0; // for context extraction on error reporting
 		do {
@@ -725,7 +728,7 @@ TEXT
 				->normalize( $stripped );
 
 			return $normalized;
-		} catch ( BlobAccessException $ex ) {
+		} catch ( BlobAccessException ) {
 			// XXX: log a warning?
 			return false;
 		}
@@ -888,6 +891,11 @@ TEXT
 		return $normalized;
 	}
 
+	/**
+	 * @param XMLParser $parser
+	 * @param string $name
+	 * @param array $attribs
+	 */
 	protected function startElement( $parser, string $name, array $attribs ) {
 		$this->checkpointJustWritten = false;
 
@@ -942,6 +950,10 @@ TEXT
 		}
 	}
 
+	/**
+	 * @param XMLParser $parser
+	 * @param string $name
+	 */
 	protected function endElement( $parser, string $name ) {
 		$this->checkpointJustWritten = false;
 
@@ -1003,6 +1015,10 @@ TEXT
 		}
 	}
 
+	/**
+	 * @param XMLParser $parser
+	 * @param string $data
+	 */
 	protected function characterData( $parser, string $data ) {
 		$this->clearOpenElement( null );
 		if ( $this->lastName == "id" ) {

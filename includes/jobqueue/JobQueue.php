@@ -35,13 +35,13 @@ use Wikimedia\UUID\GlobalIdGenerator;
  * @defgroup JobQueue JobQueue
  *
  *
- * See [the architecture doc](@ref jobqueuearch) for more information.
+ * See [the architecture doc](@ref jobqueuearch) at jobqueue/README.md for more information.
  */
 
 /**
  * Base class for queueing and running background jobs from a storage backend.
  *
- * See [the architecture doc](@ref jobqueuearch) for more information.
+ * See [the architecture doc](@ref jobqueuearch) at jobqueue/README.md for more information.
  *
  * @ingroup JobQueue
  * @since 1.21
@@ -397,6 +397,7 @@ abstract class JobQueue {
 	 * @see JobQueue::batchPush()
 	 * @param IJobSpecification[] $jobs
 	 * @param int $flags
+	 * @throws JobQueueError
 	 */
 	abstract protected function doBatchPush( array $jobs, $flags );
 
@@ -421,7 +422,7 @@ abstract class JobQueue {
 			}
 		} catch ( TimeoutException $e ) {
 			throw $e;
-		} catch ( Exception $e ) {
+		} catch ( Exception ) {
 			// don't lose jobs over this
 		}
 

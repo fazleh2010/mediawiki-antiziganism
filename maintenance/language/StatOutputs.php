@@ -30,6 +30,13 @@ use Wikimedia\AtEase\AtEase;
  * A general output object. Need to be overridden
  */
 class StatsOutput {
+	/**
+	 * @param int|float $subset
+	 * @param int|float $total
+	 * @param bool $revert
+	 * @param int|float $accuracy
+	 * @return string
+	 */
 	public function formatPercent( $subset, $total, $revert = false, $accuracy = 2 ) {
 		AtEase::suppressWarnings();
 		$return = sprintf( '%.' . $accuracy . 'f%%', 100 * $subset / $total );
@@ -50,6 +57,10 @@ class StatsOutput {
 	public function blockend() {
 	}
 
+	/**
+	 * @param string|float|int $in
+	 * @param bool $heading
+	 */
 	public function element( $in, $heading = false ) {
 	}
 }
@@ -90,10 +101,12 @@ class WikiStatsOutput extends StatsOutput {
 		echo '';
 	}
 
+	/** @inheritDoc */
 	public function element( $in, $heading = false ) {
 		echo ( $heading ? '!' : '|' ) . "$in\n";
 	}
 
+	/** @inheritDoc */
 	public function formatPercent( $subset, $total, $revert = false, $accuracy = 2 ) {
 		AtEase::suppressWarnings();
 		$v = round( 255 * $subset / $total );
@@ -128,6 +141,7 @@ class WikiStatsOutput extends StatsOutput {
 
 /** Output text. To be used on a terminal for example. */
 class TextStatsOutput extends StatsOutput {
+	/** @inheritDoc */
 	public function element( $in, $heading = false ) {
 		echo $in . "\t";
 	}
@@ -139,6 +153,7 @@ class TextStatsOutput extends StatsOutput {
 
 /** csv output. Some people love excel */
 class CsvStatsOutput extends StatsOutput {
+	/** @inheritDoc */
 	public function element( $in, $heading = false ) {
 		echo $in . ";";
 	}

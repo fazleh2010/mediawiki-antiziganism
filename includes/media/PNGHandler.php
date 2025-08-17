@@ -110,10 +110,12 @@ class PNGHandler extends BitmapHandler {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getMetadataType( $image ) {
 		return 'parsed-png';
 	}
 
+	/** @inheritDoc */
 	public function isFileMetadataValid( $image ) {
 		$data = $image->getMetadataArray();
 		if ( $data === [ '_error' => self::BROKEN_FILE ] ) {
@@ -166,7 +168,7 @@ class PNGHandler extends BitmapHandler {
 		}
 
 		if ( $metadata['duration'] ) {
-			$info[] = $wgLang->formatTimePeriod( $metadata['duration'] );
+			$info[] = htmlspecialchars( $wgLang->formatTimePeriod( $metadata['duration'] ), ENT_QUOTES );
 		}
 
 		return $wgLang->commaList( $info );
@@ -190,8 +192,11 @@ class PNGHandler extends BitmapHandler {
 		return (float)$metadata['duration'];
 	}
 
-	// PNGs should be easy to support, but it will need some sharpening applied
-	// and another user test to check if the perceived quality change is noticeable
+	/**
+	 * PNGs should be easy to support, but it will need some sharpening applied
+	 * and another user test to check if the perceived quality change is noticeable
+	 * @inheritDoc
+	 */
 	public function supportsBucketing() {
 		return false;
 	}

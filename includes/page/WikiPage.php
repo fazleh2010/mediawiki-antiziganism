@@ -39,6 +39,7 @@ use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\Logging\ManualLogEntry;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MediaWikiServices;
+use MediaWiki\Page\Event\PageProtectionChangedEvent;
 use MediaWiki\Parser\ParserOptions;
 use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Parser\ParserOutputFlags;
@@ -1214,6 +1215,8 @@ class WikiPage implements Stringable, Page, PageRecord {
 	 * or else the record will be left in a funky state.
 	 * Best if all done inside a transaction.
 	 *
+	 * @internal Low level interface, not safe for use in extensions!
+	 *
 	 * @todo Factor out into a PageStore service, to be used by PageUpdater.
 	 *
 	 * @param IDatabase $dbw
@@ -1253,6 +1256,8 @@ class WikiPage implements Stringable, Page, PageRecord {
 
 	/**
 	 * Update the page record to point to a newly saved revision.
+	 *
+	 * @internal Low level interface, not safe for use in extensions!
 	 *
 	 * @todo Factor out into a PageStore service, or move into PageUpdater.
 	 *
@@ -1939,19 +1944,26 @@ class WikiPage implements Stringable, Page, PageRecord {
 		$changed = false;
 
 		$dbw = $services->getConnectionProvider()->getPrimaryDatabase();
+		$restrictionMapBefore = [];
+		$restrictionMapAfter = [];
 
 		foreach ( $restrictionTypes as $action ) {
 			if ( !isset( $expiry[$action] ) || $expiry[$action] === $dbw->getInfinity() ) {
 				$expiry[$action] = 'infinity';
 			}
-			if ( !isset( $limit[$action] ) ) {
-				$limit[$action] = '';
-			} elseif ( $limit[$action] != '' ) {
-				$protect = true;
-			}
 
 			// Get current restrictions on $action
-			$current = implode( '', $restrictionStore->getRestrictions( $this->mTitle, $action ) );
+			$restrictionMapBefore[$action] = $restrictionStore->getRestrictions( $this->mTitle, $action );
+			$limit[$action] ??= '';
+
+			if ( $limit[$action] === '' ) {
+				$restrictionMapAfter[$action] = [];
+			} else {
+				$protect = true;
+				$restrictionMapAfter[$action] = explode( ',', $limit[$action] );
+			}
+
+			$current = implode( ',', $restrictionMapBefore[$action] );
 			if ( $current != '' ) {
 				$isProtected = true;
 			}
@@ -2150,6 +2162,20 @@ class WikiPage implements Stringable, Page, PageRecord {
 		}
 		$logId = $logEntry->insert();
 		$logEntry->publish( $logId );
+
+		$event = new PageProtectionChangedEvent(
+			$this,
+			$restrictionMapBefore,
+			$restrictionMapAfter,
+			$expiry,
+			$cascade,
+			$user,
+			$reason,
+			$tags
+		);
+
+		$dispatcher = MediaWikiServices::getInstance()->getDomainEventDispatcher();
+		$dispatcher->dispatch( $event, $services->getConnectionProvider() );
 
 		return Status::newGood( $logId );
 	}
@@ -2640,10 +2666,21 @@ class WikiPage implements Stringable, Page, PageRecord {
 		}
 
 		$dbr = $services->getConnectionProvider()->getReplicaDatabase();
-		$res = $dbr->newSelectQueryBuilder()
-			->select( [ 'page_title' => 'cl_to', 'page_namespace' => (string)NS_CATEGORY ] )
-			->from( 'categorylinks' )
-			->where( [ 'cl_from' => $id ] )
+		$qb = $dbr->newSelectQueryBuilder()
+			->from( 'categorylinks' );
+
+		$migrationStage = $services->getMainConfig()->get(
+			MainConfigNames::CategoryLinksSchemaMigrationStage
+		);
+
+		if ( $migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+			$qb->select( [ 'page_title' => 'cl_to', 'page_namespace' => (string)NS_CATEGORY ] );
+		} else {
+			$qb->select( [ 'page_title' => 'lt_title', 'page_namespace' => (string)NS_CATEGORY ] )
+				->join( 'linktarget', null, [ 'cl_target_id = lt_id', 'lt_namespace = ' . NS_CATEGORY ] );
+		}
+
+		$res = $qb->where( [ 'cl_from' => $id ] )
 			->caller( __METHOD__ )->fetchResultSet();
 
 		return $services->getTitleFactory()->newTitleArrayFromResult( $res );
@@ -2664,11 +2701,23 @@ class WikiPage implements Stringable, Page, PageRecord {
 		}
 
 		$dbr = $this->getConnectionProvider()->getReplicaDatabase();
-		$res = $dbr->newSelectQueryBuilder()
-			->select( [ 'cl_to' ] )
-			->from( 'categorylinks' )
-			->join( 'page', null, 'page_title=cl_to' )
-			->join( 'page_props', null, 'pp_page=page_id' )
+		$qb = $dbr->newSelectQueryBuilder()
+			->from( 'categorylinks' );
+
+		$migrationStage = MediaWikiServices::getInstance()->getMainConfig()->get(
+			MainConfigNames::CategoryLinksSchemaMigrationStage
+		);
+
+		if ( $migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+			$qb->select( [ 'cl_to' ] )
+				->join( 'page', null, 'page_title = cl_to' );
+		} else {
+			$qb->select( [ 'cl_to' => 'lt_title' ] )
+				->join( 'linktarget', null, 'cl_target_id = lt_id' )
+				->join( 'page', null, [ 'page_title = lt_title', 'page_namespace = lt_namespace' ] );
+		}
+
+		$res = $qb->join( 'page_props', null, 'pp_page=page_id' )
 			->where( [ 'cl_from' => $id, 'pp_propname' => 'hiddencat', 'page_namespace' => NS_CATEGORY ] )
 			->caller( __METHOD__ )->fetchResultSet();
 

@@ -10,6 +10,7 @@ use Wikimedia\Parsoid\Config\PageContent;
 use Wikimedia\Parsoid\Config\SiteConfig;
 use Wikimedia\Parsoid\Core\ContentMetadataCollector;
 use Wikimedia\Parsoid\Core\LinkTarget;
+use Wikimedia\Parsoid\Fragments\LiteralStringPFragment;
 use Wikimedia\Parsoid\Fragments\WikitextPFragment;
 use Wikimedia\Parsoid\ParserTests\MockApiHelper;
 use Wikimedia\Parsoid\Utils\PHPUtils;
@@ -557,6 +558,11 @@ class MockDataAccess extends DataAccess {
 				$html = "";
 				break;
 
+			case 'math':
+				// phpcs:ignore Generic.Files.LineLength.TooLong
+				$html = '<math xmlns="http://www.w3.org/1998/Math/MathML"><mrow data-mjx-texclass="ORD"><mstyle displaystyle="true" scriptlevel="0"><mi>x</mi></mstyle></mrow></math>';
+				break;
+
 			default:
 				throw new Error( 'Unhandled extension type encountered in: ' . $wikitext );
 		}
@@ -594,6 +600,10 @@ class MockDataAccess extends DataAccess {
 				Title::newFromText( 'Category:Mangle', $this->siteConfig ),
 				'ho'
 			);
+		} elseif ( $wikitext === '{{loop}}' ) {
+			$lit = LiteralStringPFragment::newFromLiteral( 'meh', null );
+			$wt = '{{loop}}';
+			return WikitextPFragment::newFromSplitWt( [ $lit, $wt ] );
 		} else {
 			$ret = '';
 		}

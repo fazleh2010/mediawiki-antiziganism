@@ -32,7 +32,7 @@ use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\HtmlArmor\HtmlArmor;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -59,14 +59,17 @@ class SpecialFewestRevisions extends QueryPage {
 		$this->languageConverter = $languageConverterFactory->getLanguageConverter( $this->getContentLanguage() );
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return [
 			'tables' => [ 'revision', 'page' ],
@@ -86,6 +89,7 @@ class SpecialFewestRevisions extends QueryPage {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return false;
 	}
@@ -129,13 +133,14 @@ class SpecialFewestRevisions extends QueryPage {
 	/**
 	 * Cache page existence for performance
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	protected function preprocessResults( $db, $res ) {
 		$this->executeLBFromResultWrapper( $res );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
 	}

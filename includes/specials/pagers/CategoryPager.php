@@ -56,6 +56,7 @@ class CategoryPager extends AlphabeticPager {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return [
 			'tables' => [ 'category' ],
@@ -64,10 +65,12 @@ class CategoryPager extends AlphabeticPager {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getIndexField() {
 		return 'cat_title';
 	}
 
+	/** @inheritDoc */
 	public function getDefaultQuery() {
 		parent::getDefaultQuery();
 		unset( $this->mDefaultQuery['from'] );
@@ -75,7 +78,10 @@ class CategoryPager extends AlphabeticPager {
 		return $this->mDefaultQuery;
 	}
 
-	/* Override getBody to apply LinksBatch on resultset before actually outputting anything. */
+	/**
+	 * Override getBody to apply LinksBatch on resultset before actually outputting anything.
+	 * @inheritDoc
+	 */
 	public function getBody() {
 		$batch = $this->linkBatchFactory->newLinkBatch();
 
@@ -90,6 +96,7 @@ class CategoryPager extends AlphabeticPager {
 		return parent::getBody();
 	}
 
+	/** @inheritDoc */
 	public function formatRow( $result ) {
 		$title = new TitleValue( NS_CATEGORY, $result->cat_title );
 		$text = $title->getText();
@@ -99,6 +106,7 @@ class CategoryPager extends AlphabeticPager {
 		return Html::rawElement( 'li', [], $this->getLanguage()->specialList( $link, $count ) ) . "\n";
 	}
 
+	/** @inheritDoc */
 	public function getStartForm( $from ) {
 		$formDescriptor = [
 			'from' => [

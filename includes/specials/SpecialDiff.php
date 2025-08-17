@@ -102,11 +102,14 @@ class SpecialDiff extends RedirectSpecialPage {
 			],
 		], $this->getContext(), 'diff-form' );
 		$form->setSubmitTextMsg( 'diff-form-submit' );
-		$form->setSubmitCallback( [ $this, 'onFormSubmit' ] );
+		$form->setSubmitCallback( $this->onFormSubmit( ... ) );
 		$form->show();
 	}
 
-	public function onFormSubmit( $formData ) {
+	/**
+	 * @param array $formData
+	 */
+	private function onFormSubmit( $formData ) {
 		$params = [];
 		if ( $formData['oldid'] ) {
 			$params[] = $formData['oldid'];
@@ -120,19 +123,23 @@ class SpecialDiff extends RedirectSpecialPage {
 		$this->getOutput()->redirect( $url );
 	}
 
+	/** @inheritDoc */
 	public function getDescription() {
 		// 'diff' message is in lowercase, using own message
 		return $this->msg( 'diff-form' );
 	}
 
+	/** @inheritDoc */
 	public function getName() {
 		return 'diff-form';
 	}
 
+	/** @inheritDoc */
 	public function isListed() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'redirects';
 	}

@@ -294,11 +294,11 @@ class WebInstallerOptions extends WebInstallerPage {
 							}
 						}
 
-						$text = wfMessage( 'config-extensions-requires' )
-							->rawParams( $ext, $wgLang->commaList( $links ) )
+						$text = wfMessage( 'config-extensions-requires', $ext )
+							->rawParams( $wgLang->commaList( $links ) )
 							->escaped();
 					} else {
-						$text = $ext;
+						$text = htmlspecialchars( $ext );
 					}
 					$extHtml .= $this->parent->getCheckBox( [
 						'var' => "ext-$ext",
@@ -313,7 +313,7 @@ class WebInstallerOptions extends WebInstallerPage {
 				$this->getFieldsetEnd();
 			$this->addHTML( $extHtml );
 			// Push the dependency map to the client side
-			$this->addHTML( Html::inlineScript(
+			$this->addHTML( $this->inlineScript(
 				'var extDependencyMap = ' . Html::encodeJsVar( $dependencyMap )
 			) );
 		}
@@ -427,8 +427,8 @@ class WebInstallerOptions extends WebInstallerPage {
 					$wgLang->formatNum( $counter++ )
 				);
 			}
-			return wfMessage( 'config-skins-screenshots' )
-				->rawParams( $name, $wgLang->commaList( $links ) )
+			return wfMessage( 'config-skins-screenshots', $name )
+				->rawParams( $wgLang->commaList( $links ) )
 				->escaped();
 		} else {
 			$link = Html::element(

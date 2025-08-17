@@ -26,12 +26,22 @@ namespace MediaWiki\SpecialPage;
  * @ingroup SpecialPage
  */
 class IncludableSpecialPage extends SpecialPage {
+	/**
+	 * @stable to call
+	 *
+	 * @param string $name
+	 * @param string $restriction
+	 * @param bool $listed
+	 * @param callable|bool $function Unused
+	 * @param string $file Unused
+	 */
 	public function __construct(
 		$name, $restriction = '', $listed = true, $function = false, $file = 'default'
 	) {
 		parent::__construct( $name, $restriction, $listed, $function, $file, true );
 	}
 
+	/** @inheritDoc */
 	public function isIncludable() {
 		return true;
 	}

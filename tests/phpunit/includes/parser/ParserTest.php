@@ -11,7 +11,6 @@ use MediaWiki\Languages\LanguageConverterFactory;
 use MediaWiki\Languages\LanguageNameUtils;
 use MediaWiki\Linker\LinkRendererFactory;
 use MediaWiki\Page\File\BadFileLookup;
-use MediaWiki\Page\PageReference;
 use MediaWiki\Page\PageReferenceValue;
 use MediaWiki\Parser\MagicWord;
 use MediaWiki\Parser\MagicWordFactory;
@@ -59,7 +58,6 @@ class ParserTest extends MediaWikiIntegrationTestCase {
 			$options,
 			$mwFactory,
 			$contLang,
-			$this->createNoOpMock( ParserFactory::class ),
 			$urlUtils,
 			$this->createNoOpMock( SpecialPageFactory::class ),
 			$this->createNoOpMock( LinkRendererFactory::class ),
@@ -131,7 +129,7 @@ class ParserTest extends MediaWikiIntegrationTestCase {
 	public function testSetPage() {
 		$parser = $this->newParser();
 
-		$page = new PageReferenceValue( NS_SPECIAL, 'Dummy', PageReference::LOCAL );
+		$page = PageReferenceValue::localReference( NS_SPECIAL, 'Dummy' );
 		$parser->setPage( $page );
 		$this->assertTrue( $page->isSamePageAs( $parser->getPage() ) );
 		$this->assertTrue( $page->isSamePageAs( $parser->getTitle() ) );

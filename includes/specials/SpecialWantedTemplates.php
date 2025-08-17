@@ -25,6 +25,7 @@
 namespace MediaWiki\Specials;
 
 use MediaWiki\Cache\LinkBatchFactory;
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Linker\LinksMigration;
 use MediaWiki\SpecialPage\WantedQueryPage;
 use Wikimedia\Rdbms\IConnectionProvider;
@@ -50,6 +51,7 @@ class SpecialWantedTemplates extends WantedQueryPage {
 		$this->linksMigration = $linksMigration;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$queryInfo = $this->linksMigration->getQueryInfo( 'templatelinks' );
 		[ $ns, $title ] = $this->linksMigration->getTitleFields( 'templatelinks' );
@@ -73,8 +75,17 @@ class SpecialWantedTemplates extends WantedQueryPage {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
+	}
+
+	/** @inheritDoc */
+	protected function getRecacheDB() {
+		return $this->getDatabaseProvider()->getReplicaDatabase(
+			TemplateLinksTable::VIRTUAL_DOMAIN,
+			'vslow'
+		);
 	}
 }
 

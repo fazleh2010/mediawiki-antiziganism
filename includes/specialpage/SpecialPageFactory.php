@@ -1,7 +1,5 @@
 <?php
 /**
- * Factory for handling the special page list and generating SpecialPage objects.
- *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -140,6 +138,7 @@ use MediaWiki\Specials\SpecialRedirect;
 use MediaWiki\Specials\SpecialRemoveCredentials;
 use MediaWiki\Specials\SpecialRenameUser;
 use MediaWiki\Specials\SpecialResetTokens;
+use MediaWiki\Specials\SpecialRestSandbox;
 use MediaWiki\Specials\SpecialRevisionDelete;
 use MediaWiki\Specials\SpecialRunJobs;
 use MediaWiki\Specials\SpecialSearch;
@@ -377,6 +376,7 @@ class SpecialPageFactory {
 				'ConnectionProvider',
 				'LinkBatchFactory',
 				'LanguageConverterFactory',
+				'LinksMigration',
 			]
 		],
 		'Wantedfiles' => [
@@ -482,18 +482,21 @@ class SpecialPageFactory {
 			'class' => SpecialUnlinkAccounts::class,
 			'services' => [
 				'AuthManager',
+				'SessionManager',
 			]
 		],
 		'ChangeCredentials' => [
 			'class' => SpecialChangeCredentials::class,
 			'services' => [
 				'AuthManager',
+				'SessionManager',
 			]
 		],
 		'RemoveCredentials' => [
 			'class' => SpecialRemoveCredentials::class,
 			'services' => [
 				'AuthManager',
+				'SessionManager',
 			]
 		],
 		'AuthenticationPopupSuccess' => [
@@ -717,6 +720,7 @@ class SpecialPageFactory {
 				'UserIdentityLookup',
 				'UserNameUtils',
 				'LogFormatterFactory',
+				'TempUserConfig',
 			]
 		],
 		'Watchlist' => [
@@ -855,6 +859,12 @@ class SpecialPageFactory {
 				'LanguageNameUtils',
 				'UrlUtils',
 				'ConnectionProvider',
+			]
+		],
+		'RestSandbox' => [
+			'class' => SpecialRestSandbox::class,
+			'services' => [
+				'UrlUtils',
 			]
 		],
 		'Statistics' => [
@@ -1144,6 +1154,7 @@ class SpecialPageFactory {
 				'WikiPageFactory',
 				'SearchEngineFactory',
 				'WatchlistManager',
+				'WatchedItemStore',
 				'RestrictionStore',
 				'TitleFactory',
 				'DeletePageFactory',
@@ -1178,6 +1189,8 @@ class SpecialPageFactory {
 			'class' => SpecialMytalk::class,
 			'services' => [
 				'TempUserConfig',
+				'TempUserCreator',
+				'AuthManager',
 			],
 		],
 		'PageHistory' => [
@@ -1212,6 +1225,9 @@ class SpecialPageFactory {
 		],
 		'AllMyUploads' => [
 			'class' => SpecialAllMyUploads::class,
+			'services' => [
+				'TempUserConfig',
+			],
 		],
 		'NewSection' => [
 			'class' => SpecialNewSection::class,
@@ -1459,7 +1475,7 @@ class SpecialPageFactory {
 	 * the key is an alias, and the value is the canonical name of the special page.
 	 * All registered special pages are guaranteed to map to themselves.
 	 */
-	private function getAliasList(): array {
+	public function getAliasList(): array {
 		if ( $this->aliases === null ) {
 			$aliases = $this->contLang->getSpecialPageAliases();
 			$pageList = $this->getPageList();
@@ -1593,36 +1609,21 @@ class SpecialPageFactory {
 	 * that the current user has the required permissions for.
 	 *
 	 * @param User $user User object to check permissions provided
+	 * @param IContextSource|null $context Context object, since 1.45
 	 * @return SpecialPage[]
 	 */
-	public function getUsablePages( User $user ): array {
+	public function getUsablePages( User $user, ?IContextSource $context = null ): array {
 		$pages = [];
+		$context ??= RequestContext::getMain();
 		foreach ( $this->getPageList() as $name => $rec ) {
 			$page = $this->getPage( $name );
 			if ( $page ) { // not null
-				$page->setContext( RequestContext::getMain() );
+				$page->setContext( $context );
 				if ( $page->isListed()
 					&& ( !$page->isRestricted() || $page->userCanExecute( $user ) )
 				) {
 					$pages[$name] = $page;
 				}
-			}
-		}
-
-		return $pages;
-	}
-
-	/**
-	 * Get listed special pages available to everyone by default.
-	 *
-	 * @return array<string,SpecialPage>
-	 */
-	public function getRegularPages(): array {
-		$pages = [];
-		foreach ( $this->getPageList() as $name => $rec ) {
-			$page = $this->getPage( $name );
-			if ( $page && $page->isListed() && !$page->isRestricted() ) {
-				$pages[$name] = $page;
 			}
 		}
 

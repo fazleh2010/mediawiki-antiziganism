@@ -24,7 +24,7 @@ use Wikimedia\Parsoid\Wt2Html\TT\PreHandler;
 class CleanUp {
 	/**
 	 * @param Element $node
-	 * @return bool|Element
+	 * @return bool|?Node
 	 */
 	public static function stripMarkerMetas( Element $node ) {
 		// This meta tag can never have data-mw associated with it.
@@ -122,7 +122,7 @@ class CleanUp {
 	/**
 	 * @param Node $node
 	 * @param DTState $state
-	 * @return bool|Node
+	 * @return bool|?Node
 	 */
 	public static function handleEmptyElements( Node $node, DTState $state ) {
 		// Set by isEmptyNode() to indicate whether a node which is "empty" contained
@@ -135,15 +135,21 @@ class CleanUp {
 		) {
 			return true;
 		}
-		foreach ( DOMUtils::attributes( $node ) as $name => $value ) {
-			// Skip the Parsoid-added data attribute and template-wrapping attributes
-			if ( $name === DOMDataUtils::DATA_OBJECT_ATTR_NAME ||
-				( ( $state->tplInfo ?? null ) && isset( self::ALLOWED_TPL_WRAPPER_ATTRS[$name] ) )
-			) {
-				continue;
-			}
 
-			return true;
+		// While RemexCompatFormatter::element in the legacy parser will only
+		// mark these nodes as empty elements if they don't have any
+		// attributes, Parser::handleTables will drop empty wikitext syntax
+		// trs, regardless of attributes.
+		if ( DOMCompat::nodeName( $node ) !== 'tr' || WTUtils::isLiteralHTMLNode( $node ) ) {
+			foreach ( DOMCompat::attributes( $node ) as $name => $_value ) {
+				// Skip the Parsoid-added data attribute and template-wrapping attributes
+				if ( $name === DOMDataUtils::DATA_OBJECT_ATTR_NAME ||
+					( ( $state->tplInfo ?? null ) && isset( self::ALLOWED_TPL_WRAPPER_ATTRS[$name] ) )
+				) {
+					continue;
+				}
+				return true;
+			}
 		}
 
 		/**
@@ -200,6 +206,11 @@ class CleanUp {
 			if ( $c instanceof Text && preg_match( '/^[ \t]*$/D', $c->nodeValue ) ) {
 				$node->removeChild( $c );
 				$trimmedLen += strlen( $c->nodeValue );
+				$updateDSR = !$skipped;
+			} elseif ( $c instanceof Element && DOMUtils::hasTypeOf( $c, 'mw:DisplaySpace' ) ) {
+				$node->removeChild( $c );
+				// even though content of node is 2-byte character (NBSP), original space was 1-byte character
+				$trimmedLen += 1;
 				$updateDSR = !$skipped;
 			} elseif ( !WTUtils::isRenderingTransparentNode( $c ) ) {
 				break;
@@ -261,7 +272,7 @@ class CleanUp {
 	 *
 	 * @param Node $node
 	 * @param DTState $state
-	 * @return bool|Node The next node or true to continue with $node->nextSibling
+	 * @return bool|?Node The next node or true to continue with $node->nextSibling
 	 */
 	public static function finalCleanup( Node $node, DTState $state ) {
 		if ( !( $node instanceof Element ) ) {
@@ -359,7 +370,7 @@ class CleanUp {
 	 *
 	 * @param Node $node
 	 * @param DTState $state
-	 * @return bool|Node The next node or true to continue with $node->nextSibling
+	 * @return bool|?Node The next node or true to continue with $node->nextSibling
 	 */
 	public static function markDiscardableDataParsoid( Node $node, DTState $state ) {
 		if ( !( $node instanceof Element ) ) {

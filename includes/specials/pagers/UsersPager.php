@@ -318,6 +318,7 @@ class UsersPager extends AlphabeticPager {
 		return Html::rawElement( 'li', [], "{$item}{$edits}{$created}{$blocked}" );
 	}
 
+	/** @inheritDoc */
 	protected function doBatchLookups() {
 		$batch = $this->linkBatchFactory->newLinkBatch()->setCaller( __METHOD__ );
 		$userIds = [];
@@ -488,6 +489,9 @@ class UsersPager extends AlphabeticPager {
 		return $htmlForm->prepareForm()->getHTML( true );
 	}
 
+	/**
+	 * @return bool
+	 */
 	protected function canSeeHideuser() {
 		return $this->getAuthority()->isAllowed( 'hideuser' );
 	}

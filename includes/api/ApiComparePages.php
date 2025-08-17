@@ -162,10 +162,10 @@ class ApiComparePages extends ApiBase {
 					break;
 
 				case 'cur':
-					$title = $fromRelRev->getPageAsLinkTarget();
+					$title = $fromRelRev->getPage();
 					$toRev = $this->revisionStore->getRevisionByTitle( $title );
 					if ( !$toRev ) {
-						$title = Title::newFromLinkTarget( $title );
+						$title = Title::newFromPageIdentity( $title );
 						$this->dieWithError(
 							[ 'apierror-missingrev-title', wfEscapeWikiText( $title->getPrefixedText() ) ],
 							'nosuchrevid'
@@ -197,10 +197,10 @@ class ApiComparePages extends ApiBase {
 
 		// Get the diff
 		$context = new DerivativeContext( $this->getContext() );
-		if ( $fromRelRev && $fromRelRev->getPageAsLinkTarget() ) {
+		if ( $fromRelRev ) {
 			$context->setTitle( Title::newFromPageIdentity( $fromRelRev->getPage() ) );
 		// @phan-suppress-next-line PhanPossiblyUndeclaredVariable T240141
-		} elseif ( $toRelRev && $toRelRev->getPageAsLinkTarget() ) {
+		} elseif ( $toRelRev ) {
 			$context->setTitle( Title::newFromPageIdentity( $toRelRev->getPage() ) );
 		} else {
 			$guessedTitle = $this->guessTitle();
@@ -579,7 +579,7 @@ class ApiComparePages extends ApiBase {
 					$content = $oldContent->replaceSection( $section, $content, '' );
 				} catch ( TimeoutException $e ) {
 					throw $e;
-				} catch ( Exception $ex ) {
+				} catch ( Exception ) {
 					// Probably a content model mismatch.
 					$content = null;
 				}
@@ -691,6 +691,7 @@ class ApiComparePages extends ApiBase {
 		return $user;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$slotRoles = $this->slotRoleRegistry->getKnownRoles();
 		sort( $slotRoles, SORT_STRING );
@@ -797,6 +798,7 @@ class ApiComparePages extends ApiBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=compare&fromrev=1&torev=2'
@@ -804,6 +806,7 @@ class ApiComparePages extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Compare';
 	}

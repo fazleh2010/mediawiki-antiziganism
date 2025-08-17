@@ -119,14 +119,17 @@ class JobQueueRedis extends JobQueue {
 		$this->logger = LoggerFactory::getInstance( 'redis' );
 	}
 
+	/** @inheritDoc */
 	protected function supportedOrders() {
 		return [ 'timestamp', 'fifo' ];
 	}
 
+	/** @inheritDoc */
 	protected function optimalOrder() {
 		return 'fifo';
 	}
 
+	/** @inheritDoc */
 	protected function supportsDelayedJobs() {
 		return true;
 	}
@@ -306,17 +309,15 @@ class JobQueueRedis extends JobQueue {
 		return pushed
 LUA;
 		return $conn->luaEval( $script,
-			array_merge(
-				[
-					$this->getQueueKey( 'l-unclaimed' ), # KEYS[1]
-					$this->getQueueKey( 'h-sha1ById' ), # KEYS[2]
-					$this->getQueueKey( 'h-idBySha1' ), # KEYS[3]
-					$this->getQueueKey( 'z-delayed' ), # KEYS[4]
-					$this->getQueueKey( 'h-data' ), # KEYS[5]
-					$this->getGlobalKey( 's-queuesWithJobs' ), # KEYS[6]
-				],
-				$args
-			),
+			[
+				$this->getQueueKey( 'l-unclaimed' ), # KEYS[1]
+				$this->getQueueKey( 'h-sha1ById' ), # KEYS[2]
+				$this->getQueueKey( 'h-idBySha1' ), # KEYS[3]
+				$this->getQueueKey( 'z-delayed' ), # KEYS[4]
+				$this->getQueueKey( 'h-data' ), # KEYS[5]
+				$this->getGlobalKey( 's-queuesWithJobs' ), # KEYS[6]
+				...$args
+			],
 			6 # number of first argument(s) that are keys
 		);
 	}
@@ -606,14 +607,17 @@ LUA;
 		);
 	}
 
+	/** @inheritDoc */
 	public function getCoalesceLocationInternal() {
 		return "RedisServer:" . $this->server;
 	}
 
+	/** @inheritDoc */
 	protected function doGetSiblingQueuesWithJobs( array $types ) {
 		return array_keys( array_filter( $this->doGetSiblingQueueSizes( $types ) ) );
 	}
 
+	/** @inheritDoc */
 	protected function doGetSiblingQueueSizes( array $types ) {
 		$sizes = []; // (type => size)
 		$types = array_values( $types ); // reindex

@@ -41,11 +41,12 @@ class ApiFormatXml extends ApiFormatBase {
 	/** @var string|null */
 	private $mXslt = null;
 
+	/** @inheritDoc */
 	public function getMimeType() {
 		return 'text/xml';
 	}
 
-	public function setRootElement( $rootElemName ) {
+	public function setRootElement( string $rootElemName ) {
 		$this->mRootElemName = $rootElemName;
 	}
 
@@ -287,6 +288,7 @@ class ApiFormatXml extends ApiFormatBase {
 			htmlspecialchars( $nt->getLocalURL( 'action=raw' ) ) . '" type="text/xsl" ?>' );
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return parent::getAllowedParams() + [
 			'xslt' => [

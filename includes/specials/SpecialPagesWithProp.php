@@ -66,10 +66,12 @@ class SpecialPagesWithProp extends QueryPage {
 		$this->setDatabaseProvider( $dbProvider );
 	}
 
+	/** @inheritDoc */
 	public function isCacheable() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->setHeaders();
 		$this->outputHeader();
@@ -118,7 +120,7 @@ class SpecialPagesWithProp extends QueryPage {
 		$form = HTMLForm::factory( 'ooui', $fields, $this->getContext() )
 			->setMethod( 'get' )
 			->setTitle( $this->getPageTitle() ) // Remove subpage
-			->setSubmitCallback( [ $this, 'onSubmit' ] )
+			->setSubmitCallback( $this->onSubmit( ... ) )
 			->setWrapperLegendMsg( 'pageswithprop-legend' )
 			->addHeaderHtml( $this->msg( 'pageswithprop-text' )->parseAsBlock() )
 			->setSubmitTextMsg( 'pageswithprop-submit' )
@@ -129,7 +131,11 @@ class SpecialPagesWithProp extends QueryPage {
 		}
 	}
 
-	public function onSubmit( $data, $form ) {
+	/**
+	 * @param array $data
+	 * @param HTMLForm $form
+	 */
+	private function onSubmit( $data, $form ) {
 		$this->propName = $data['propname'];
 		parent::execute( $data['propname'] );
 	}
@@ -170,6 +176,7 @@ class SpecialPagesWithProp extends QueryPage {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$query = [
 			'tables' => [ 'page_props', 'page' ],
@@ -198,6 +205,7 @@ class SpecialPagesWithProp extends QueryPage {
 		return $query;
 	}
 
+	/** @inheritDoc */
 	protected function getOrderFields() {
 		$sort = [ 'page_id' ];
 		if ( $this->sortByValue ) {
@@ -243,14 +251,14 @@ class SpecialPagesWithProp extends QueryPage {
 		return $ret;
 	}
 
-	public function getExistingPropNames() {
+	public function getExistingPropNames(): array {
 		if ( $this->existingPropNames === null ) {
 			$this->existingPropNames = $this->queryExistingProps();
 		}
 		return $this->existingPropNames;
 	}
 
-	protected function queryExistingProps( $limit = null, $offset = 0 ) {
+	protected function queryExistingProps( ?int $limit = null, int $offset = 0 ): array {
 		$queryBuilder = $this->getDatabaseProvider()
 			->getReplicaDatabase()
 			->newSelectQueryBuilder()
@@ -275,6 +283,7 @@ class SpecialPagesWithProp extends QueryPage {
 		return $propnames;
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pages';
 	}

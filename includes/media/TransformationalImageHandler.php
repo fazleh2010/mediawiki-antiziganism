@@ -517,7 +517,7 @@ abstract class TransformationalImageHandler extends ImageHandler {
 		# If there are square brackets, add a do-nothing scene specification
 		# to force a literal interpretation
 		if ( $scene === false ) {
-			if ( strpos( $path, '[' ) !== false ) {
+			if ( str_contains( $path, '[' ) ) {
 				$path .= '[0--1]';
 			}
 		} else {
@@ -641,9 +641,7 @@ abstract class TransformationalImageHandler extends ImageHandler {
 			return true;
 		}
 
-		// @phan-suppress-next-line PhanTypePossiblyInvalidDimOffset Checked by normaliseParams
 		$srcWidth = $file->getWidth( $params['page'] );
-		// @phan-suppress-next-line PhanTypePossiblyInvalidDimOffset Checked by normaliseParams
 		$srcHeight = $file->getHeight( $params['page'] );
 
 		if ( $srcWidth * $srcHeight > $maxImageArea

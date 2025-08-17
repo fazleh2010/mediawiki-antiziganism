@@ -22,8 +22,8 @@
  */
 
 use MediaWiki\FileRepo\File\File;
-use MediaWiki\Libs\UnpackFailedException;
 use Wikimedia\StringUtils\StringUtils;
+use Wikimedia\UnpackFailedException;
 
 /**
  * Handler for Microsoft's bitmap format; getimagesize() doesn't
@@ -75,7 +75,7 @@ class BmpHandler extends BitmapHandler {
 		try {
 			$w = StringUtils::unpack( 'V', $w, 4 );
 			$h = StringUtils::unpack( 'V', $h, 4 );
-		} catch ( UnpackFailedException $e ) {
+		} catch ( UnpackFailedException ) {
 			return [];
 		}
 

@@ -30,6 +30,7 @@ use MediaWiki\Context\RequestContext;
 use MediaWiki\DAO\WikiAwareEntityTrait;
 use MediaWiki\Deferred\AutoCommitUpdate;
 use MediaWiki\Deferred\DeferredUpdates;
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Exception\MWException;
 use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\Html\Html;
@@ -269,7 +270,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 		try {
 			$t->secureAndSplit( $key );
 			return $t;
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			return null;
 		}
 	}
@@ -405,7 +406,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 
 		try {
 			return self::newFromTextThrow( (string)$text, (int)$defaultNamespace );
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			return null;
 		}
 	}
@@ -506,7 +507,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 		try {
 			$t->secureAndSplit( $dbKeyForm );
 			return $t;
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			return null;
 		}
 	}
@@ -660,7 +661,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 		try {
 			$t->secureAndSplit( $dbKeyForm );
 			return $t;
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			return null;
 		}
 	}
@@ -911,7 +912,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 				$this->mIsValid = false;
 				return $this->mIsValid;
 			}
-		} catch ( MalformedTitleException $ex ) {
+		} catch ( MalformedTitleException ) {
 			$this->mIsValid = false;
 			return $this->mIsValid;
 		}
@@ -1427,7 +1428,7 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 	/**
 	 * Could this MediaWiki namespace page contain custom CSS, JSON, or JavaScript for the
 	 * global UI. This is generally true for pages in the MediaWiki namespace having
-	 * CONTENT_MODEL_CSS, CONTENT_MODEL_JSON, or CONTENT_MODEL_JAVASCRIPT.
+	 * CONTENT_MODEL_CSS, CONTENT_MODEL_JSON, CONTENT_MODEL_JAVASCRIPT or CONTENT_MODEL_VUE.
 	 *
 	 * This method does *not* return true for per-user JS/JSON/CSS. Use isUserConfigPage()
 	 * for that!
@@ -1519,7 +1520,9 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 		return (
 			$this->mNamespace === NS_USER
 			&& $this->isSubpage()
-			&& $this->hasContentModel( CONTENT_MODEL_JAVASCRIPT )
+			&& ( $this->hasContentModel( CONTENT_MODEL_JAVASCRIPT ) ||
+				$this->hasContentModel( CONTENT_MODEL_VUE )
+			)
 		);
 	}
 
@@ -1569,10 +1572,15 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 		return (
 			$this->mNamespace === NS_MEDIAWIKI
 			&& (
-				$this->hasContentModel( CONTENT_MODEL_JAVASCRIPT )
-				// paranoia - a MediaWiki: namespace page with mismatching extension and content
-				// model is probably by mistake and might get handled incorrectly (see e.g. T112937)
-				|| str_ends_with( $this->mDbkeyform, '.js' )
+				(
+					$this->hasContentModel( CONTENT_MODEL_JAVASCRIPT )
+					// paranoia - a MediaWiki: namespace page with mismatching extension and content
+					// model is probably by mistake and might get handled incorrectly (see e.g. T112937)
+					|| str_ends_with( $this->mDbkeyform, '.js' )
+				) || (
+					$this->hasContentModel( CONTENT_MODEL_VUE )
+					|| str_ends_with( $this->mDbkeyform, '.vue' )
+				)
 			)
 		);
 	}
@@ -2779,10 +2787,15 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 	 * @return Title[]
 	 */
 	public function getLinksTo( $options = [], $table = 'pagelinks', $prefix = 'pl' ) {
-		if ( count( $options ) > 0 ) {
-			$db = $this->getDbProvider()->getPrimaryDatabase();
+		if ( $table === 'templatelinks' ) {
+			$domain = TemplateLinksTable::VIRTUAL_DOMAIN;
 		} else {
-			$db = $this->getDbProvider()->getReplicaDatabase();
+			$domain = false;
+		}
+		if ( count( $options ) > 0 ) {
+			$db = $this->getDbProvider()->getPrimaryDatabase( $domain );
+		} else {
+			$db = $this->getDbProvider()->getReplicaDatabase( $domain );
 		}
 
 		$linksMigration = MediaWikiServices::getInstance()->getLinksMigration();
@@ -3376,6 +3389,11 @@ class Title implements Stringable, LinkTarget, PageIdentity {
 			$this,
 			'pagelinks',
 			[ 'causeAction' => 'page-touch' ]
+		);
+		$jobs[] = HTMLCacheUpdateJob::newForBacklinks(
+			$this,
+			'existencelinks',
+			[ 'causeAction' => 'existence-touch' ]
 		);
 		if ( $this->mNamespace === NS_CATEGORY ) {
 			$jobs[] = HTMLCacheUpdateJob::newForBacklinks(

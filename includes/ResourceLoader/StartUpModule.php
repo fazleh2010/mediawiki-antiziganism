@@ -48,7 +48,7 @@ class StartUpModule extends Module {
 	 * Cache version for client-side ResourceLoader module storage.
 	 * Like ResourceLoaderStorageVersion but not configurable.
 	 */
-	private const STORAGE_VERSION = '2';
+	private const STORAGE_VERSION = '3';
 
 	/** @var int[] */
 	private array $groupIds = [
@@ -142,7 +142,7 @@ class StartUpModule extends Module {
 					$implicitDependencies = self::getImplicitDependencies( $registryData, $dependency, $depCheck );
 					$dependencies = array_diff( $dependencies, $implicitDependencies );
 				}
-			} catch ( CircularDependencyError $err ) {
+			} catch ( CircularDependencyError ) {
 				// Leave unchanged
 				$dependencies = $data['dependencies'];
 			}

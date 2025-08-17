@@ -1,9 +1,9 @@
 {
 	"@metadata": {
 		"authors": [
+			"Teaparty",
 			"WikiPhoenix",
-			"Yupik",
-			"Teaparty"
+			"Yupik"
 		]
 	},
 	"cdx-chip-input-chip-added": "Chip $1 lades till.",

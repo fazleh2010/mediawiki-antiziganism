@@ -439,15 +439,6 @@ abstract class DatabaseUpdater {
 	}
 
 	/**
-	 * Get the list of extension-defined updates
-	 *
-	 * @return array
-	 */
-	protected function getExtensionUpdates() {
-		return $this->extensionUpdates;
-	}
-
-	/**
 	 * @since 1.17
 	 *
 	 * @return string[]
@@ -508,7 +499,7 @@ abstract class DatabaseUpdater {
 		}
 		if ( isset( $what['extensions'] ) ) {
 			$this->loadExtensionSchemaUpdates();
-			$this->runUpdates( $this->getExtensionUpdates(), true );
+			$this->runUpdates( $this->extensionUpdates, true );
 			$this->runUpdates( $this->extensionUpdatesWithVirtualDomains, true, true );
 		}
 
@@ -1390,6 +1381,47 @@ abstract class DatabaseUpdater {
 			'table' => 'pagelinks'
 		] );
 		$this->output( "Running migrateLinksTable.php on pagelinks...\n" );
+		$task->execute();
+		$this->output( "done.\n" );
+	}
+
+	protected function migrateCategorylinks() {
+		if ( $this->updateRowExists( MigrateLinksTable::class . 'categorylinks' ) ) {
+			$this->output( "...categorylinks table has already been migrated.\n" );
+			return;
+		}
+		/**
+		 * @var MigrateLinksTable $task
+		 */
+		$task = $this->maintenance->runChild(
+			MigrateLinksTable::class, 'migrateLinksTable.php'
+		);
+		'@phan-var MigrateLinksTable $task';
+		$task->loadParamsAndArgs( MigrateLinksTable::class, [
+			'force' => true,
+			'table' => 'categorylinks'
+		] );
+		$this->output( "Running migrateLinksTable.php on categorylinks...\n" );
+		$task->execute();
+		$this->output( "done.\n" );
+	}
+
+	protected function normalizeCollation() {
+		if ( $this->updateRowExists( UpdateCollation::class . 'normalization' ) ) {
+			$this->output( "...collation table has already been normalized.\n" );
+			return;
+		}
+		/**
+		 * @var UpdateCollation $task
+		 */
+		$task = $this->maintenance->runChild(
+			UpdateCollation::class, 'updateCollation.php'
+		);
+		'@phan-var UpdateCollation $task';
+		$task->loadParamsAndArgs( UpdateCollation::class, [
+			'only-migrate-normalization' => true,
+		] );
+		$this->output( "Running updateCollation.php --only-migrate-normalization...\n" );
 		$task->execute();
 		$this->output( "done.\n" );
 	}

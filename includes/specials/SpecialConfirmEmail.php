@@ -58,6 +58,7 @@ class SpecialConfirmEmail extends UnlistedSpecialPage {
 		$this->userFactory = $userFactory;
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -125,15 +126,12 @@ class SpecialConfirmEmail extends UnlistedSpecialPage {
 			$form
 				->setAction( $this->getPageTitle()->getLocalURL() )
 				->setSubmitTextMsg( 'confirmemail_send' )
-				->setSubmitCallback( [ $this, 'submitSend' ] );
+				->setSubmitCallback( $this->submitSend( ... ) );
 
 			$retval = $form->show();
 
-			if ( $retval === true ) {
-				// should never happen, but if so, don't let the user without any message
+			if ( $retval === true || ( $retval instanceof Status && $retval->isGood() ) ) {
 				$out->addWikiMsg( 'confirmemail_sent' );
-			} elseif ( $retval instanceof Status && $retval->isGood() ) {
-				$out->addWikiTextAsInterface( $retval->getValue() );
 			}
 		} else {
 			// date and time are separate parameters to facilitate localisation.
@@ -153,10 +151,10 @@ class SpecialConfirmEmail extends UnlistedSpecialPage {
 	 *
 	 * @return Status Status object with the result
 	 */
-	public function submitSend() {
+	private function submitSend() {
 		$status = $this->getUser()->sendConfirmationMail();
 		if ( $status->isGood() ) {
-			return Status::newGood( $this->msg( 'confirmemail_sent' )->text() );
+			return Status::newGood();
 		} else {
 			return Status::newFatal( new RawMessage(
 				$status->getWikiText( 'confirmemail_sendfailed', false, $this->getLanguage() )

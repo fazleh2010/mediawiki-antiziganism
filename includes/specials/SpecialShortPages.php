@@ -30,7 +30,7 @@ use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -53,10 +53,12 @@ class SpecialShortPages extends QueryPage {
 		$this->setLinkBatchFactory( $linkBatchFactory );
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$config = $this->getConfig();
 		$tables = [ 'page' ];
@@ -86,6 +88,7 @@ class SpecialShortPages extends QueryPage {
 		];
 	}
 
+	/** @inheritDoc */
 	public function reallyDoQuery( $limit, $offset = false ) {
 		$fname = static::class . '::reallyDoQuery';
 		$dbr = $this->getRecacheDB();
@@ -146,18 +149,20 @@ class SpecialShortPages extends QueryPage {
 		return $uqb->caller( $fname )->fetchResultSet();
 	}
 
+	/** @inheritDoc */
 	protected function getOrderFields() {
 		return [ 'page_len' ];
 	}
 
 	/**
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
 		$this->executeLBFromResultWrapper( $res );
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return false;
 	}
@@ -202,6 +207,7 @@ class SpecialShortPages extends QueryPage {
 		return $exists ? $result : Html::rawElement( 'del', [], $result );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
 	}

@@ -89,6 +89,7 @@ abstract class AuthManagerSpecialPage extends SpecialPage {
 		return $this->getName();
 	}
 
+	/** @inheritDoc */
 	public function getRequest() {
 		return $this->savedRequest ?: $this->getContext()->getRequest();
 	}
@@ -455,7 +456,7 @@ abstract class AuthManagerSpecialPage extends SpecialPage {
 		$status = false;
 
 		$form = $this->getAuthForm( $this->authRequests, $this->authAction );
-		$form->setSubmitCallback( [ $this, 'handleFormSubmit' ] );
+		$form->setSubmitCallback( $this->handleFormSubmit( ... ) );
 
 		if ( $this->getRequest()->wasPosted() ) {
 			// handle tokens manually; $form->tryAuthorizedSubmit only works for logged-in users

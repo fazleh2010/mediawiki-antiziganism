@@ -103,13 +103,10 @@ trait DummyServicesTrait {
 		CommentParser $parser
 	): CommentParserFactory {
 		return new class( $parser ) extends CommentParserFactory {
-			private $parser;
-
-			public function __construct( $parser ) {
-				$this->parser = $parser;
+			public function __construct( private readonly CommentParser $parser ) {
 			}
 
-			public function create() {
+			public function create(): CommentParser {
 				return $this->parser;
 			}
 		};
@@ -203,14 +200,17 @@ trait DummyServicesTrait {
 		return new class( $allInterwikiRows ) implements InterwikiLookup {
 			private $allInterwikiRows;
 
+			/** @inheritDoc */
 			public function __construct( $allInterwikiRows ) {
 				$this->allInterwikiRows = $allInterwikiRows;
 			}
 
+			/** @inheritDoc */
 			public function isValidInterwiki( $prefix ) {
 				return (bool)$this->fetch( $prefix );
 			}
 
+			/** @inheritDoc */
 			public function fetch( $prefix ) {
 				if ( $prefix == '' ) {
 					return null;
@@ -236,6 +236,7 @@ trait DummyServicesTrait {
 				);
 			}
 
+			/** @inheritDoc */
 			public function getAllPrefixes( $local = null ) {
 				if ( $local === null ) {
 					return array_values( $this->allInterwikiRows );
@@ -250,6 +251,7 @@ trait DummyServicesTrait {
 				);
 			}
 
+			/** @inheritDoc */
 			public function invalidateCache( $prefix ) {
 				// Nothing to do
 			}

@@ -98,7 +98,7 @@ class ApiTag extends ApiBase {
 		$this->getResult()->addValue( null, $this->getModuleName(), $ret );
 	}
 
-	protected function validateLogId( $logid ) {
+	protected function validateLogId( int $logid ): bool {
 		$result = $this->dbr->newSelectQueryBuilder()
 			->select( 'log_id' )
 			->from( 'logging' )
@@ -107,7 +107,7 @@ class ApiTag extends ApiBase {
 		return (bool)$result;
 	}
 
-	protected function processIndividual( $type, $params, $id ) {
+	protected function processIndividual( string $type, array $params, int $id ): array {
 		$user = $this->getUser();
 		$idResult = [ $type => $id ];
 
@@ -195,14 +195,17 @@ class ApiTag extends ApiBase {
 		return $idResult;
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'rcid' => [
@@ -236,10 +239,12 @@ class ApiTag extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=tag&revid=123&add=vandalism&token=123ABC'
@@ -249,6 +254,7 @@ class ApiTag extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Tag';
 	}

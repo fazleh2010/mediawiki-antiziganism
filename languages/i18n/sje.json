@@ -2,7 +2,8 @@
 	"@metadata": {
 		"authors": [
 			"Bidumsábme",
-			"Olve Utne"
+			"Olve Utne",
+			"Yupik"
 		]
 	},
 	"pagecategories": "{{PLURAL:$1|Kategorija}}",
@@ -210,8 +211,8 @@
 	"createacct-submit": "Daga duv kåntåv",
 	"createacct-another-submit": "Álge kåntåv",
 	"createacct-benefit-heading": "{{SITENAME}}-dahkeja lä almatja degu dån.",
-	"createacct-benefit-body1": "{{PLURAL:$1|rävvdalibme|rävvdalime}}",
-	"createacct-benefit-body2": "{{PLURAL:$1|bielle|biele}}",
+	"createacct-benefit-text1": "$2 {{PLURAL:$1|rävvdalibme|rävvdalime}}",
+	"createacct-benefit-text2": "$2 {{PLURAL:$1|bielle|biele}}",
 	"userexists": "Adnejnamav mav dån tjälli lä juo adnám.\nVällji ietjá namav.",
 	"loginerror": "Sisluggimvihke",
 	"createacct-error": "Kånntåállgemvihke",
@@ -241,16 +242,6 @@
 	"retypenew": "Tjále åđđå biessambágov åđđåsist",
 	"resetpass_submit": "Tjále biessambágov ja luggi sisa",
 	"changepassword-success": "Duv biessambáhko lä målsoduvvum!",
-	"botpasswords": "Båhttåbiessambágo",
-	"botpasswords-createnew": "Daga åđđå båhttåbiessambágov",
-	"botpasswords-editexisting": "Rävvdadä dálátj båhttåbiessambágov",
-	"botpasswords-label-appid": "Båhttånamma:",
-	"botpasswords-label-create": "Álge",
-	"botpasswords-label-cancel": "Buŧŧki",
-	"botpasswords-label-delete": "Gádodä",
-	"botpasswords-label-resetpassword": "Ruoptojtbieja biessambágov",
-	"botpasswords-created-title": "Båhttåbiessambágov lä dahkaduvvum",
-	"botpasswords-deleted-title": "Båhttåbiessambágo lä gádoduvvum",
 	"resetpass_forbidden": "Biessambágo i máhte målsoduvvut",
 	"resetpass_forbidden-reason": "Biessambágo i máhte målsoduvvut: $1",
 	"resetpass-submit-loggedin": "Målso biessambágov",
@@ -1109,6 +1100,7 @@
 	"skin-action-move": "Sirde",
 	"newpages-showhide-bots": "$1 båhtå",
 	"blockedtext-block-ip": "Duv dálatj IP-adrässa lä $1.",
+	"renameusernew": "Åđđå adnejnamma:",
 	"interwiki": "Vuosedä ja rävvdadä wikigasskajdáhtájt",
 	"interwiki-logtext": "Vuosedä låggåv",
 	"log-name-interwiki": "Wikigasskajtabällalåggå",

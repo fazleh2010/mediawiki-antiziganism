@@ -45,10 +45,11 @@ class DatabaseFlags implements IDatabaseFlags {
 		self::DBO_DEBUG | self::DBO_NOBUFFER | self::DBO_TRX | self::DBO_DDLMODE
 	);
 
-	public function __construct( $flags ) {
+	public function __construct( int $flags ) {
 		$this->flags = $flags;
 	}
 
+	/** @inheritDoc */
 	public function setFlag( $flag, $remember = self::REMEMBER_NOTHING ) {
 		if ( $flag & ~static::DBO_MUTABLE ) {
 			throw new DBLanguageError(
@@ -63,6 +64,7 @@ class DatabaseFlags implements IDatabaseFlags {
 		$this->flags |= $flag;
 	}
 
+	/** @inheritDoc */
 	public function clearFlag( $flag, $remember = self::REMEMBER_NOTHING ) {
 		if ( $flag & ~static::DBO_MUTABLE ) {
 			throw new DBLanguageError(
@@ -77,6 +79,7 @@ class DatabaseFlags implements IDatabaseFlags {
 		$this->flags &= ~$flag;
 	}
 
+	/** @inheritDoc */
 	public function restoreFlags( $state = self::RESTORE_PRIOR ) {
 		if ( !$this->priorFlags ) {
 			return;
@@ -90,6 +93,7 @@ class DatabaseFlags implements IDatabaseFlags {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getFlag( $flag ) {
 		return ( ( $this->flags & $flag ) === $flag );
 	}

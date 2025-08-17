@@ -133,10 +133,12 @@ class SpecialRevisionDelete extends UnlistedSpecialPage {
 		$this->repoGroup = $repoGroup;
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->useTransactionalTimeLimit();
 
@@ -428,9 +430,7 @@ class SpecialRevisionDelete extends UnlistedSpecialPage {
 		$numRevisions = 0;
 		// Live revisions...
 		$list = $this->getList();
-		for ( $list->reset(); $list->current(); $list->next() ) {
-			$item = $list->current();
-
+		foreach ( $list as $item ) {
 			if ( !$item->canView() ) {
 				if ( !$this->submitClicked ) {
 					throw new PermissionsError( 'suppressrevision' );
@@ -741,6 +741,7 @@ class SpecialRevisionDelete extends UnlistedSpecialPage {
 		);
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pagetools';
 	}

@@ -23,12 +23,14 @@
 namespace MediaWiki\Api;
 
 use MediaWiki\Cache\GenderCache;
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Linker\LinksMigration;
 use MediaWiki\ParamValidator\TypeDef\NamespaceDef;
 use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\Title;
 use Wikimedia\ParamValidator\ParamValidator;
 use Wikimedia\ParamValidator\TypeDef\IntegerDef;
+use Wikimedia\Rdbms\IConnectionProvider;
 use Wikimedia\Rdbms\IExpression;
 use Wikimedia\Rdbms\LikeValue;
 
@@ -52,17 +54,21 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 	private $useIndex = null;
 	/** @var array */
 	private $props = [];
+	/** @var string|bool */
+	private $virtualDomain = false;
 
 	private NamespaceInfo $namespaceInfo;
 	private GenderCache $genderCache;
 	private LinksMigration $linksMigration;
+	private IConnectionProvider $dbProvider;
 
 	public function __construct(
 		ApiQuery $query,
 		string $moduleName,
 		NamespaceInfo $namespaceInfo,
 		GenderCache $genderCache,
-		LinksMigration $linksMigration
+		LinksMigration $linksMigration,
+		IConnectionProvider $dbProvider
 	) {
 		switch ( $moduleName ) {
 			case 'alllinks':
@@ -78,6 +84,7 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 				$this->tablePrefix = 'tl_';
 				$this->dfltNamespace = NS_TEMPLATE;
 				$this->indexTag = 't';
+				$this->virtualDomain = TemplateLinksTable::VIRTUAL_DOMAIN;
 				break;
 			case 'allfileusages':
 				$prefix = 'af';
@@ -106,16 +113,19 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 		$this->namespaceInfo = $namespaceInfo;
 		$this->genderCache = $genderCache;
 		$this->linksMigration = $linksMigration;
+		$this->dbProvider = $dbProvider;
 	}
 
 	public function execute() {
 		$this->run();
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode( $params ) {
 		return 'public';
 	}
 
+	/** @inheritDoc */
 	public function executeGenerator( $resultPageSet ) {
 		$this->run( $resultPageSet );
 	}
@@ -239,7 +249,11 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 		}
 		$this->addOption( 'ORDER BY', $orderBy );
 
+		$this->getQueryBuilder()->connection(
+			$this->dbProvider->getReplicaDatabase( $this->virtualDomain, 'api' )
+		);
 		$res = $this->select( __METHOD__ );
+		$this->getQueryBuilder()->connection( $this->getDB() );
 
 		// Get gender information
 		if ( $resultPageSet === null && $res->numRows() && $this->namespaceInfo->hasGenderDistinction( $namespace ) ) {
@@ -314,6 +328,7 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$allowedParams = [
 			'continue' => [
@@ -326,9 +341,7 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 			'prop' => [
 				ParamValidator::PARAM_ISMULTI => true,
 				ParamValidator::PARAM_DEFAULT => 'title',
-				ParamValidator::PARAM_TYPE => array_merge(
-					[ 'ids', 'title' ], array_keys( $this->props )
-				),
+				ParamValidator::PARAM_TYPE => [ 'ids', 'title', ...array_keys( $this->props ) ],
 				ApiBase::PARAM_HELP_MSG_PER_VALUE => [],
 			],
 			'namespace' => [
@@ -358,6 +371,7 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 		return $allowedParams;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		$p = $this->getModulePrefix();
 		$name = $this->getModuleName();
@@ -375,6 +389,7 @@ class ApiQueryAllLinks extends ApiQueryGeneratorBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		$name = ucfirst( $this->getModuleName() );
 

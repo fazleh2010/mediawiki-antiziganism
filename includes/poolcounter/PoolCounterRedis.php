@@ -87,7 +87,7 @@ class PoolCounterRedis extends PoolCounter {
 	/** @var PoolCounterRedis[] List of active PoolCounterRedis objects in this script */
 	protected static $active = null;
 
-	public function __construct( $conf, $type, $key ) {
+	public function __construct( array $conf, string $type, string $key ) {
 		parent::__construct( $conf, $type, $key );
 
 		$this->serversByLabel = $conf['servers'];
@@ -104,7 +104,7 @@ class PoolCounterRedis extends PoolCounter {
 
 		if ( self::$active === null ) {
 			self::$active = [];
-			register_shutdown_function( [ __CLASS__, 'releaseAll' ] );
+			register_shutdown_function( [ self::class, 'releaseAll' ] );
 		}
 	}
 
@@ -130,6 +130,7 @@ class PoolCounterRedis extends PoolCounter {
 		return Status::newGood( $this->conn );
 	}
 
+	/** @inheritDoc */
 	public function acquireForMe( $timeout = null ) {
 		$status = $this->precheckAcquire();
 		if ( !$status->isGood() ) {
@@ -139,6 +140,7 @@ class PoolCounterRedis extends PoolCounter {
 		return $this->waitForSlotOrNotif( self::AWAKE_ONE, $timeout );
 	}
 
+	/** @inheritDoc */
 	public function acquireForAnyone( $timeout = null ) {
 		$status = $this->precheckAcquire();
 		if ( !$status->isGood() ) {
@@ -148,6 +150,7 @@ class PoolCounterRedis extends PoolCounter {
 		return $this->waitForSlotOrNotif( self::AWAKE_ALL, $timeout );
 	}
 
+	/** @inheritDoc */
 	public function release() {
 		if ( $this->slot === null ) {
 			return Status::newGood( PoolCounter::NOT_LOCKED ); // not locked

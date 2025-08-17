@@ -38,7 +38,7 @@ trait MockTitleTrait {
 		} else {
 			$id = $props['id'] ?? ++$this->pageIdCounter;
 		}
-		$nsName = $ns ? "ns$ns:" : '';
+		$nsName = $ns < 0 ? "Special:" : ( $ns ? "ns$ns:" : '' );
 
 		$preText = $text;
 		$text = preg_replace( '/^[\w ]*?:/', '', $text );
@@ -82,6 +82,7 @@ trait MockTitleTrait {
 		$title->method( 'canExist' )
 			->willReturn( $ns >= 0 && empty( $props['interwiki'] ) && $text !== '' );
 		$title->method( 'getWikiId' )->willReturn( Title::LOCAL );
+		$title->method( 'getLinkURL' )->willReturn( "/wiki/" . str_replace( ' ', '_', $preText ) );
 		if ( isset( $props['revision'] ) ) {
 			$title->method( 'getLatestRevId' )->willReturn( $props['revision'] );
 		} else {
@@ -101,11 +102,10 @@ trait MockTitleTrait {
 		$title->method( '__toString' )->willReturn( "MockTitle:{$preText}" );
 
 		$title->method( 'toPageIdentity' )->willReturnCallback( static function () use ( $title ) {
-			return new PageIdentityValue(
+			return PageIdentityValue::localIdentity(
 				$title->getId(),
 				$title->getNamespace(),
-				$title->getDBkey(),
-				PageIdentity::LOCAL
+				$title->getDBkey()
 			);
 		} );
 

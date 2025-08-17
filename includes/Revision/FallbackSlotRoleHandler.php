@@ -36,7 +36,7 @@ use MediaWiki\Page\PageIdentity;
  */
 class FallbackSlotRoleHandler extends SlotRoleHandler {
 
-	public function __construct( $role ) {
+	public function __construct( string $role ) {
 		parent::__construct( $role, CONTENT_MODEL_UNKNOWN );
 	}
 
@@ -60,6 +60,7 @@ class FallbackSlotRoleHandler extends SlotRoleHandler {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getOutputLayoutHints() {
 		// TODO: should we return [ 'display' => 'none'] here, causing undefined slots
 		// to be hidden? We'd still need some place to surface the content of such

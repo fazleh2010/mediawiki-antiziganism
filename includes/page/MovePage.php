@@ -38,8 +38,8 @@ use MediaWiki\HookContainer\HookRunner;
 use MediaWiki\Logging\LogFormatterFactory;
 use MediaWiki\Logging\ManualLogEntry;
 use MediaWiki\MainConfigNames;
+use MediaWiki\Page\Event\PageLatestRevisionChangedEvent;
 use MediaWiki\Page\Event\PageMovedEvent;
-use MediaWiki\Page\Event\PageRevisionUpdatedEvent;
 use MediaWiki\Permissions\Authority;
 use MediaWiki\Permissions\PermissionStatus;
 use MediaWiki\Permissions\RestrictionStore;
@@ -103,8 +103,8 @@ class MovePage {
 	 * @see MovePageFactory
 	 */
 	public function __construct(
-		Title $oldTitle,
-		Title $newTitle,
+		PageIdentity $oldTitle,
+		PageIdentity $newTitle,
 		ServiceOptions $options,
 		IConnectionProvider $dbProvider,
 		NamespaceInfo $nsInfo,
@@ -125,8 +125,8 @@ class MovePage {
 		DeletePageFactory $deletePageFactory,
 		LogFormatterFactory $logFormatterFactory
 	) {
-		$this->oldTitle = $oldTitle;
-		$this->newTitle = $newTitle;
+		$this->oldTitle = Title::newFromPageIdentity( $oldTitle );
+		$this->newTitle = Title::newFromPageIdentity( $newTitle );
 
 		$this->options = $options;
 		$this->dbProvider = $dbProvider;
@@ -745,7 +745,9 @@ class MovePage {
 		$this->eventDispatcher->dispatch( new PageMovedEvent(
 			$pageStateBeforeMove,
 			$this->newTitle->toPageRecord( IDBAccessObject::READ_LATEST ),
-			$user
+			$user,
+			$reason,
+			$moveAttemptResult->getValue()['redirectPage']
 		), $this->dbProvider );
 
 		$dbw->endAtomic( __METHOD__ );
@@ -935,7 +937,7 @@ class MovePage {
 		// NOTE: Use FLAG_SILENT to avoid redundant RecentChanges entry.
 		//       The move log already generates one.
 		$nullRevision = $newpage->newPageUpdater( $user )
-			->setCause( PageRevisionUpdatedEvent::CAUSE_MOVE )
+			->setCause( PageLatestRevisionChangedEvent::CAUSE_MOVE )
 			->setHints( [
 				'oldtitle' => $this->oldTitle,
 				'oldcountable' => $oldcountable,
@@ -948,6 +950,7 @@ class MovePage {
 
 		// Recreate the redirect, this time in the other direction.
 		$redirectRevision = null;
+		$redirectArticle = null;
 		if ( $redirectContent ) {
 			$redirectArticle = $this->wikiPageFactory->newFromTitle( $this->oldTitle );
 			$redirectArticle->loadFromRow( false, IDBAccessObject::READ_LOCKING ); // T48397
@@ -969,6 +972,7 @@ class MovePage {
 		return Status::newGood( [
 			'nullRevision' => $nullRevision,
 			'redirectRevision' => $redirectRevision,
+			'redirectPage' => $redirectArticle !== null ? $redirectArticle->toPageRecord() : null
 		] );
 	}
 }

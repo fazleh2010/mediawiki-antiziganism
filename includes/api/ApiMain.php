@@ -297,6 +297,7 @@ class ApiMain extends ApiBase {
 			'services' => [
 				'RollbackPageFactory',
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 			]
 		],
@@ -305,6 +306,7 @@ class ApiMain extends ApiBase {
 			'services' => [
 				'RepoGroup',
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 				'DeletePageFactory',
 			]
@@ -313,6 +315,7 @@ class ApiMain extends ApiBase {
 			'class' => ApiUndelete::class,
 			'services' => [
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 				'UndeletePageFactory',
 				'WikiPageFactory',
@@ -322,6 +325,7 @@ class ApiMain extends ApiBase {
 			'class' => ApiProtect::class,
 			'services' => [
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 				'RestrictionStore',
 			]
@@ -360,6 +364,7 @@ class ApiMain extends ApiBase {
 				'MovePageFactory',
 				'RepoGroup',
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 			]
 		],
@@ -382,6 +387,7 @@ class ApiMain extends ApiBase {
 			'services' => [
 				'JobQueueGroup',
 				'WatchlistManager',
+				'WatchedItemStore',
 				'UserOptionsLookup',
 			]
 		],
@@ -872,6 +878,7 @@ class ApiMain extends ApiBase {
 		$this->mCacheMode = $mode;
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode() {
 		return $this->mCacheMode;
 	}
@@ -993,6 +1000,15 @@ class ApiMain extends ApiBase {
 	 * @param Throwable $e
 	 */
 	protected function handleException( Throwable $e ) {
+		$statsModuleName = $this->mModule ? $this->mModule->getModuleName() : 'main';
+
+		// Collect stats on errors (T396613).
+		// NOTE: We only count fatal errors, a mere call to addError() or
+		// addWarning() does not count towards these states. That could
+		// be added in the future, but should use a different stats key.
+		$stats = $this->statsFactory->getCounter( 'api_errors' )
+			->setLabel( 'module', $statsModuleName );
+
 		// T65145: Rollback any open database transactions
 		if ( !$e instanceof ApiUsageException ) {
 			// ApiUsageExceptions are intentional, so don't rollback if that's the case
@@ -1000,6 +1016,9 @@ class ApiMain extends ApiBase {
 				$e,
 				MWExceptionHandler::CAUGHT_BY_ENTRYPOINT
 			);
+			$stats->setLabel( 'exception_cause', 'server-error' );
+		} else {
+			$stats->setLabel( 'exception_cause', 'client-error' );
 		}
 
 		// Allow extra cleanup and logging
@@ -1010,6 +1029,7 @@ class ApiMain extends ApiBase {
 		// handler will process and log it.
 
 		$errCodes = $this->substituteResultWithError( $e );
+		sort( $errCodes );
 
 		// Error results should not be cached
 		$this->setCacheMode( 'private' );
@@ -1023,6 +1043,9 @@ class ApiMain extends ApiBase {
 
 		// Printer may not be initialized if the extractRequestParams() fails for the main module
 		$this->createErrorPrinter();
+
+		$stats->setLabel( 'error_code', implode( '_', $errCodes ) );
+		$stats->increment();
 
 		// Get desired HTTP code from an ApiUsageException. Don't use codes from other
 		// exception types, as they are unlikely to be intended as an HTTP code.
@@ -1039,7 +1062,7 @@ class ApiMain extends ApiBase {
 			foreach ( $ex->getStatusValue()->getMessages() as $error ) {
 				try {
 					$this->mPrinter->addWarning( $error );
-				} catch ( Throwable $ex2 ) {
+				} catch ( Throwable ) {
 					// WTF?
 					$this->addWarning( $error );
 				}
@@ -1074,7 +1097,7 @@ class ApiMain extends ApiBase {
 			$main = new self( RequestContext::getMain(), false );
 			$main->handleException( $e );
 			$main->logRequest( 0, $e );
-		} catch ( Throwable $e2 ) {
+		} catch ( Throwable ) {
 			// Nope, even that didn't work. Punt.
 			throw $e;
 		}
@@ -1777,7 +1800,7 @@ class ApiMain extends ApiBase {
 							$return304 = wfTimestamp( TS_MW, $lastMod ) <= $ts->getTimestamp( TS_MW );
 						}
 					}
-				} catch ( TimestampException $e ) {
+				} catch ( TimestampException ) {
 					// Invalid timestamp, ignore it
 				}
 			}
@@ -2062,7 +2085,6 @@ class ApiMain extends ApiBase {
 				'request_id' => WebRequest::getRequestId(),
 				'id' => MediaWikiServices::getInstance()
 					->getGlobalIdGenerator()->newUUIDv4(),
-				'dt' => wfTimestamp( TS_ISO_8601 ),
 				'domain' => $this->getConfig()->get( MainConfigNames::ServerName ),
 				// If using the EventBus extension (as intended) with this log channel,
 				// this stream name will map to a Kafka topic.

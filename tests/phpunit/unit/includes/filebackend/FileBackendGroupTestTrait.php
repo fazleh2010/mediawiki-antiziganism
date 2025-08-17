@@ -1,5 +1,7 @@
 <?php
 
+// phpcs:disable MediaWiki.Commenting.FunctionComment.MissingDocumentationPublic -- Test traits are not excluded
+
 use MediaWiki\FileBackend\FileBackendGroup;
 use MediaWiki\FileBackend\LockManager\LockManagerGroupFactory;
 use MediaWiki\FileRepo\LocalRepo;
@@ -12,7 +14,6 @@ use Wikimedia\FileBackend\FSFileBackend;
 use Wikimedia\Mime\MimeAnalyzer;
 use Wikimedia\ObjectCache\BagOStuff;
 use Wikimedia\ObjectCache\HashBagOStuff;
-use Wikimedia\ObjectCache\WANObjectCache;
 use Wikimedia\TestingAccessWrapper;
 
 /**
@@ -50,9 +51,6 @@ trait FileBackendGroupTestTrait {
 	 * @var BagOStuff|null
 	 */
 	private $srvCache;
-
-	/** @var WANObjectCache */
-	private $wanCache;
 
 	/** @var LockManagerGroupFactory */
 	private $lmgFactory;
@@ -233,12 +231,14 @@ trait FileBackendGroupTestTrait {
 		$config['profiler'] = null;
 
 		$this->assertEquals( [
-			'mimeCallback' => [ $obj, 'guessMimeInternal' ],
+			'mimeCallback' => $obj->guessMimeInternal( ... ),
 			'obResetFunc' => 'wfResetOutputBuffers',
-			'streamMimeFunc' => [ StreamFile::class, 'contentTypeFromPath' ],
+			'streamMimeFunc' => StreamFile::contentTypeFromPath( ... ),
 			'tmpFileFactory' => $this->tmpFileFactory,
-			'statusWrapper' => [ Status::class, 'wrap' ],
-			'wanCache' => $this->wanCache,
+			'statusWrapper' => Status::wrap( ... ),
+			// Ignore actual value, normal service is fine, because it wraps
+			// $wgMainCacheType (HashBagOStuff) which we already clear between tests.
+			'wanCache' => $config['wanCache'],
 			// If $this->srvCache is null, we don't know what it should be, so just fill in the
 			// actual value. Equality to a new HashBagOStuff doesn't work because of the token.
 			'srvCache' => $this->srvCache ?? $config['srvCache'],
@@ -260,16 +260,15 @@ trait FileBackendGroupTestTrait {
 			'class' => FSFileBackend::class,
 			'lockManager' =>
 				$this->lmgFactory->getLockManagerGroup( self::getWikiID() )->get( 'fsLockManager' ),
-			'asyncHandler' => [
-				MediaWiki\Deferred\DeferredUpdates::class,
-				'addCallableUpdate'
-			]
+			'asyncHandler' => DeferredUpdates::addCallableUpdate( ... )
 		], $config );
 
+		// Compare closures with ==
+		// https://github.com/sebastianbergmann/comparator/issues/127
+		$this->assertTrue( $obj->guessMimeInternal( ... ) == $config['mimeCallback'] );
+
 		// For config values that are objects, check object identity.
-		$this->assertSame( [ $obj, 'guessMimeInternal' ], $config['mimeCallback'] );
 		$this->assertSame( $this->tmpFileFactory, $config['tmpFileFactory'] );
-		$this->assertSame( $this->wanCache, $config['wanCache'] );
 		if ( $this->srvCache === null ) {
 			$this->assertInstanceOf( HashBagOStuff::class, $config['srvCache'] );
 			$this->assertSame(

@@ -23,6 +23,7 @@
 namespace MediaWiki\ResourceLoader;
 
 use FileContentsHasher;
+use InvalidArgumentException;
 use LogicException;
 use MediaWiki\Config\Config;
 use MediaWiki\HookContainer\HookContainer;
@@ -49,6 +50,8 @@ abstract class Module implements LoggerAwareInterface {
 	protected $config;
 	/** @var LoggerInterface */
 	protected $logger;
+
+	private ?VueComponentParser $vueComponentParser = null;
 
 	/**
 	 * Script and style modules form a hierarchy of trustworthiness, with core modules
@@ -116,7 +119,7 @@ abstract class Module implements LoggerAwareInterface {
 	public const ORIGIN_ALL = 10;
 
 	/** @var int Cache version for user-script JS validation errors from validateScriptFile(). */
-	private const USERJSPARSE_CACHE_VERSION = 3;
+	private const USERJSPARSE_CACHE_VERSION = 4;
 
 	/**
 	 * Get this module's name. This is set when the module is registered
@@ -168,23 +171,6 @@ abstract class Module implements LoggerAwareInterface {
 	public function getFlip( Context $context ) {
 		return MediaWikiServices::getInstance()->getContentLanguage()->getDir() !==
 			$context->getDirection();
-	}
-
-	/**
-	 * Get JS representing deprecation information for the current module if available
-	 *
-	 * @deprecated since 1.41 use getDeprecationWarning()
-	 *
-	 * @param Context $context
-	 * @return string JavaScript code
-	 */
-	public function getDeprecationInformation( Context $context ) {
-		wfDeprecated( __METHOD__, '1.41' );
-		$warning = $this->getDeprecationWarning();
-		if ( $warning === null ) {
-			return '';
-		}
-		return 'mw.log.warn(' . $context->encodeJson( $warning ) . ');';
 	}
 
 	/**
@@ -291,7 +277,7 @@ abstract class Module implements LoggerAwareInterface {
 	 * @since 1.27
 	 * @return LoggerInterface
 	 */
-	protected function getLogger() {
+	protected function getLogger(): LoggerInterface {
 		if ( !$this->logger ) {
 			$this->logger = new NullLogger();
 		}
@@ -745,7 +731,9 @@ abstract class Module implements LoggerAwareInterface {
 	 */
 	final protected function buildContent( Context $context ) {
 		$statsFactory = MediaWikiServices::getInstance()->getStatsFactory();
-		$statStart = hrtime( true );
+		$timer = $statsFactory->getTiming( 'resourceloader_build_seconds' )
+			->setLabel( 'name', strtr( $this->getName(), '.', '_' ) )
+			->start();
 
 		// This MUST build both scripts and styles, regardless of whether $context->getOnly()
 		// is 'scripts' or 'styles' because the result is used by getVersionHash which
@@ -821,14 +809,7 @@ abstract class Module implements LoggerAwareInterface {
 			$content['deprecationWarning'] = $deprecationWarning;
 		}
 
-		$statName = strtr( $this->getName(), '.', '_' );
-		$statsFactory->getTiming( 'resourceloader_build_seconds' )
-			->setLabel( 'name', $statName )
-			->copyToStatsdAt( [
-				'resourceloader_build.all',
-				"resourceloader_build.$statName",
-			] )
-			->observeNanoseconds( hrtime( true ) - $statStart );
+		$timer->stop();
 
 		return $content;
 	}
@@ -1018,7 +999,7 @@ abstract class Module implements LoggerAwareInterface {
 			$cache::TTL_WEEK,
 			static function () use ( $contents ) {
 				try {
-					Peast::ES2016( $contents )->parse();
+					Peast::ES2017( $contents )->parse();
 				} catch ( PeastSyntaxException $e ) {
 					return $e->getMessage() . " on line " . $e->getPosition()->getLine();
 				}
@@ -1039,6 +1020,35 @@ abstract class Module implements LoggerAwareInterface {
 				');';
 		}
 		return $contents;
+	}
+
+	/**
+	 * @param Context $context
+	 * @param string $content
+	 * @return array
+	 * @throws InvalidArgumentException If the input is invalid
+	 */
+	protected function parseVueContent( Context $context, string $content ): array {
+		$this->vueComponentParser ??= new VueComponentParser;
+		$parsedComponent = $this->vueComponentParser->parse(
+			$content,
+			[ 'minifyTemplate' => !$context->getDebug() ]
+		);
+		$encodedTemplate = json_encode( $parsedComponent['template'] );
+		if ( $context->getDebug() ) {
+			// Replace \n (backslash-n) with space + backslash-n + backslash-newline in debug mode
+			// The \n has to be preserved to prevent Vue parser issues (T351771)
+			// We only replace \n if not preceded by a backslash, to avoid breaking '\\n'
+			$encodedTemplate = preg_replace( '/(?<!\\\\)\\\\n/', " \\n\\\n", $encodedTemplate );
+			// Expand \t to real tabs in debug mode
+			$encodedTemplate = strtr( $encodedTemplate, [ "\\t" => "\t" ] );
+		}
+		return [
+			'script' => $parsedComponent['script'] .
+				";\nmodule.exports.template = $encodedTemplate;",
+			'style' => $parsedComponent['style'] ?? '',
+			'styleLang' => $parsedComponent['styleLang'] ?? 'css'
+		];
 	}
 
 	/**

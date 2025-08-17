@@ -173,9 +173,8 @@ class Article implements Page {
 	/**
 	 * Constructor from a page id
 	 * @param int $id Article ID to load
-	 * @return Article|null
 	 */
-	public static function newFromID( $id ) {
+	public static function newFromID( $id ): ?static {
 		$t = Title::newFromID( $id );
 		return $t === null ? null : new static( $t );
 	}
@@ -185,9 +184,8 @@ class Article implements Page {
 	 *
 	 * @param Title $title
 	 * @param IContextSource $context
-	 * @return Article
 	 */
-	public static function newFromTitle( $title, IContextSource $context ): self {
+	public static function newFromTitle( $title, IContextSource $context ): static {
 		if ( $title->getNamespace() === NS_MEDIA ) {
 			// XXX: This should not be here, but where should it go?
 			$title = Title::makeTitle( NS_FILE, $title->getDBkey() );
@@ -549,7 +547,7 @@ class Article implements Page {
 		try {
 			$continue =
 				$this->generateContentOutput( $authority, $parserOptions, $oldid, $outputPage, $poOptions );
-		} catch ( BadRevisionException $e ) {
+		} catch ( BadRevisionException ) {
 			$continue = false;
 			$this->showViewError( wfMessage( 'badrevision' )->text() );
 		}
@@ -810,25 +808,29 @@ class Article implements Page {
 		# Run the parse, protected by a pool counter
 		wfDebug( __METHOD__ . ": doing uncached parse" );
 
-		$opt = 0;
+		$opt = [];
 
 		// we already checked the cache in case 2, don't check again.
-		$opt |= ParserOutputAccess::OPT_NO_CHECK_CACHE;
+		$opt[ ParserOutputAccess::OPT_NO_CHECK_CACHE ] = true;
 
 		// we already checked in fetchRevisionRecord()
-		$opt |= ParserOutputAccess::OPT_NO_AUDIENCE_CHECK;
+		$opt[ ParserOutputAccess::OPT_NO_AUDIENCE_CHECK ] = true;
 
-		// enable stampede protection and allow stale content
-		$opt |= ParserOutputAccess::OPT_FOR_ARTICLE_VIEW;
+		// enable stampede protection
+		$opt[ ParserOutputAccess::OPT_POOL_COUNTER ]
+			= ParserOutputAccess::POOL_COUNTER_ARTICLE_VIEW;
+
+		// allow stale cached content to be served
+		$opt[ ParserOutputAccess::OPT_POOL_COUNTER_FALLBACK ] = true;
 
 		// Attempt to trigger WikiPage::triggerOpportunisticLinksUpdate
 		// Ideally this should not be the responsibility of the ParserCache to control this.
 		// See https://phabricator.wikimedia.org/T329842#8816557 for more context.
-		$opt |= ParserOutputAccess::OPT_LINKS_UPDATE;
+		$opt[ ParserOutputAccess::OPT_LINKS_UPDATE ] = true;
 
 		if ( !$rev->getId() || !$useParserCache ) {
 			// fake revision or uncacheable options
-			$opt |= ParserOutputAccess::OPT_NO_CACHE;
+			$opt[ ParserOutputAccess::OPT_NO_CACHE ] = true;
 		}
 
 		$renderStatus = $parserOutputAccess->getParserOutput(
@@ -1087,7 +1089,7 @@ class Article implements Page {
 		$context->getOutput()->addHelpLink( 'Help:Diff' );
 	}
 
-	protected function isDiffOnlyView() {
+	protected function isDiffOnlyView(): bool {
 		return $this->getContext()->getRequest()->getBool(
 			'diffonly',
 			$this->userOptionsLookup->getBoolOption( $this->getContext()->getUser(), 'diffonly' )
@@ -1163,10 +1165,7 @@ class Article implements Page {
 		if ( $title->canUseNoindex() && $pOutput && $pOutput->getIndexPolicy() ) {
 			# __INDEX__ and __NOINDEX__ magic words, if allowed. Incorporates
 			# a final check that we have really got the parser output.
-			$policy = array_merge(
-				$policy,
-				[ 'index' => $pOutput->getIndexPolicy() ]
-			);
+			$policy['index'] = $pOutput->getIndexPolicy();
 		}
 
 		if ( isset( $articleRobotPolicies[$title->getPrefixedText()] ) ) {
@@ -1284,11 +1283,30 @@ class Article implements Page {
 	}
 
 	/**
-	 * Show a header specific to the namespace currently being viewed, like
-	 * [[MediaWiki:Talkpagetext]]. For Article::view().
+	 * Show a header specific to the namespace currently being viewed, such as
+	 * [[MediaWiki:Subjectpageheader]] on subject pages or
+	 * [[MediaWiki:Talkpageheader]] on talk pages.
+	 *
+	 * This function is used in Article::view().
+	 *
+	 * For the addition of subject page headers, see T151682.
 	 */
 	public function showNamespaceHeader() {
-		if ( $this->getTitle()->isTalkPage() && !$this->getContext()->msg( 'talkpageheader' )->isDisabled() ) {
+		if (
+			!$this->getTitle()->isTalkPage() &&
+			$this->getTitle()->exists() &&
+			!$this->getContext()->msg( 'subjectpageheader' )->isDisabled()
+		) {
+			$this->getContext()->getOutput()->wrapWikiMsg(
+				"<div class=\"mw-subjectpageheader\">\n$1\n</div>",
+				[ 'subjectpageheader' ]
+			);
+		}
+
+		if (
+			$this->getTitle()->isTalkPage() &&
+			!$this->getContext()->msg( 'talkpageheader' )->isDisabled()
+		) {
 			$this->getContext()->getOutput()->wrapWikiMsg(
 				"<div class=\"mw-talkpageheader\">\n$1\n</div>",
 				[ 'talkpageheader' ]
@@ -1987,7 +2005,7 @@ class Article implements Page {
 				return true;
 			} else {
 				wfDebug( "Article::tryFileCache(): starting buffer" );
-				ob_start( [ &$cache, 'saveToFileCache' ] );
+				ob_start( [ $cache, 'saveToFileCache' ] );
 			}
 		} else {
 			wfDebug( "Article::tryFileCache(): not cacheable" );

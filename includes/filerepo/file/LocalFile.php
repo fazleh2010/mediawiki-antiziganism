@@ -205,7 +205,7 @@ class LocalFile extends File {
 	private $descriptionTouched;
 
 	/** @var bool Whether the row was upgraded on load */
-	private $upgraded;
+	private $upgraded = false;
 
 	/** @var bool Whether the row was scheduled to upgrade on load */
 	private $upgrading;
@@ -241,10 +241,8 @@ class LocalFile extends File {
 	 * @param Title $title
 	 * @param LocalRepo $repo
 	 * @param null $unused
-	 *
-	 * @return static
 	 */
-	public static function newFromTitle( $title, $repo, $unused = null ) {
+	public static function newFromTitle( $title, $repo, $unused = null ): static {
 		return new static( $title, $repo );
 	}
 
@@ -256,10 +254,8 @@ class LocalFile extends File {
 	 *
 	 * @param stdClass $row
 	 * @param LocalRepo $repo
-	 *
-	 * @return static
 	 */
-	public static function newFromRow( $row, $repo ) {
+	public static function newFromRow( $row, $repo ): static {
 		$title = Title::makeTitle( NS_FILE, $row->img_name );
 		$file = new static( $title, $repo );
 		$file->loadFromRow( $row );
@@ -278,7 +274,7 @@ class LocalFile extends File {
 	 * @param string|false $timestamp MW_timestamp (optional)
 	 * @return static|false
 	 */
-	public static function newFromKey( $sha1, $repo, $timestamp = false ) {
+	public static function newFromKey( $sha1, $repo, $timestamp = false ): static|false {
 		$dbr = $repo->getReplicaDB();
 		$queryBuilder = FileSelectQueryBuilder::newForFile( $dbr );
 
@@ -611,7 +607,7 @@ class LocalFile extends File {
 		$prefixLength = strlen( $prefix );
 
 		// Double check prefix once
-		if ( substr( array_key_first( $array ), 0, $prefixLength ) !== $prefix ) {
+		if ( !str_starts_with( array_key_first( $array ), $prefix ) ) {
 			throw new InvalidArgumentException( __METHOD__ . ': incorrect $prefix parameter' );
 		}
 
@@ -778,7 +774,7 @@ class LocalFile extends File {
 					} else {
 						$this->reserializeMetadata();
 					}
-				} catch ( LocalFileLockError $e ) {
+				} catch ( LocalFileLockError ) {
 					// let the other process handle it (or do it next time)
 				}
 			} );
@@ -863,7 +859,7 @@ class LocalFile extends File {
 		}
 	}
 
-	protected function getFileTypeId() {
+	protected function getFileTypeId(): int {
 		if ( $this->fileTypeId ) {
 			return $this->fileTypeId;
 		}
@@ -1460,7 +1456,7 @@ class LocalFile extends File {
 					$files[] = $file;
 				}
 			}
-		} catch ( FileBackendError $e ) {
+		} catch ( FileBackendError ) {
 		} // suppress (T56674)
 
 		return $files;

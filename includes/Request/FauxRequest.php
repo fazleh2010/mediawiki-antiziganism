@@ -30,7 +30,6 @@ use MediaWiki;
 use MediaWiki\Exception\MWException;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MediaWikiServices;
-use MediaWiki\Session\SessionManager;
 
 /**
  * WebRequest clone which takes values from a provided array.
@@ -66,9 +65,11 @@ class FauxRequest extends WebRequest {
 		$this->data = $data;
 		$this->wasPosted = $wasPosted;
 		if ( $session instanceof MediaWiki\Session\Session ) {
+			$this->session = $session;
 			$this->sessionId = $session->getSessionId();
 		} elseif ( is_array( $session ) ) {
-			$mwsession = SessionManager::singleton()->getEmptySession( $this );
+			$mwsession = MediaWikiServices::getInstance()->getSessionManager()->getEmptySession( $this );
+			$this->session = $mwsession;
 			$this->sessionId = $mwsession->getSessionId();
 			foreach ( $session as $key => $value ) {
 				$mwsession->set( $key, $value );
@@ -115,10 +116,12 @@ class FauxRequest extends WebRequest {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getQueryValuesOnly() {
 		return $this->getQueryValues();
 	}
 
+	/** @inheritDoc */
 	public function getMethod() {
 		return $this->wasPosted ? 'POST' : 'GET';
 	}
@@ -130,6 +133,7 @@ class FauxRequest extends WebRequest {
 		return $this->wasPosted;
 	}
 
+	/** @inheritDoc */
 	public function getCookie( $key, $prefix = null, $default = null ) {
 		if ( $prefix === null ) {
 			$cookiePrefix = MediaWikiServices::getInstance()->getMainConfig()->get( MainConfigNames::CookiePrefix );
@@ -235,6 +239,7 @@ class FauxRequest extends WebRequest {
 		return $this->requestUrl !== null;
 	}
 
+	/** @inheritDoc */
 	protected function getServerInfo( $name, $default = null ): ?string {
 		return $this->serverInfo[$name] ?? $default;
 	}
@@ -257,6 +262,7 @@ class FauxRequest extends WebRequest {
 		return $this->requestUrl;
 	}
 
+	/** @inheritDoc */
 	public function getProtocol() {
 		return $this->protocol;
 	}
@@ -290,6 +296,7 @@ class FauxRequest extends WebRequest {
 		return null;
 	}
 
+	/** @inheritDoc */
 	public function getPostValues() {
 		return $this->wasPosted ? $this->data : [];
 	}

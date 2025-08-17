@@ -64,6 +64,8 @@ abstract class Token implements JsonCodecable, \JsonSerializable {
 				return DOMDataUtils::getCodecHints()['data-mw'];
 			case 'attribs':
 				return Hint::build( KV::class, Hint::LIST );
+			case 'nestedTokens':
+				return new Hint( self::hint(), Hint::LIST );
 			default:
 				return null;
 		}
@@ -82,15 +84,6 @@ abstract class Token implements JsonCodecable, \JsonSerializable {
 
 	public static function hint(): Hint {
 		return Hint::build( self::class, Hint::INHERITED );
-	}
-
-	/**
-	 * Get a name for the token.
-	 * Derived classes can override this.
-	 * @return string
-	 */
-	public function getName(): string {
-		return $this->getType();
 	}
 
 	/**
@@ -205,8 +198,9 @@ abstract class Token implements JsonCodecable, \JsonSerializable {
 	 * context to be set to a token.
 	 *
 	 * @param string $name
-	 * @return array Information about the shadow info attached to this attribute:
-	 *   - value: (string|Token|array<Token|string>)
+	 * @return array{value: string|Token|array<Token|KV|string>, modified: bool, fromsrc: bool}
+	 *  Information about the shadow info attached to this attribute:
+	 *   - value: (string|Token|array<Token|KV|string>)
 	 *     When modified is false and fromsrc is true, this is always a string.
 	 *   - modified: (bool)
 	 *   - fromsrc: (bool)

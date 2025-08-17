@@ -89,6 +89,11 @@ function validateSpec( response ) {
 	expect( response ).to.satisfyApiSpec;
 }
 
+function validateDefaultSpec( response ) {
+	// eslint-disable-next-line no-unused-expressions
+	expect( response.text ).to.satisfySchemaInApiSpec( 'GenericErrorResponseModel' );
+}
+
 // TODO: Replace all occurrences of (Lint Page/Lint_Page) with `page`.
 describe( '/transform/ endpoint', () => {
 	const client = new REST();
@@ -234,7 +239,7 @@ describe( '/transform/ endpoint', () => {
 					JSON.parse( res.error.text ).message.should.equal(
 						'Not acceptable'
 					);
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -256,7 +261,8 @@ describe( '/transform/ endpoint', () => {
 				.send( { wikitext: '== h2 ==' } )
 				.expect( 406 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
+
 				} )
 				.end( done );
 		} );
@@ -507,10 +513,7 @@ describe( '/transform/ endpoint', () => {
 
 	describe( 'wt2lint', () => {
 
-		it( 'should lint the given wikitext', function ( done ) {
-			if ( skipForNow ) {
-				return this.skip();
-			} // Enable linting config
+		it( 'should lint the given wikitext', ( done ) => {
 			client.req
 				.post( endpointPrefix + '/v1/transform/wikitext/to/lint/' )
 				.send( {
@@ -526,16 +529,14 @@ describe( '/transform/ endpoint', () => {
 					res.body.should.be.instanceof( Array );
 					res.body.length.should.equal( 1 );
 					res.body[ 0 ].type.should.equal( 'fostered' );
+					validateSpec( res );
 				} )
 				.end( done );
 		} );
 
-		it( 'should lint the given revision, transform', function ( done ) {
-			if ( skipForNow ) {
-				return this.skip();
-			} // Enable linting config
+		it( 'should lint the given revision, transform', ( done ) => {
 			client.req
-				.post( endpointPrefix + '/v1/transform/wikitext/to/lint/Lint_Page/102' )
+				.post( `${ endpointPrefix }/v1/transform/wikitext/to/lint/${ pageEncoded }/${ revid }` )
 				.send( {} )
 				.expect( status200 )
 				.expect( ( res ) => {
@@ -547,12 +548,22 @@ describe( '/transform/ endpoint', () => {
 				.end( done );
 		} );
 
-		it( 'should lint the given page, transform', function ( done ) {
-			if ( skipForNow ) {
-				return this.skip();
-			} // Enable linting config
+		it( 'should lint the given revision, transform (GET)', ( done ) => {
 			client.req
-				.post( endpointPrefix + '/v1/transform/wikitext/to/lint/Lint_Page' )
+				.get( `${ endpointPrefix }/v1/transform/wikitext/to/lint/${ pageEncoded }/${ revid }` )
+				.expect( status200 )
+				.expect( ( res ) => {
+					res.body.should.be.instanceof( Array );
+					res.body.length.should.equal( 1 );
+					res.body[ 0 ].type.should.equal( 'fostered' );
+					validateSpec( res );
+				} )
+				.end( done );
+		} );
+
+		it( 'should lint the given page, transform', ( done ) => {
+			client.req
+				.post( `${ endpointPrefix }/v1/transform/wikitext/to/lint/${ pageEncoded }` )
 				.send( {} )
 				.expect( status200 )
 				.expect( ( res ) => {
@@ -564,10 +575,21 @@ describe( '/transform/ endpoint', () => {
 				.end( done );
 		} );
 
-		it( 'should lint multibyte wikitext', function ( done ) {
-			if ( skipForNow ) {
-				return this.skip();
-			} // Enable linting config
+		it( 'should lint the given page, transform (GET)', ( done ) => {
+			client.req
+				.get( `${ endpointPrefix }/v1/transform/wikitext/to/lint/${ pageEncoded }` )
+				.send( {} )
+				.expect( status200 )
+				.expect( ( res ) => {
+					res.body.should.be.instanceof( Array );
+					res.body.length.should.equal( 1 );
+					res.body[ 0 ].type.should.equal( 'fostered' );
+					validateSpec( res );
+				} )
+				.end( done );
+		} );
+
+		it( 'should lint multibyte wikitext', ( done ) => {
 			client.req
 				.post( endpointPrefix + '/v1/transform/wikitext/to/lint/' )
 				.send( {
@@ -670,7 +692,7 @@ describe( '/transform/ endpoint', () => {
 				.send( {} )
 				.expect( 400 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -682,7 +704,7 @@ describe( '/transform/ endpoint', () => {
 				.send( {} )
 				.expect( 400 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -693,7 +715,7 @@ describe( '/transform/ endpoint', () => {
 				.send( {} )
 				.expect( 404 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -705,7 +727,7 @@ describe( '/transform/ endpoint', () => {
 				.send( {} )
 				.expect( 404 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -955,7 +977,7 @@ describe( '/transform/ endpoint', () => {
 				.send( { wikitext: '{{1x|foo}}', subst: 'true' } )
 				.expect( 501 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );
@@ -970,7 +992,7 @@ describe( '/transform/ endpoint', () => {
 				} )
 				.expect( 413 )
 				.expect( ( res ) => {
-					validateSpec( res );
+					validateDefaultSpec( res );
 				} )
 				.end( done );
 		} );

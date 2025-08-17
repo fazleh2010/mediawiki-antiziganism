@@ -9,7 +9,6 @@ use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
 use Wikimedia\Parsoid\DOM\Text;
 use Wikimedia\Parsoid\Html2Wt\SerializerState;
-use Wikimedia\Parsoid\Html2Wt\WTSUtils;
 use Wikimedia\Parsoid\Utils\DiffDOMUtils;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 use Wikimedia\Parsoid\Utils\DOMDataUtils;
@@ -133,7 +132,9 @@ class DOMHandler {
 	 *
 	 * @param Element $node
 	 * @param Node $otherNode
-	 * @return array An array in the form [ 'min' => <int>, 'max' => <int> ] or an empty array.
+	 *
+	 * @return array{}|array{min: 0|1|2, max: 1|2} An array in the form
+	 *  [ 'min' => <int>, 'max' => <int> ] or an empty array.
 	 */
 	protected function wtListEOL( Element $node, Node $otherNode ): array {
 		if ( !( $otherNode instanceof Element ) || DOMUtils::atTheTop( $otherNode ) ) {
@@ -248,9 +249,11 @@ class DOMHandler {
 
 	/**
 	 * Helper: Newline constraint helper for table nodes
+	 *
 	 * @param Node $node
 	 * @param Node $origNode
-	 * @return int
+	 *
+	 * @return 1|2
 	 */
 	protected function maxNLsInTable( Node $node, Node $origNode ): int {
 		return ( WTUtils::isNewElt( $node ) || WTUtils::isNewElt( $origNode ) ) ? 1 : 2;
@@ -267,8 +270,7 @@ class DOMHandler {
 	private function serializeTableElement(
 		string $symbol, ?string $endSymbol, SerializerState $state, Element $node
 	): string {
-		$token = WTSUtils::mkTagTk( $node );
-		$sAttribs = $state->serializer->serializeAttributes( $node, $token );
+		$sAttribs = $state->serializer->serializeAttributes( $node );
 		if ( $sAttribs !== '' ) {
 			// IMPORTANT: use ?? not ?: in the first check because we want to preserve an
 			// empty string. Use != '' in the second to avoid treating '0' as empty.
@@ -338,7 +340,6 @@ class DOMHandler {
 		$space = '';
 		if ( WTUtils::isNewElt( $node ) ) {
 			$fc = DiffDOMUtils::firstNonDeletedChild( $node );
-			// PORT-FIXME are different \s semantics going to be a problem?
 			if ( $fc && ( !( $fc instanceof Text ) || !preg_match( '/^\s/', $fc->nodeValue ) ) ) {
 				$space = $newEltDefault;
 			}
@@ -362,7 +363,6 @@ class DOMHandler {
 		$space = '';
 		if ( WTUtils::isNewElt( $node ) ) {
 			$lc = DiffDOMUtils::lastNonDeletedChild( $node );
-			// PORT-FIXME are different \s semantics going to be a problem?
 			if ( $lc && ( !( $lc instanceof Text ) || !preg_match( '/\s$/D', $lc->nodeValue ) ) ) {
 				$space = $newEltDefault;
 			}
@@ -389,10 +389,11 @@ class DOMHandler {
 	 * Uneditable forms wrapped with mw:Placeholder tags OR unedited nowikis
 	 * N.B. We no longer emit self-closed nowikis as placeholders, so remove this
 	 * once all our stored content is updated.
+	 *
 	 * @param Element $node
 	 * @param SerializerState $state
 	 */
-	protected function emitPlaceholderSrc( Element $node, SerializerState $state ) {
+	protected function emitPlaceholderSrc( Element $node, SerializerState $state ): void {
 		$dp = DOMDataUtils::getDataParsoid( $node );
 		if ( preg_match( '!<nowiki\s*/>!', $dp->src ?? '' ) ) {
 			$state->hasSelfClosingNowikis = true;

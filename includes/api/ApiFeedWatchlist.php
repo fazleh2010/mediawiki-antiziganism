@@ -23,6 +23,7 @@
 namespace MediaWiki\Api;
 
 use Exception;
+use MediaWiki\Feed\ChannelFeed;
 use MediaWiki\Feed\FeedItem;
 use MediaWiki\MainConfigNames;
 use MediaWiki\Parser\ParserFactory;
@@ -73,6 +74,7 @@ class ApiFeedWatchlist extends ApiBase {
 	public function execute() {
 		$config = $this->getConfig();
 		$feedClasses = $config->get( MainConfigNames::FeedClasses );
+		'@phan-var array<string,class-string<ChannelFeed>> $feedClasses';
 		$params = [];
 		$feedItems = [];
 		try {
@@ -169,7 +171,7 @@ class ApiFeedWatchlist extends ApiBase {
 
 			$feedFormat = $params['feedformat'] ?? 'rss';
 			$msg = $this->msg( 'watchlist' )->inContentLanguage()->escaped();
-			$feed = new $feedClasses[$feedFormat] ( $feedTitle, $msg, $feedUrl );
+			$feed = new $feedClasses[$feedFormat]( $feedTitle, $msg, $feedUrl );
 
 			if ( $e instanceof ApiUsageException ) {
 				foreach ( $e->getStatusValue()->getMessages() as $msg ) {
@@ -259,6 +261,7 @@ class ApiFeedWatchlist extends ApiBase {
 		return $this->watchlistModule;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams( $flags = 0 ) {
 		$feedFormatNames = array_keys( $this->getConfig()->get( MainConfigNames::FeedClasses ) );
 		$ret = [
@@ -308,6 +311,7 @@ class ApiFeedWatchlist extends ApiBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=feedwatchlist'
@@ -317,6 +321,7 @@ class ApiFeedWatchlist extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Watchlist_feed';
 	}

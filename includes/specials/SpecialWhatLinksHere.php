@@ -22,6 +22,7 @@ namespace MediaWiki\Specials;
 
 use MediaWiki\Cache\LinkBatchFactory;
 use MediaWiki\Content\IContentHandlerFactory;
+use MediaWiki\Deferred\LinksUpdate\TemplateLinksTable;
 use MediaWiki\Html\Html;
 use MediaWiki\HTMLForm\HTMLForm;
 use MediaWiki\Linker\LinksMigration;
@@ -304,7 +305,12 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 		}
 
 		if ( !$hidetrans ) {
-			$tlRes = $queryFunc( $dbr, 'templatelinks', 'tl_from' );
+
+			$tlRes = $queryFunc(
+				$this->dbProvider->getReplicaDatabase( TemplateLinksTable::VIRTUAL_DOMAIN ),
+				'templatelinks',
+				'tl_from'
+			);
 		}
 
 		if ( !$hideimages ) {
@@ -486,7 +492,7 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 		}
 	}
 
-	protected function listStart( $level ) {
+	protected function listStart( int $level ): string {
 		return Html::openElement( 'ul', ( $level ? [] : [ 'id' => 'mw-whatlinkshere-list' ] ) );
 	}
 
@@ -551,11 +557,11 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 			Html::rawElement( 'li', [], "$link $propsText $wlh" ) . "\n";
 	}
 
-	protected function listEnd() {
+	protected function listEnd(): string {
 		return Html::closeElement( 'ul' );
 	}
 
-	protected function wlhLink( Title $target, $text, $editText ) {
+	protected function wlhLink( Title $target, string $text, string $editText ): string {
 		static $title = null;
 		$title ??= $this->getPageTitle();
 
@@ -628,6 +634,7 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 		return $navBuilder->getHtml();
 	}
 
+	/** @inheritDoc */
 	protected function getFormFields() {
 		$this->addHelpLink( 'Help:What links here' );
 		$this->getOutput()->addModuleStyles( 'mediawiki.special' );
@@ -730,23 +737,28 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 			->setSubmitTextMsg( 'whatlinkshere-submit' );
 	}
 
+	/** @inheritDoc */
 	protected function getShowAlways() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	protected function getSubpageField() {
 		return 'target';
 	}
 
+	/** @inheritDoc */
 	public function onSubmit( array $data ) {
 		$this->formData = $data;
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function requiresPost() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function getDisplayFormat() {
 		return 'ooui';
 	}
@@ -763,6 +775,7 @@ class SpecialWhatLinksHere extends FormSpecialPage {
 		return $this->prefixSearchString( $search, $limit, $offset, $this->searchEngineFactory );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pagetools';
 	}

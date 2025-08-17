@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 /**
  * Copyright (C) 2011-2022 Wikimedia Foundation and others.
  *
@@ -26,6 +27,7 @@ use MediaWiki\Config\Config;
 use MediaWiki\Config\MutableConfig;
 use MediaWiki\Config\ServiceOptions;
 use MediaWiki\Content\IContentHandlerFactory;
+use MediaWiki\Debug\MWDebug;
 use MediaWiki\Exception\MWUnknownContentModelException;
 use MediaWiki\Interwiki\InterwikiLookup;
 use MediaWiki\Language\Language;
@@ -56,6 +58,7 @@ use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\Utils\Utils;
 use Wikimedia\Stats\PrefixingStatsdDataFactoryProxy;
 use Wikimedia\Stats\StatsFactory;
+use Wikimedia\Stats\StatsUtils;
 
 /**
  * Site-level configuration for Parsoid
@@ -66,12 +69,6 @@ use Wikimedia\Stats\StatsFactory;
  * @internal
  */
 class SiteConfig extends ISiteConfig {
-
-	/**
-	 * Regular expression fragment for matching wikitext comments.
-	 * Meant for inclusion in other regular expressions.
-	 */
-	protected const COMMENT_REGEXP_FRAGMENT = '<!--(?>[\s\S]*?-->)';
 
 	public const CONSTRUCTOR_OPTIONS = [
 		MainConfigNames::GalleryOptions,
@@ -272,6 +269,32 @@ class SiteConfig extends ISiteConfig {
 		$this->prefixedStatsFactory()->getTiming( $name )
 			->setLabels( $labels )
 			->observe( $value );
+	}
+
+	/**
+	 * Record a histogram metric
+	 * @param string $name
+	 * @param float $value A time value in milliseconds
+	 * @param array $buckets The buckets used in this histogram
+	 * @param array $labels The metric labels
+	 * @return void
+	 */
+	public function observeHistogram( string $name, float $value, array $buckets, array $labels ) {
+		$metric = $this->prefixedStatsFactory()->getHistogram( $name, $buckets );
+		foreach ( $labels as $labelKey => $labelValue ) {
+			$metric->setLabel( $labelKey, $labelValue );
+		}
+		$metric->observe( $value );
+	}
+
+	/**
+	 * Generate buckets based on skip and mean
+	 * @param float $mean
+	 * @param int $skip
+	 * @return float[]
+	 */
+	public function getHistogramBuckets( float $mean, int $skip ) {
+		return StatsUtils::makeBucketsFromMean( $mean, $skip );
 	}
 
 	/**
@@ -598,7 +621,12 @@ class SiteConfig extends ISiteConfig {
 	): void {
 		'@phan-var ParserOutput $metadata'; // @var ParserOutput $metadata
 		// Look for a displaytitle.
-		$displayTitle = $metadata->getPageProperty( 'displaytitle' ) ?:
+		//
+		// Temporarily (while we wait for ParserCache content to expire),
+		// explicitly cast to handle titles that are numbers. A separate patch
+		// ensures that ParserOutput only contains strings for displaytitle
+		// (and other number-like string properties).
+		$displayTitle = (string)$metadata->getPageProperty( 'displaytitle' ) ?:
 			// Use the default title, properly escaped
 			Utils::escapeHtml( $defaultTitle );
 		$this->exportMetadataHelper(
@@ -752,7 +780,7 @@ class SiteConfig extends ISiteConfig {
 	protected function shouldValidateExtConfig(): bool {
 		// Only perform json schema validation for extension module
 		// configurations when running tests.
-		return defined( 'MW_PHPUNIT_TEST' ) || defined( 'MW_PARSER_TEST' );
+		return defined( 'MW_PHPUNIT_TEST' );
 	}
 
 	/** @inheritDoc */
@@ -850,7 +878,7 @@ class SiteConfig extends ISiteConfig {
 			if ( $handler->getDefaultFormat() === CONTENT_FORMAT_WIKITEXT ) {
 				return true;
 			}
-		} catch ( MWUnknownContentModelException $ex ) {
+		} catch ( MWUnknownContentModelException ) {
 			// If the content model is not known, it can't be supported.
 			return false;
 		}
@@ -858,4 +886,18 @@ class SiteConfig extends ISiteConfig {
 		return $this->getContentModelHandler( $model ) !== null;
 	}
 
+	/** @inheritDoc */
+	public function deprecated( string $function, string $version, int $callerOffset = 2 ): void {
+		MWDebug::deprecated( $function, $version, "Parsoid", $callerOffset + 1 );
+	}
+
+	/** @inheritDoc */
+	public function filterDeprecationForTest( string $regex ): void {
+		MWDebug::filterDeprecationForTest( $regex );
+	}
+
+	/** @inheritDoc */
+	public function clearDeprecationFilters(): void {
+		MWDebug::clearDeprecationFilters();
+	}
 }

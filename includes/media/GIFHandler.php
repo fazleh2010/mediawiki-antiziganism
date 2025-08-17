@@ -38,6 +38,7 @@ class GIFHandler extends BitmapHandler {
 	 */
 	private const BROKEN_FILE = '0';
 
+	/** @inheritDoc */
 	public function getSizeAndMetadata( $state, $filename ) {
 		try {
 			$parsedGIFMetadata = BitmapMetadataHandler::GIF( $filename );
@@ -129,10 +130,12 @@ class GIFHandler extends BitmapHandler {
 		return $this->getImageArea( $file ) <= $maxAnimatedGifArea;
 	}
 
+	/** @inheritDoc */
 	public function getMetadataType( $image ) {
 		return 'parsed-gif';
 	}
 
+	/** @inheritDoc */
 	public function isFileMetadataValid( $image ) {
 		$data = $image->getMetadataArray();
 		if ( $data === [ '_error' => self::BROKEN_FILE ] ) {
@@ -185,7 +188,7 @@ class GIFHandler extends BitmapHandler {
 		}
 
 		if ( $metadata['duration'] ) {
-			$info[] = $wgLang->formatTimePeriod( $metadata['duration'] );
+			$info[] = htmlspecialchars( $wgLang->formatTimePeriod( $metadata['duration'] ), ENT_QUOTES );
 		}
 
 		return $wgLang->commaList( $info );

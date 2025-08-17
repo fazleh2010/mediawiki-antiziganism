@@ -51,6 +51,7 @@ class SvgHandler extends ImageHandler {
 		'title' => 'ObjectName',
 	];
 
+	/** @inheritDoc */
 	public function isEnabled() {
 		$config = MediaWikiServices::getInstance()->getMainConfig();
 		$svgConverters = $config->get( MainConfigNames::SVGConverters );
@@ -67,6 +68,10 @@ class SvgHandler extends ImageHandler {
 		return true;
 	}
 
+	/**
+	 * @param File $file
+	 * @return bool
+	 */
 	public function allowRenderingByUserAgent( $file ) {
 		$svgNativeRendering = MediaWikiServices::getInstance()
 			->getMainConfig()->get( MainConfigNames::SVGNativeRendering );
@@ -86,10 +91,12 @@ class SvgHandler extends ImageHandler {
 			&& $file->getSize() <= $maxSVGFilesize;
 	}
 
+	/** @inheritDoc */
 	public function mustRender( $file ) {
 		return !$this->allowRenderingByUserAgent( $file );
 	}
 
+	/** @inheritDoc */
 	public function isVectorized( $file ) {
 		return true;
 	}
@@ -158,7 +165,7 @@ class SvgHandler extends ImageHandler {
 				return $svgLang;
 			}
 			$trimmedSvgLang = $svgLang;
-			while ( strpos( $trimmedSvgLang, '-' ) !== false ) {
+			while ( str_contains( $trimmedSvgLang, '-' ) ) {
 				$trimmedSvgLang = substr( $trimmedSvgLang, 0, strrpos( $trimmedSvgLang, '-' ) );
 				if ( strcasecmp( $trimmedSvgLang, $userPreferredLanguage ) === 0 ) {
 					return $svgLang;
@@ -406,6 +413,13 @@ class SvgHandler extends ImageHandler {
 		return true;
 	}
 
+	/**
+	 * @param string $srcPath
+	 * @param string $dstPath
+	 * @param int $width
+	 * @param int $height
+	 * @return string|void
+	 */
 	public static function rasterizeImagickExt( $srcPath, $dstPath, $width, $height ) {
 		$im = new Imagick( $srcPath );
 		$im->setBackgroundColor( 'transparent' );
@@ -421,6 +435,7 @@ class SvgHandler extends ImageHandler {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getThumbType( $ext, $mime, $params = null ) {
 		return [ 'png', 'image/png' ];
 	}
@@ -437,7 +452,7 @@ class SvgHandler extends ImageHandler {
 	public function getLongDesc( $file ) {
 		$metadata = $this->validateMetadata( $file->getMetadataArray() );
 		if ( isset( $metadata['error'] ) ) {
-			return wfMessage( 'svg-long-error', $metadata['error']['message'] )->text();
+			return wfMessage( 'svg-long-error', $metadata['error']['message'] )->escaped();
 		}
 
 		if ( $this->isAnimatedImage( $file ) ) {
@@ -446,7 +461,10 @@ class SvgHandler extends ImageHandler {
 			$msg = wfMessage( 'svg-long-desc' );
 		}
 
-		return $msg->numParams( $file->getWidth(), $file->getHeight() )->sizeParams( $file->getSize() )->parse();
+		return $msg
+			->numParams( $file->getWidth(), $file->getHeight() )
+			->sizeParams( $file->getSize() )
+			->parse();
 	}
 
 	/**
@@ -476,6 +494,7 @@ class SvgHandler extends ImageHandler {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function validateMetadata( $unser ) {
 		if ( isset( $unser['version'] ) && $unser['version'] === self::SVG_METADATA_VERSION ) {
 			return $unser;
@@ -484,10 +503,12 @@ class SvgHandler extends ImageHandler {
 		return null;
 	}
 
+	/** @inheritDoc */
 	public function getMetadataType( $image ) {
 		return 'parsed-svg';
 	}
 
+	/** @inheritDoc */
 	public function isFileMetadataValid( $image ) {
 		$meta = $this->validateMetadata( $image->getMetadataArray() );
 		if ( !$meta ) {
@@ -501,6 +522,7 @@ class SvgHandler extends ImageHandler {
 		return self::METADATA_GOOD;
 	}
 
+	/** @inheritDoc */
 	protected function visibleMetadataFields() {
 		return [ 'objectname', 'imagedescription' ];
 	}
@@ -596,6 +618,7 @@ class SvgHandler extends ImageHandler {
 		return "$lang{$params['width']}px";
 	}
 
+	/** @inheritDoc */
 	public function parseParamString( $str ) {
 		$m = false;
 		// Language codes are supposed to be lowercase
@@ -611,6 +634,7 @@ class SvgHandler extends ImageHandler {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getParamMap() {
 		return [ 'img_lang' => 'lang', 'img_width' => 'width' ];
 	}
@@ -628,6 +652,7 @@ class SvgHandler extends ImageHandler {
 		return $scriptParams;
 	}
 
+	/** @inheritDoc */
 	public function getCommonMetaArray( File $file ) {
 		$metadata = $this->validateMetadata( $file->getMetadataArray() );
 		if ( !$metadata || isset( $metadata['error'] ) ) {

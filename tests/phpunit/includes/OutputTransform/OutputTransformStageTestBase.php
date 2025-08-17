@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\Tests\OutputTransform;
 
@@ -11,11 +12,11 @@ use MediaWikiIntegrationTestCase;
 abstract class OutputTransformStageTestBase extends MediaWikiIntegrationTestCase {
 	abstract public function createStage(): OutputTransformStage;
 
-	abstract public function provideShouldRun(): iterable;
+	abstract public static function provideShouldRun(): iterable;
 
-	abstract public function provideShouldNotRun(): iterable;
+	abstract public static function provideShouldNotRun(): iterable;
 
-	abstract public function provideTransform(): iterable;
+	abstract public static function provideTransform(): iterable;
 
 	/**
 	 * @dataProvider provideShouldRun

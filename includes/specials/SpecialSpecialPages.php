@@ -21,8 +21,10 @@
 namespace MediaWiki\Specials;
 
 use MediaWiki\Html\Html;
-use MediaWiki\Language\RawMessage;
 use MediaWiki\SpecialPage\UnlistedSpecialPage;
+use MediaWiki\Title\Title;
+use OOUI\FieldLayout;
+use OOUI\SearchInputWidget;
 use Wikimedia\Parsoid\Core\SectionMetadata;
 use Wikimedia\Parsoid\Core\TOCData;
 
@@ -37,6 +39,7 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 		parent::__construct( 'Specialpages' );
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$out = $this->getOutput();
 		$this->setHeaders();
@@ -56,7 +59,7 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 
 	/** @return array[][]|false */
 	private function getPageGroups() {
-		$pages = $this->getSpecialPageFactory()->getUsablePages( $this->getUser() );
+		$pages = $this->getSpecialPageFactory()->getUsablePages( $this->getUser(), $this->getContext() );
 
 		if ( $pages === [] ) {
 			// Yeah, that was pointless. Thanks for coming.
@@ -68,11 +71,6 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 		foreach ( $pages as $page ) {
 			$group = $page->getFinalGroupName();
 			$desc = $page->getDescription();
-			// T343849
-			if ( is_string( $desc ) ) {
-				wfDeprecated( "string return from {$page->getName()}::getDescription()", '1.41' );
-				$desc = ( new RawMessage( '$1' ) )->rawParams( $desc );
-			}
 			// (T360723) Only show an entry if the message isn't blanked, to allow on-wiki unlisting
 			if ( !$desc->isDisabled() ) {
 				$groups[$group][$desc->text()] = [
@@ -100,6 +98,9 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 
 	private function outputPageList( array $groups ) {
 		$out = $this->getOutput();
+		$aliases = $this->getSpecialPageFactory()->getAliasList();
+		$out->addModules( 'mediawiki.special.specialpages' );
+		$out->enableOOUI();
 
 		// Legend
 		$includesRestrictedPages = false;
@@ -141,6 +142,18 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 			$out->addModuleStyles( 'mediawiki.special.changeslist.legend' );
 		}
 
+		$out->addHTML( new FieldLayout(
+			new SearchInputWidget( [
+				'placeholder' => $this->msg( 'specialpages-header-search' )->text(),
+			] ),
+			[
+				'classes' => [ 'mw-special-pages-search' ],
+				'label' => $this->msg( 'specialpages-header-search' )->text(),
+				'invisibleLabel' => true,
+				'infusable' => true,
+			]
+		) );
+
 		// Format table of contents
 		$tocData = new TOCData();
 		$tocLength = 0;
@@ -164,6 +177,7 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 		$out->addTOCPlaceholder( $tocData );
 
 		// Format contents
+		$language = $this->getLanguage();
 		foreach ( $groups as $group => $sortedPages ) {
 			if ( str_contains( $group, '/' ) ) {
 				[ $group, $subGroup ] = explode( '/', $group, 2 );
@@ -184,6 +198,18 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 				. '<ul>'
 			);
 			foreach ( $sortedPages as $desc => [ $title, $restricted, $cached ] ) {
+				$indexAttr = [ 'data-search-index-0' => $language->lc( $title->getText() ) ];
+				$c = 1;
+				foreach ( $aliases as $alias => $target ) {
+					/** @var Title $title */
+					if (
+						$target == $title->getText() &&
+						$language->lc( $alias ) !== $language->lc( $title->getText() )
+					) {
+						$indexAttr['data-search-index-' . $c ] = $language->lc( $alias );
+						++$c;
+					}
+				}
 				$pageClasses = [];
 				if ( $cached ) {
 					$pageClasses[] = 'mw-specialpagecached';
@@ -195,7 +221,7 @@ class SpecialSpecialPages extends UnlistedSpecialPage {
 				$link = $this->getLinkRenderer()->makeKnownLink( $title, $desc );
 				$out->addHTML( Html::rawElement(
 						'li',
-						[ 'class' => $pageClasses ],
+						$indexAttr + [ 'class' => $pageClasses ],
 						$link
 					) . "\n" );
 			}

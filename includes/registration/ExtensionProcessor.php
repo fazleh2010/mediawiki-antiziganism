@@ -308,6 +308,7 @@ class ExtensionProcessor implements Processor {
 					];
 				}
 				$module['name'] ??= $name;
+				$module['extension-name'] = $name;
 			}
 		}
 
@@ -357,6 +358,7 @@ class ExtensionProcessor implements Processor {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getExtractedInfo( bool $includeDev = false ) {
 		// Make sure the merge strategies are set
 		foreach ( $this->globals as $key => $val ) {
@@ -395,6 +397,7 @@ class ExtensionProcessor implements Processor {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getRequirements( array $info, $includeDev ) {
 		// Quick shortcuts
 		if ( !$includeDev || !isset( $info['dev-requires'] ) ) {
@@ -636,7 +639,7 @@ class ExtensionProcessor implements Processor {
 		}
 	}
 
-	protected function extractResourceLoaderModules( $dir, array $info ) {
+	protected function extractResourceLoaderModules( string $dir, array $info ) {
 		$defaultPaths = $info['ResourceFileModulePaths'] ?? false;
 		if ( isset( $defaultPaths['localBasePath'] ) ) {
 			if ( $defaultPaths['localBasePath'] === '' ) {
@@ -676,7 +679,7 @@ class ExtensionProcessor implements Processor {
 					$data['localBasePath'] = "$dir/{$data['localBasePath']}";
 				}
 			}
-			$this->attributes['QUnitTestModules']["test.{$info['name']}"] = $data;
+			$this->attributes['QUnitTestModule']["test.{$info['name']}"] = $data;
 		}
 
 		if ( isset( $info['MessagePosterModule'] ) ) {
@@ -693,7 +696,7 @@ class ExtensionProcessor implements Processor {
 		}
 	}
 
-	protected function extractExtensionMessagesFiles( $dir, array $info ) {
+	protected function extractExtensionMessagesFiles( string $dir, array $info ) {
 		if ( isset( $info['ExtensionMessagesFiles'] ) ) {
 			foreach ( $info['ExtensionMessagesFiles'] as &$file ) {
 				$file = "$dir/$file";
@@ -702,7 +705,7 @@ class ExtensionProcessor implements Processor {
 		}
 	}
 
-	protected function extractRestModuleFiles( $dir, array $info ) {
+	protected function extractRestModuleFiles( string $dir, array $info ) {
 		$var = MainConfigNames::RestAPIAdditionalRouteFiles;
 		if ( isset( $info['RestModuleFiles'] ) ) {
 			foreach ( $info['RestModuleFiles'] as &$file ) {
@@ -952,7 +955,7 @@ class ExtensionProcessor implements Processor {
 		$this->globals[$key] = $value;
 	}
 
-	protected function extractPathBasedGlobal( $global, $dir, $paths ) {
+	protected function extractPathBasedGlobal( string $global, string $dir, array $paths ) {
 		foreach ( $paths as $path ) {
 			$this->globals[$global][] = "$dir/$path";
 		}

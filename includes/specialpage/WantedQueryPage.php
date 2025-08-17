@@ -23,7 +23,7 @@ namespace MediaWiki\SpecialPage;
 use MediaWiki\Skin\Skin;
 use MediaWiki\Title\Title;
 use stdClass;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -33,10 +33,12 @@ use Wikimedia\Rdbms\IResultWrapper;
  * @ingroup SpecialPage
  */
 abstract class WantedQueryPage extends QueryPage {
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
@@ -44,7 +46,7 @@ abstract class WantedQueryPage extends QueryPage {
 	/**
 	 * Cache page existence for performance
 	 * @stable to override
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	protected function preprocessResults( $db, $res ) {

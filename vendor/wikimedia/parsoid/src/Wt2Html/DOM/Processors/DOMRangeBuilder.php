@@ -54,7 +54,6 @@ use Wikimedia\Parsoid\Wt2Html\Frame;
  *
  * FIXME: At some point, more of the details should be extracted and documented
  * in pseudo-code as an algorithm.
- * @module
  */
 class DOMRangeBuilder {
 
@@ -149,10 +148,8 @@ class DOMRangeBuilder {
 				/**
 				 * The point of the above loop is to ensure we're working
 				 * with a Element if there is an $n.
-				 *
-				 * @var Element $n
 				 */
-				'@phan-var Element $n';
+				'@phan-var Element $n'; // @var Element $n
 				$dsr = DOMDataUtils::getDataParsoid( $n )->dsr ?? null;
 			}
 
@@ -180,7 +177,9 @@ class DOMRangeBuilder {
 	 * @return string
 	 */
 	protected function getRangeId( Element $node ): string {
-		return DOMCompat::getAttribute( $node, "about" );
+		$rangeId = DOMCompat::getAttribute( $node, "about" );
+		'@phan-var string $rangeId'; // asserting this is not null
+		return $rangeId;
 	}
 
 	/**
@@ -207,7 +206,6 @@ class DOMRangeBuilder {
 			if ( $startsInFosterablePosn ) {
 				// Expand range!
 				$range->start = $range->end = $range->start->parentNode;
-				$startsInFosterablePosn = false;
 			} else {
 				$emptySpan = $this->document->createElement( 'span' );
 				$range->start->parentNode->insertBefore( $emptySpan, $endElem );
@@ -460,8 +458,9 @@ class DOMRangeBuilder {
 	 * Record template info in $this->compoundTpls as we go.
 	 *
 	 * @param Node $docRoot
-	 * @param DOMRangeInfo[] $tplRanges The potentially overlapping ranges
-	 * @return DOMRangeInfo[] The non-overlapping ranges
+	 * @param list<DOMRangeInfo> $tplRanges The potentially overlapping ranges
+	 *
+	 * @return list<DOMRangeInfo> The non-overlapping ranges
 	 */
 	public function findTopLevelNonOverlappingRanges( Node $docRoot, array $tplRanges ): array {
 		// For each node, assign an attribute that is a record of all
@@ -585,7 +584,7 @@ class DOMRangeBuilder {
 
 			$this->verifyTplInfoExpectation( $templateInfo, $tmp );
 
-			$this->env->trace( "{$this->traceType}/merge", static function () use ( &$DOMDataUtils, &$r ) {
+			$this->env->trace( "{$this->traceType}/merge", static function () use ( &$r ) {
 				$msg = '';
 				$dp1 = DOMDataUtils::getDataParsoid( $r->start );
 				$dp2 = DOMDataUtils::getDataParsoid( $r->end );
@@ -711,8 +710,7 @@ class DOMRangeBuilder {
 		$dp = DOMDataUtils::getDataParsoid( $firstNode );
 		while ( !empty( $dp->fostered ) ) {
 			$firstNode = $firstNode->nextSibling;
-			/** @var Element $firstNode */
-			DOMUtils::assertElt( $firstNode );
+			'@phan-var Element $firstNode'; // @var Element $firstNode
 			$dp = DOMDataUtils::getDataParsoid( $firstNode );
 		}
 
@@ -787,7 +785,7 @@ class DOMRangeBuilder {
 	 */
 	private static function findEncapTarget( DOMRangeInfo $range ): Element {
 		$encapTgt = $range->start;
-		'@phan-var Node $encapTgt';
+		'@phan-var Node $encapTgt'; // @var Node $encapTgt
 
 		// Skip template-marker meta-tags.
 		while ( WTUtils::isTplMarkerMeta( $encapTgt ) ||
@@ -805,7 +803,7 @@ class DOMRangeBuilder {
 			$encapTgt = $encapTgt->nextSibling;
 		}
 
-		'@phan-var Element $encapTgt';
+		'@phan-var Element $encapTgt'; // @var Node $encapTgt
 		return $encapTgt;
 	}
 
@@ -1100,7 +1098,7 @@ class DOMRangeBuilder {
 	 * Recursively walk the DOM tree. Find wrappable template ranges and return them.
 	 *
 	 * @param Node $rootNode
-	 * @return DOMRangeInfo[]
+	 * @return list<DOMRangeInfo>
 	 */
 	protected function findWrappableMetaRanges( Node $rootNode ): array {
 		$tpls = [];
@@ -1113,8 +1111,8 @@ class DOMRangeBuilder {
 	 * Recursive helper for findWrappableTemplateRanges()
 	 *
 	 * @param Node $rootNode
-	 * @param ElementRange[] &$tpls Template start and end elements by ID
-	 * @param DOMRangeInfo[] &$tplRanges Template range info
+	 * @param array<string,ElementRange> &$tpls Template start and end elements by ID
+	 * @param list<DOMRangeInfo> &$tplRanges Template range info
 	 */
 	private function findWrappableTemplateRangesRecursive(
 		Node $rootNode, array &$tpls, array &$tplRanges
@@ -1152,7 +1150,7 @@ class DOMRangeBuilder {
 						if ( $tpl ) {
 							$tpl->startElem = $elem;
 							// content or end marker existed already
-							if ( !empty( $tpl->endElem ) ) {
+							if ( $tpl->endElem !== null ) {
 								// End marker was foster-parented.
 								// Found actual start tag.
 								$tplRanges[] = $this->getDOMRange(

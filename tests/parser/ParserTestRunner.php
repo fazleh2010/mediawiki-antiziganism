@@ -73,6 +73,7 @@ use Wikimedia\Parsoid\ParserTests\StyleTag as ParsoidStyleTag;
 use Wikimedia\Parsoid\ParserTests\Test as ParserTest;
 use Wikimedia\Parsoid\ParserTests\TestFileReader;
 use Wikimedia\Parsoid\ParserTests\TestMode as ParserTestMode;
+use Wikimedia\Parsoid\ParserTests\TestUtils;
 use Wikimedia\Parsoid\Parsoid;
 use Wikimedia\Parsoid\Utils\ContentUtils;
 use Wikimedia\Parsoid\Utils\DOMCompat;
@@ -224,6 +225,7 @@ class ParserTestRunner {
 	 *      Else name of the file backend to use
 	 *  - disable-save-parse (bool) if true, disable parse on article insertion
 	 *  - update-tests (bool) Update parserTests.txt with results from wt2html fails.
+	 *  - update-format (string) format of the updated test (raw, actualNormalized, noDsr)
 	 *
 	 * NOTE: At this time, Parsoid-specific test options are only handled
 	 * in PHPUnit mode. A future patch will likely tweak some of this and
@@ -245,6 +247,8 @@ class ParserTestRunner {
 			'updateKnownFailures' => false,
 			'changetree' => null,
 			'update-tests' => false,
+			'update-unexpected' => false,
+			'update-format' => 'noDsr',
 			// Options can also match those in ParserTestModes::TEST_MODES
 			// but we don't need to initialize those here; they will be
 			// accessed via $this->requestedTestModes instead.
@@ -700,7 +704,7 @@ class ParserTestRunner {
 		} );
 	}
 
-	protected function registerHook( string $name, callable $handler ) {
+	protected function registerHook( string $name, callable $handler ): callable {
 		$hookContainer = MediaWikiServices::getInstance()->getHookContainer();
 		$reset = $hookContainer->scopedRegister( $name, $handler );
 		return static function () use ( &$reset ) {
@@ -1003,8 +1007,10 @@ class ParserTestRunner {
 					$this->updateKnownFailures( $filename, $testFileInfo );
 				}
 
-				if ( $this->options['update-tests'] ) {
-					$this->updateTests( $filename, $testFileInfo, !$inParsoidMode );
+				if ( $this->options['update-tests'] || $this->options['update-unexpected'] ) {
+					$this->updateTests(
+						$filename, $testFileInfo, !$inParsoidMode, $this->options['update-format'] ?? null
+					);
 				}
 
 				// Clean up
@@ -1131,7 +1137,7 @@ class ParserTestRunner {
 		return null;
 	}
 
-	public static function getLegacyMetadataSection( ParserTest $test ) {
+	public static function getLegacyMetadataSection( ParserTest $test ): ?string {
 		return // specific results for legacy parser
 			$test->sections['metadata/php'] ??
 			// specific results for legacy parser and parsoid integrated mode
@@ -1142,7 +1148,7 @@ class ParserTestRunner {
 			null;
 	}
 
-	public static function getParsoidMetadataSection( ParserTest $test ) {
+	public static function getParsoidMetadataSection( ParserTest $test ): ?string {
 		return // specific results for parsoid integrated mode
 			$test->sections['metadata/parsoid+integrated'] ??
 			// specific results for parsoid
@@ -1262,21 +1268,39 @@ class ParserTestRunner {
 	/**
 	 * @param string $filename The parser test file
 	 * @param TestFileReader $testFileInfo
-	 * @param bool $isLegacy
+	 * @param bool $isLegacy whether we are updating legacy or Parsoid tests
+	 * @param ?string $updateFormat format in which to update the tests
+	 *  - 'raw' - format returned by the parser
+	 *  - 'actualNormalized' - normalizes format to remove irrelevant differences depending on test sections (see
+	 *     Wikimedia\Parsoid\ParserTests\Test::normalizeHtml)
+	 *  - 'noDsr' (default) - filter out the dsr from data-parsoid, and data-parsoid itself it is empty
 	 */
 	public function updateTests(
-		string $filename, TestFileReader $testFileInfo, bool $isLegacy
+		string $filename, TestFileReader $testFileInfo, bool $isLegacy, ?string $updateFormat
 	) {
 		$fileContent = file_get_contents( $filename );
 		foreach ( $testFileInfo->testCases as $t ) {
 			$testName = $t->testName;
 			$fail = $t->knownFailures[$isLegacy ? 'legacy' : 'wt2html'] ?? null;
-			$html = $isLegacy ? $t->legacyHtml : $t->parsoidHtml;
+			$html = $isLegacy ? $t->legacyHtml : ( $t->sections['html/parsoid+integrated'] ?? $t->parsoidHtml );
 			if ( $isLegacy && $fail === null ) {
 				$fail = $t->knownFailures['metadata'] ?? null;
 				$html = self::getLegacyMetadataSection( $t );
 			}
 			if ( $testName !== null && $fail !== null && $html !== null ) {
+
+				if ( !$isLegacy ) {
+					if ( $updateFormat !== 'raw' && $updateFormat !== 'actualNormalized' ) {
+						$updateFormat = 'noDsr';
+					}
+
+					if ( $updateFormat === 'actualNormalized' ) {
+						[ $fail, $expected ] = $t->normalizeHTML( $fail, null, false );
+					} elseif ( $updateFormat === 'noDsr' ) {
+						$fail = TestUtils::filterDsr( $fail );
+					}
+				}
+
 				$exp = '/(!!\s*test\s*' .
 					preg_quote( $testName, '/' ) .
 					'(?:(?!!!\s*end)[\s\S])*' .
@@ -1494,7 +1518,7 @@ class ParserTestRunner {
 
 		$wikitext = $test->wikitext;
 		$output = null;
-		$pageReference = new PageReferenceValue( $title->getNamespace(), $title->getDBkey(), PageReferenceValue::LOCAL );
+		$pageReference = PageReferenceValue::localReference( $title->getNamespace(), $title->getDBkey() );
 		'@phan-var string $wikitext'; // assert that this is not null
 		if ( isset( $opts['pst'] ) ) {
 			$out = $parser->preSaveTransform( $wikitext, $pageReference, $options->getUserIdentity(), $options );
@@ -1552,7 +1576,7 @@ class ParserTestRunner {
 
 		$testResult = new ParserTestResult( $test, $mode, $expected, $out );
 
-		if ( $this->options['update-tests'] && !$testResult->isSuccess() ) {
+		if ( ( $this->options['update-tests'] || $this->options['update-unexpected'] ) && !$testResult->isSuccess() ) {
 			$test->knownFailures["$mode"] = $rawOut;
 		}
 
@@ -1685,7 +1709,7 @@ class ParserTestRunner {
 			$actualFlags = [];
 			foreach ( ParserOutputFlags::cases() as $name ) {
 				if ( $output->getOutputFlag( $name ) ) {
-					$actualFlags[] = $name;
+					$actualFlags[] = $name->value;
 				}
 			}
 			sort( $actualFlags );
@@ -1695,7 +1719,7 @@ class ParserTestRunner {
 			# still doing that complain about it.
 			$oldFlags = array_diff_key(
 				TestingAccessWrapper::newFromObject( $output )->mFlags,
-				array_fill_keys( ParserOutputFlags::cases(), true )
+				array_fill_keys( ParserOutputFlags::values(), true )
 			);
 			if ( $oldFlags ) {
 				wfDeprecated( 'Arbitrary flags in ParserOutput', '1.39' );
@@ -1790,6 +1814,14 @@ class ParserTestRunner {
 
 		if ( $this->options['update-tests'] && !$passed ) {
 			$test->knownFailures["$mode"] = $rawActual;
+		}
+
+		if ( $this->options['update-unexpected'] ) {
+			if ( $knownFailureChanged || $unexpectedFail ) {
+				$test->knownFailures["$mode"] = $rawActual;
+			} else {
+				unset( $test->knownFailures["$mode"] );
+			}
 		}
 
 		if ( $unexpectedPass ) {
@@ -2199,8 +2231,10 @@ class ParserTestRunner {
 					$revRecord = $runner->createRevRecord( $title, $user, $revProps );
 				}
 				$page = MediaWikiServices::getInstance()->getTitleFactory()->newFromLinkTarget( $title );
-				$pageConfig = $pageConfigFactory->create(
-					$page, $user, $revRecord, null, null
+				$pageConfig = $pageConfigFactory->createFromParserOptions(
+					ParserOptions::newFromUser( $user ),
+					$page,
+					$revRecord
 				);
 				return $pageConfig->getParserOptions();
 			} );
@@ -2384,7 +2418,7 @@ class ParserTestRunner {
 			),
 			'wgMaxTocLevel' => $maxtoclevel,
 			'wgAllowExternalImages' => self::getOptionValue( 'wgAllowExternalImages', $opts, true ),
-			'wgThumbLimits' => [ 0, 0, 0, 0, 0, self::getOptionValue( 'thumbsize', $opts, 180 ) ],
+			'wgThumbLimits' => [ 0, 0, 0, 0, 0, (int)self::getOptionValue( 'thumbsize', $opts, 180 ) ],
 			'wgDefaultLanguageVariant' => $variant,
 			'wgLinkHolderBatchSize' => $linkHolderBatchSize,
 			// Set as a JSON object like:
@@ -2393,8 +2427,6 @@ class ParserTestRunner {
 				+ [ 'ISBN' => true, 'PMID' => true, 'RFC' => true ],
 			// Test with legacy encoding by default until HTML5 is very stable and default
 			'wgFragmentMode' => [ 'legacy' ],
-			// Use legacy headings for a while until tests in extensions are updated
-			'wgParserEnableLegacyHeadingDOM' => true,
 			'wgLocaltimezone' => $timezone,
 		];
 
@@ -2428,10 +2460,6 @@ class ParserTestRunner {
 			$this->resetTitleServices();
 			$mwServices->resetServiceForTesting( 'MagicWordFactory' );
 			$mwServices->resetServiceForTesting( 'ParserFactory' );
-			// Depends on $wgParserEnableLegacyMediaDOM
-			$mwServices->resetServiceForTesting( 'Tidy' );
-			// Depends on $wgParserEnableLegacyHeadingDOM
-			$mwServices->resetServiceForTesting( 'DefaultOutputPipeline' );
 			// The SiteConfig depends on various services that reset above,
 			// so reset it as well.
 			// T310283: be more selective about resetting SiteConfig if

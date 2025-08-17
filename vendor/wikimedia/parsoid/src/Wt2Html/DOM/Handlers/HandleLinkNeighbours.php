@@ -56,7 +56,7 @@ class HandleLinkNeighbours {
 	 * @param string $regex
 	 * @param Element $aNode
 	 * @param ?string $baseAbout
-	 * @return array
+	 * @return list<array{fromTpl: bool, node: Text, src: non-empty-string}>
 	 */
 	private static function findAndHandleNeighbour(
 		Env $env, bool $goForward, string $regex, Element $aNode, ?string $baseAbout
@@ -145,7 +145,7 @@ class HandleLinkNeighbours {
 		$env = $state->env;
 		$dp = DOMDataUtils::getDataParsoid( $node );
 		$prefixNbrs = self::getLinkPrefix( $env, $node );
-		if ( !empty( $prefixNbrs ) ) {
+		if ( $prefixNbrs ) {
 			$prefix = '';
 			$dataMwCorrection = '';
 			$dsrCorrection = 0;
@@ -189,7 +189,7 @@ class HandleLinkNeighbours {
 		// Find link trail neighbors
 		$dp = DOMDataUtils::getDataParsoid( $node );
 		$trailNbrs = self::getLinkTrail( $env, $node );
-		if ( !empty( $trailNbrs ) ) {
+		if ( $trailNbrs ) {
 			$trail = '';
 			$dataMwCorrection = '';
 			$dsrCorrection = 0;

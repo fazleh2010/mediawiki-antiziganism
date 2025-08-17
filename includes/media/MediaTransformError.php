@@ -52,6 +52,7 @@ class MediaTransformError extends MediaTransformOutput {
 		$this->path = false;
 	}
 
+	/** @inheritDoc */
 	public function toHtml( $options = [] ) {
 		return "<div class=\"MediaTransformError\" style=\"" .
 			"width: {$this->width}px; height: {$this->height}px; display:inline-block;\">" .
@@ -59,18 +60,28 @@ class MediaTransformError extends MediaTransformOutput {
 			"</div>";
 	}
 
+	/**
+	 * @return string
+	 */
 	public function toText() {
 		return $this->msg->text();
 	}
 
+	/**
+	 * @return string
+	 */
 	public function getHtmlMsg() {
 		return $this->msg->escaped();
 	}
 
+	/**
+	 * @return Message
+	 */
 	public function getMsg() {
 		return $this->msg;
 	}
 
+	/** @inheritDoc */
 	public function isError() {
 		return true;
 	}

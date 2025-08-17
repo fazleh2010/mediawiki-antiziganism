@@ -8,6 +8,7 @@ use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\Core\SelectiveUpdateData;
 use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
+use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\Tokens\SourceRange;
 use Wikimedia\Parsoid\Tokens\Token;
 use Wikimedia\Parsoid\Utils\DOMCompat;
@@ -16,7 +17,6 @@ use Wikimedia\Parsoid\Utils\PHPUtils;
 /**
  * Wrap some stages into a pipeline.
  */
-
 class ParserPipeline {
 	private bool $alwaysToplevel;
 	private bool $atTopLevel;
@@ -106,25 +106,25 @@ class ParserPipeline {
 	 * in case that first stage is the source of input chunks we are processing
 	 * in the rest of the pipeline)
 	 *
-	 * @param string|Token|array<Token|string>|DocumentFragment $input
+	 * @param string|Token|array<Token|string>|DocumentFragment|Element $input
 	 * @param array{sol:bool} $opts
 	 *  - sol (bool) Whether tokens should be processed in start-of-line context.
 	 *  - chunky (bool) Whether we are processing the input chunkily.
 	 *                  If so, the first stage will be skipped
-	 * @return array|Document
+	 * @return array|DocumentFragment|Element
 	 */
-	public function parse( $input, array $opts ) {
+	public function parse(
+		string|Token|array|DocumentFragment|Element $input,
+		array $opts
+	): array|DocumentFragment|Element {
 		$profile = $this->env->profiling() ? $this->env->pushNewProfile() : null;
 		if ( $profile !== null ) {
 			$profile->start();
 		}
 
 		$output = $input;
-		foreach ( $this->stages as $stage ) {
+		foreach ( $this->stages as $i => $stage ) {
 			$output = $stage->process( $output, $opts );
-			if ( $output === null ) {
-				throw new \RuntimeException( 'Stage ' . get_class( $stage ) . ' generated null output.' );
-			}
 		}
 
 		$this->env->getPipelineFactory()->returnPipeline( $this );
@@ -151,7 +151,7 @@ class ParserPipeline {
 	 * @param array{sol:bool} $opts
 	 *  - atTopLevel: (bool) Whether we are processing the top-level document
 	 *  - sol: (bool) Whether input should be processed in start-of-line context
-	 * @return Document|array final DOM or array of token chnks
+	 * @return Element|array final <body> element or array of token chnks
 	 */
 	public function parseChunkily( string $input, array $opts ) {
 		$profile = $this->env->profiling() ? $this->env->pushNewProfile() : null;
@@ -201,7 +201,7 @@ class ParserPipeline {
 	 * @param array $initialState Once the pipeline is retrieved / constructed,
 	 * it will be initialized with this state.
 	 */
-	public function init( array $initialState = [] ) {
+	public function init( array $initialState = [] ): void {
 		// Reset pipeline state once per top-level doc.
 		// This clears state from any per-doc global state
 		// maintained across all pipelines used by the document.
@@ -210,6 +210,7 @@ class ParserPipeline {
 		$this->resetState( [
 			'toplevel' => $this->atTopLevel,
 			'toFragment' => $initialState['toFragment'] ?? true,
+			'tplInfo' => $initialState['tplInfo'] ?? null,
 		] );
 
 		// Set frame

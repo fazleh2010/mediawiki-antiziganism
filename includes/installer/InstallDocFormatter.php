@@ -27,15 +27,15 @@ class InstallDocFormatter {
 	/** @var string */
 	private $text;
 
-	public static function format( $text ) {
+	public static function format( string $text ): string {
 		return ( new self( $text ) )->execute();
 	}
 
-	protected function __construct( $text ) {
+	protected function __construct( string $text ) {
 		$this->text = $text;
 	}
 
-	protected function execute() {
+	protected function execute(): string {
 		$text = $this->text;
 		// Use Unix line endings, escape some wikitext stuff
 		$text = str_replace( [ '<', '{{', '[[', '__', "\r" ],

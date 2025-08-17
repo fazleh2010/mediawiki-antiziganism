@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\OutputTransform;
 
@@ -10,7 +11,7 @@ use MediaWiki\Tests\OutputTransform\DummyDOMTransformStage;
 use MediaWikiCoversValidator;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
-use Wikimedia\Parsoid\Core\PageBundle;
+use Wikimedia\Parsoid\Core\HtmlPageBundle;
 
 class ContentDOMTransformStageTest extends TestCase {
 	use MediaWikiCoversValidator;
@@ -30,7 +31,7 @@ class ContentDOMTransformStageTest extends TestCase {
 	public function testTransform() {
 		$html = "<div>some output</div>";
 		$po = new ParserOutput( $html );
-		PageBundleParserOutputConverter::applyPageBundleDataToParserOutput( new PageBundle( $html ), $po );
+		PageBundleParserOutputConverter::applyPageBundleDataToParserOutput( new HtmlPageBundle( $html ), $po );
 		$transform = $this->createStage();
 		$options = [ 'isParsoidContent' => true ];
 		$po = $transform->transform( $po, null, $options );

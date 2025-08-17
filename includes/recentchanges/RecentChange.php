@@ -20,7 +20,6 @@
 
 namespace MediaWiki\RecentChanges;
 
-use EmailNotification;
 use InvalidArgumentException;
 use MediaWiki\ChangeTags\Taggable;
 use MediaWiki\Config\Config;
@@ -299,14 +298,12 @@ class RecentChange implements Taggable {
 	 * @phan-return array{tables:string[],fields:string[],joins:array}
 	 */
 	public static function getQueryInfo() {
-		$commentQuery = MediaWikiServices::getInstance()->getCommentStore()->getJoin( 'rc_comment' );
-		// Optimizer sometimes refuses to pick up the correct join order (T311360)
-		$commentQuery['joins']['comment_rc_comment'][0] = 'STRAIGHT_JOIN';
 		return [
 			'tables' => [
 				'recentchanges',
-				'recentchanges_actor' => 'actor'
-			] + $commentQuery['tables'],
+				'recentchanges_actor' => 'actor',
+				'recentchanges_comment' => 'comment',
+			],
 			'fields' => [
 				'rc_id',
 				'rc_timestamp',
@@ -332,10 +329,15 @@ class RecentChange implements Taggable {
 				'rc_actor',
 				'rc_user' => 'recentchanges_actor.actor_user',
 				'rc_user_text' => 'recentchanges_actor.actor_name',
-			] + $commentQuery['fields'],
+				'rc_comment_text' => 'recentchanges_comment.comment_text',
+				'rc_comment_data' => 'recentchanges_comment.comment_data',
+				'rc_comment_id' => 'recentchanges_comment.comment_id',
+			],
 			'joins' => [
-				'recentchanges_actor' => [ 'STRAIGHT_JOIN', 'actor_id=rc_actor' ]
-			] + $commentQuery['joins'],
+				// Optimizer sometimes refuses to pick up the correct join order (T311360)
+				'recentchanges_actor' => [ 'STRAIGHT_JOIN', 'actor_id=rc_actor' ],
+				'recentchanges_comment' => [ 'STRAIGHT_JOIN', 'comment_id=rc_comment_id' ],
+			],
 		];
 	}
 
@@ -395,10 +397,9 @@ class RecentChange implements Taggable {
 			//      at least if it's not a special page.
 			//      However, newForCategorization() puts the ID of the categorized page into
 			//      rc_cur_id, but the title of the category page into rc_title.
-			$this->mPage = new PageReferenceValue(
+			$this->mPage = PageReferenceValue::localReference(
 				(int)$this->mAttribs['rc_namespace'],
-				$this->mAttribs['rc_title'],
-				PageReference::LOCAL
+				$this->mAttribs['rc_title']
 			);
 		}
 
@@ -447,7 +448,7 @@ class RecentChange implements Taggable {
 		}
 
 		# Strict mode fixups (not-NULL fields)
-		foreach ( [ 'minor', 'bot', 'new', 'patrolled', 'deleted' ] as $field ) {
+		foreach ( [ 'minor', 'bot', 'patrolled', 'deleted' ] as $field ) {
 			$this->mAttribs["rc_$field"] = (int)$this->mAttribs["rc_$field"];
 		}
 		# ...more fixups (NULL fields)
@@ -455,6 +456,11 @@ class RecentChange implements Taggable {
 			$this->mAttribs["rc_$field"] = isset( $this->mAttribs["rc_$field"] )
 				? (int)$this->mAttribs["rc_$field"]
 				: null;
+		}
+
+		// rc_new is deprecated, but we still support it for compatibility reasons.
+		if ( isset( $this->mAttribs['rc_new'] ) ) {
+			$this->mAttribs['rc_new'] = (int)$this->mAttribs['rc_new'];
 		}
 
 		$row = $this->mAttribs;
@@ -543,8 +549,8 @@ class RecentChange implements Taggable {
 				// Send emails or email jobs once this row is safely committed
 				$dbw->onTransactionCommitOrIdle(
 					function () {
-						$enotif = new EmailNotification();
-						$enotif->notifyOnPageChange( $this );
+						$notifier = new RecentChangeNotifier();
+						$notifier->notifyOnPageChange( $this );
 					},
 					__METHOD__
 				);
@@ -598,29 +604,6 @@ class RecentChange implements Taggable {
 			$feed = RCFeed::factory( $params );
 			$feed->notify( $this, $actionComment );
 		}
-	}
-
-	/**
-	 * Mark this RecentChange as patrolled
-	 *
-	 * NOTE: Can also return 'rcpatroldisabled', 'hookaborted' and
-	 * 'markedaspatrollederror-noautopatrol' as errors
-	 *
-	 * @deprecated since 1.43 Use markPatrolled() instead
-	 *
-	 * @param Authority $performer User performing the action
-	 * @param bool|null $auto Unused. Passing true logs a warning.
-	 * @param string|string[]|null $tags Change tags to add to the patrol log entry
-	 *   ($user should be able to add the specified tags before this is called)
-	 * @return array[] Array of permissions errors, see PermissionManager::getPermissionErrors()
-	 */
-	public function doMarkPatrolled( Authority $performer, $auto = null, $tags = null ) {
-		wfDeprecated( __METHOD__, '1.43' );
-		if ( $auto ) {
-			wfWarn( __METHOD__ . ' with $auto = true' );
-			return [];
-		}
-		return $this->markPatrolled( $performer, $tags )->toLegacyErrorArray();
 	}
 
 	/**
@@ -1310,8 +1293,8 @@ class RecentChange implements Taggable {
 	 * This is used for:
 	 *
 	 * - performance optimization in RecentChange::save().
-	 *   After an edit, whether or not we need to use the EmailNotification
-	 *   service to determine which EnotifNotifyJob to dispatch.
+	 *   After an edit, whether or not we need to use the RecentChangeNotifier
+	 *   to determine which RecentChangeNotifyJob to dispatch.
 	 *
 	 * - performance optmization in WatchlistManager.
 	 *   After using reset ("Mark all pages as seen") on Special:Watchlist,
@@ -1323,7 +1306,7 @@ class RecentChange implements Taggable {
 	 * FIXME: The $wgShowUpdatedMarker variable was added to this condtion
 	 * in 2008 (2cf12c973d, SVN r35001) because at the time the per-user
 	 * "last seen" marker for watchlist and page history, was managed by
-	 * the EmailNotification/UserMailed classes. As of August 2022, this
+	 * the RecentChangeNotifier/UserMailer classes. As of August 2022, this
 	 * appears to no longer be the case.
 	 *
 	 * @since 1.40

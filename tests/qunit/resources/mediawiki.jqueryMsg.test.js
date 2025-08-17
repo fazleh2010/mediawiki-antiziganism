@@ -653,7 +653,7 @@
 				key = testCase[ 0 ],
 				input = testCase[ 1 ],
 				output = testCase[ 2 ],
-				paramHref = key.slice( 0, 8 ) === 'wikilink' ? 'Example' : 'http://example.com',
+				paramHref = key.startsWith( 'wikilink' ) ? 'Example' : 'http://example.com',
 				paramText = 'Text';
 			mw.messages.set( key, input );
 			assert.htmlEqual(
@@ -1240,9 +1240,8 @@
 		this.suppressWarnings();
 		const logSpy = this.sandbox.spy( mw.log, 'warn' );
 
-		assert.strictEqual(
+		assert.false(
 			mw.message( 'invalid-wikitext' ).isParseable(),
-			false,
 			'Invalid wikitext: reported as not parseable'
 		);
 
@@ -1381,9 +1380,8 @@
 			'jQuery plugin $.fn.msg() works correctly'
 		);
 
-		assert.strictEqual(
+		assert.true(
 			mw.message( 'integration-test' ).isParseable(),
-			true,
 			'mw.message().isParseable() works correctly'
 		);
 

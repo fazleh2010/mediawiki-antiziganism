@@ -18,7 +18,7 @@
  * @file
  */
 
-use MediaWiki\Language\ReplacementArray;
+use Wikimedia\ReplacementArray;
 
 /**
  * Inuktitut specific code.
@@ -111,6 +111,7 @@ class IuConverter extends LanguageConverterSpecific {
 		];
 	}
 
+	/** @inheritDoc */
 	public function translate( $text, $toVariant ) {
 		// If $text is empty or only includes spaces, do nothing
 		// Otherwise translate it

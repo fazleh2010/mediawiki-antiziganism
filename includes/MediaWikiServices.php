@@ -153,7 +153,7 @@ use MediaWiki\Revision\RevisionStoreFactory;
 use MediaWiki\Revision\SlotRoleRegistry;
 use MediaWiki\Search\SearchResultThumbnailProvider;
 use MediaWiki\Search\TitleMatcher;
-use MediaWiki\Session\SessionManager;
+use MediaWiki\Session\SessionManagerInterface;
 use MediaWiki\Settings\Config\ConfigSchema;
 use MediaWiki\Shell\CommandFactory;
 use MediaWiki\Shell\ShellboxClientFactory;
@@ -173,6 +173,7 @@ use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\TitleFactory;
 use MediaWiki\Title\TitleFormatter;
 use MediaWiki\Title\TitleParser;
+use MediaWIki\Upload\UploadVerification;
 use MediaWiki\User\ActorMigration;
 use MediaWiki\User\ActorNormalization;
 use MediaWiki\User\ActorStore;
@@ -361,6 +362,7 @@ class MediaWikiServices extends ServiceContainer {
 		return self::$instance;
 	}
 
+	/** @inheritDoc */
 	public function getService( $name ) {
 		// TODO: in 1.37, getInstance() should fail if $globalInstanceAllowed is false! (T153256)
 		if ( !self::$globalInstanceAllowed && $this === self::$instance ) {
@@ -382,7 +384,7 @@ class MediaWikiServices extends ServiceContainer {
 	 * @return self The old MediaWikiServices object, so it can be restored later.
 	 */
 	public static function forceGlobalInstance( self $services ): self {
-		if ( !defined( 'MW_PHPUNIT_TEST' ) && !defined( 'MW_PARSER_TEST' ) ) {
+		if ( !defined( 'MW_PHPUNIT_TEST' ) ) {
 			throw new LogicException( __METHOD__ . ' must not be used outside unit tests.' );
 		}
 
@@ -473,7 +475,7 @@ class MediaWikiServices extends ServiceContainer {
 			// the other instance. Skip this service in this case. See T143974
 			try {
 				$oldService = $other->peekService( $name );
-			} catch ( NoSuchServiceException $e ) {
+			} catch ( NoSuchServiceException ) {
 				continue;
 			}
 
@@ -514,7 +516,7 @@ class MediaWikiServices extends ServiceContainer {
 	 * storage layer will result in an error.
 	 *
 	 * @since 1.28
-	 * @deprecated since 1.40, use disableStorage() instead.
+	 * @deprecated since 1.40, use disableStorage() instead. Hard deprecated in 1.45.
 	 *
 	 * @warning This is intended for extreme situations, see the documentation of disableStorage() for details.
 	 *
@@ -522,6 +524,7 @@ class MediaWikiServices extends ServiceContainer {
 	 * @see resetChildProcessServices()
 	 */
 	public static function disableStorageBackend() {
+		wfDeprecated( __METHOD__, '1.40' );
 		$services = self::getInstance();
 		$services->disableStorage();
 	}
@@ -645,7 +648,7 @@ class MediaWikiServices extends ServiceContainer {
 	 *        from the container.
 	 */
 	public function resetServiceForTesting( $name, $destroy = true ) {
-		if ( !defined( 'MW_PHPUNIT_TEST' ) && !defined( 'MW_PARSER_TEST' ) ) {
+		if ( !defined( 'MW_PHPUNIT_TEST' ) ) {
 			throw new LogicException( 'resetServiceForTesting() must not be used outside unit tests.' );
 		}
 
@@ -679,7 +682,6 @@ class MediaWikiServices extends ServiceContainer {
 	 */
 	public static function failIfResetNotAllowed( $method ) {
 		if ( !defined( 'MW_PHPUNIT_TEST' )
-			&& !defined( 'MW_PARSER_TEST' )
 			&& !defined( 'MEDIAWIKI_INSTALL' )
 			&& !defined( 'RUN_MAINTENANCE_IF_MAIN' )
 			&& defined( 'MW_SERVICE_BOOTSTRAP_COMPLETE' )
@@ -973,9 +975,14 @@ class MediaWikiServices extends ServiceContainer {
 
 	/**
 	 * @since 1.29
-	 * @deprecated since 1.41 use ::getReadOnlyMode() instead
+	 * @deprecated since 1.41, use ::getReadOnlyMode() service together
+	 *   with ::getConfiguredReason() and ::isConfiguredReadOnly() to
+	 *   check when a site is set to read-only mode.
+	 *
+	 *   Hard deprecated in 1.45.
 	 */
 	public function getConfiguredReadOnlyMode(): ConfiguredReadOnlyMode {
+		wfDeprecated( __METHOD__, '1.41' );
 		return $this->getService( 'ConfiguredReadOnlyMode' );
 	}
 
@@ -1540,7 +1547,7 @@ class MediaWikiServices extends ServiceContainer {
 	}
 
 	/**
-	 * @since 1.44
+	 * @since 1.45
 	 */
 	public function getNotificationService(): NotificationService {
 		return $this->getService( 'NotificationService' );
@@ -1915,7 +1922,7 @@ class MediaWikiServices extends ServiceContainer {
 	/**
 	 * @since 1.44
 	 */
-	public function getSessionManager(): SessionManager {
+	public function getSessionManager(): SessionManagerInterface {
 		return $this->getService( 'SessionManager' );
 	}
 
@@ -2103,6 +2110,13 @@ class MediaWikiServices extends ServiceContainer {
 	 */
 	public function getUploadRevisionImporter(): UploadRevisionImporter {
 		return $this->getService( 'UploadRevisionImporter' );
+	}
+
+	/**
+	 * @since 1.45
+	 */
+	public function getUploadVerification(): UploadVerification {
+		return $this->getService( 'UploadVerification' );
 	}
 
 	/**

@@ -1,8 +1,5 @@
 <?php
 declare( strict_types = 1 );
-// Suppress UnusedPluginSuppression because
-// Phan on PHP 7.4 and PHP 8.1 need different suppressions
-// @phan-file-suppress UnusedPluginSuppression,UnusedPluginFileSuppression
 
 /**
  * Front-end/Wrapper for a particular tree builder, in this case the
@@ -13,13 +10,17 @@ declare( strict_types = 1 );
 namespace Wikimedia\Parsoid\Wt2Html\TreeBuilder;
 
 use Generator;
+use Wikimedia\Assert\Assert;
 use Wikimedia\Parsoid\Config\Env;
+use Wikimedia\Parsoid\DOM\DocumentFragment;
+use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
 use Wikimedia\Parsoid\NodeData\DataMw;
 use Wikimedia\Parsoid\NodeData\DataParsoid;
 use Wikimedia\Parsoid\NodeData\NodeData;
 use Wikimedia\Parsoid\NodeData\TempData;
 use Wikimedia\Parsoid\Tokens\CommentTk;
+use Wikimedia\Parsoid\Tokens\CompoundTk;
 use Wikimedia\Parsoid\Tokens\EndTagTk;
 use Wikimedia\Parsoid\Tokens\EOFTk;
 use Wikimedia\Parsoid\Tokens\NlTk;
@@ -138,6 +139,9 @@ class TreeBuilderStage extends PipelineStage {
 		}
 	}
 
+	/**
+	 * @return DocumentFragment|Element
+	 */
 	public function finalizeDOM(): Node {
 		// Check if the EOFTk actually made it all the way through, and flag the
 		// page where it did not!
@@ -175,9 +179,10 @@ class TreeBuilderStage extends PipelineStage {
 	/**
 	 * Keep this in sync with `DOMDataUtils.setNodeData()`
 	 *
-	 * @param array $attribs
+	 * @param array<string,string> $attribs
 	 * @param DataParsoid $dataParsoid
-	 * @return array
+	 * @param ?DataMw $dataMw
+	 * @return array<string,string>
 	 */
 	private function stashDataAttribs( array $attribs, DataParsoid $dataParsoid, ?DataMw $dataMw ): array {
 		$data = new NodeData;
@@ -256,6 +261,10 @@ class TreeBuilderStage extends PipelineStage {
 			$data = $token instanceof NlTk ? "\n" : $token;
 			// Combine string tokens to be finalized later
 			$this->textContentBuffer .= $data;
+		} elseif ( $token instanceof CompoundTk ) {
+			$this->env->trace( 'html', $this->pipelineId, "---- START NESTED TOKENS ----" );
+			$this->processChunk( $token->getNestedTokens() );
+			$this->env->trace( 'html', $this->pipelineId, "---- END NESTED TOKENS ----" );
 		} elseif ( $token instanceof TagTk ) {
 			$tName = $token->getName();
 			if ( $tName === 'table' ) {
@@ -283,12 +292,6 @@ class TreeBuilderStage extends PipelineStage {
 			}
 		} elseif ( $token instanceof SelfclosingTagTk ) {
 			$tName = $token->getName();
-
-			// Re-expand an empty-line meta-token into its constituent comment + WS tokens
-			if ( TokenUtils::isEmptyLineMetaToken( $token ) ) {
-				$this->processChunk( $dataParsoid->tokens );
-				return;
-			}
 
 			$wasInserted = false;
 
@@ -372,7 +375,6 @@ class TreeBuilderStage extends PipelineStage {
 			}
 		} elseif ( $token instanceof CommentTk ) {
 			$dp = $token->dataParsoid;
-			// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
 			if ( isset( $dp->unclosedComment ) ) {
 				// Add a marker meta tag to aid accurate DSR computation
 				$attribs = [ 'typeof' => 'mw:Placeholder/UnclosedComment' ];
@@ -402,8 +404,8 @@ class TreeBuilderStage extends PipelineStage {
 		if ( ( $dp->stx ?? null ) !== 'html' &&
 			( $name === 'td' || $name === 'tr' || $name === 'th' )
 		) {
-			// A stripped wikitext-syntax table tag outside of a table. Re-insert the original
-			// page source.
+			// A stripped wikitext-syntax table tag outside of a table.
+			// Re-insert the original page source.
 			if ( !empty( $dp->tsr ) &&
 				$dp->tsr->start !== null && $dp->tsr->end !== null
 			) {
@@ -442,7 +444,7 @@ class TreeBuilderStage extends PipelineStage {
 	 */
 	private function insertPlaceholderMeta(
 		string $name, DataParsoid $dp, bool $isStart
-	) {
+	): void {
 		// If node is in a position where the placeholder node will get fostered
 		// out, don't bother adding one since the browser and other compliant
 		// clients will move the placeholder out of the table.
@@ -480,25 +482,32 @@ class TreeBuilderStage extends PipelineStage {
 	/**
 	 * @inheritDoc
 	 */
-	public function process( $input, array $opts ) {
+	public function process(
+		string|array|DocumentFragment|Element $input,
+		array $options
+	): array|Element|DocumentFragment {
+		Assert::invariant( is_array( $input ), "Input should be an array" );
 		'@phan-var array $input'; // @var array $input
 		$this->processChunk( $input );
-		// @phan-suppress-next-line PhanTypeMismatchReturnSuperType
 		return $this->finalizeDOM();
 	}
 
 	/**
 	 * @inheritDoc
 	 */
-	public function processChunkily( $input, array $opts ): Generator {
+	public function processChunkily(
+		string|array|DocumentFragment|Element $input,
+		array $options
+	): Generator {
 		if ( $this->prevStage ) {
-			foreach ( $this->prevStage->processChunkily( $input, $opts ) as $chunk ) {
+			foreach ( $this->prevStage->processChunkily( $input, $options ) as $chunk ) {
+				Assert::invariant( is_array( $chunk ), "Chunk should be an array" );
 				'@phan-var array $chunk'; // @var array $chunk
 				$this->processChunk( $chunk );
 			}
 			yield $this->finalizeDOM();
 		} else {
-			yield $this->process( $input, $opts );
+			yield $this->process( $input, $options );
 		}
 	}
 

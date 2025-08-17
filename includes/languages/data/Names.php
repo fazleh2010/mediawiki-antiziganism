@@ -62,6 +62,7 @@ class Names {
 		'aeb-arab' => 'تونسي', # Tunisian Arabic (Arabic Script)
 		'aeb-latn' => 'Tûnsî', # Tunisian Arabic (Latin Script)
 		'af' => 'Afrikaans', # Afrikaans
+		'aig' => 'Aanteegan an\' Baabyuudan', # Antiguan and Barbudan Creole English
 		'aln' => 'Gegë', # Gheg Albanian
 		'als' => 'Alemannisch', # Alemannic -- not a valid code, for compatibility. See gsw.
 		'alt' => 'алтай тил', # Altai, T254854
@@ -164,6 +165,7 @@ class Names {
 		'dga' => 'Dagaare', # Southern Dagaare
 		'din' => 'Thuɔŋjäŋ', # Dinka
 		'diq' => 'Zazaki', # Zazaki
+		'dlg' => 'долган тыла', # Dolgan
 		'dsb' => 'dolnoserbski', # Lower Sorbian
 		'dtp' => 'Kadazandusun', # Central Dusun
 		'dty' => 'डोटेली', # Doteli
@@ -313,8 +315,10 @@ class Names {
 		'kri' => 'Krio', # Krio
 		'krj' => 'Kinaray-a', # Kinaray-a
 		'krl' => 'karjal', # Karelian
-		'ks' => 'कॉशुर / کٲشُر', # Kashmiri (multiple scripts - defaults to Perso-Arabic)
+		'ks' => 'کٲشُر', # Kashmiri (defaults to Perso-Arabic script)
+		# Backwards compatibility
 		'ks-arab' => 'کٲشُر', # Kashmiri (Perso-Arabic script)
+		# Backwards compatibility, deprecated, to be removed
 		'ks-deva' => 'कॉशुर', # Kashmiri (Devanagari script)
 		'ksh' => 'Ripoarisch', # Ripuarian
 		'ksw' => 'စှီၤ', # S'gaw Karen
@@ -386,10 +390,10 @@ class Names {
 		'mzn' => 'مازِرونی', # Mazanderani
 		'na' => 'Dorerin Naoero', # Nauruan
 		'nah' => 'Nāhuatl', # Nahuatl (added to ISO 639-3 on 2006-10-31)
-		'nan' => '閩南語 / Bân-lâm-gú', # Minnan (multiple scripts), T10217, T354937
+		'nan' => '閩南語 / Bân-lâm-gí', # Minnan (multiple scripts), T10217, T354937
 		'nan-hant' => '閩南語（傳統漢字）', # Minnan (Traditional Han script), T354937
-		'nan-latn-pehoeji' => 'Bân-lâm-gú (Pe̍h-ōe-jī)', # Minnan (Pe̍h-ōe-jī), T354937
-		'nan-latn-tailo' => 'Bân-lâm-gú (Tâi-lô)', # Minnan (Tâi-lô), T354937
+		'nan-latn-pehoeji' => 'Bân-lâm-gí (Pe̍h-ōe-jī)', # Minnan (Pe̍h-ōe-jī), T354937
+		'nan-latn-tailo' => 'Bân-lâm-gí (Tâi-lô)', # Minnan (Tâi-lô), T354937
 		'nap' => 'Napulitano', # Neapolitan, T45793
 		'nb' => 'norsk bokmål', # Norwegian (Bokmal)
 		'nds' => 'Plattdüütsch', # Low German ''or'' Low Saxon
@@ -592,6 +596,7 @@ class Names {
 		'yi' => 'ייִדיש', # Yiddish
 		'yo' => 'Yorùbá', # Yoruba
 		'yrl' => 'Nhẽẽgatú', # Nheengatu
+		'yua' => 'maaya t’aan', # Yucatec Maya
 		'yue' => '粵語', # Cantonese (multiple scripts - defaults to Traditional Han)
 		'yue-hans' => '粵语（简体）', # Cantonese (Simplified Han)
 		'yue-hant' => '粵語（繁體）', # Cantonese (Traditional Han)

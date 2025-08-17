@@ -130,26 +130,26 @@ class CoreParserFunctions {
 			'interlanguagelink',
 		];
 		foreach ( $noHashFunctions as $func ) {
-			$parser->setFunctionHook( $func, [ __CLASS__, $func ], Parser::SFH_NO_HASH );
+			$parser->setFunctionHook( $func, [ self::class, $func ], Parser::SFH_NO_HASH );
 		}
 
-		$parser->setFunctionHook( 'int', [ __CLASS__, 'intFunction' ], Parser::SFH_NO_HASH );
-		$parser->setFunctionHook( 'special', [ __CLASS__, 'special' ] );
-		$parser->setFunctionHook( 'speciale', [ __CLASS__, 'speciale' ] );
-		$parser->setFunctionHook( 'tag', [ __CLASS__, 'tagObj' ], Parser::SFH_OBJECT_ARGS );
-		$parser->setFunctionHook( 'formatdate', [ __CLASS__, 'formatDate' ] );
+		$parser->setFunctionHook( 'int', [ self::class, 'intFunction' ], Parser::SFH_NO_HASH );
+		$parser->setFunctionHook( 'special', [ self::class, 'special' ] );
+		$parser->setFunctionHook( 'speciale', [ self::class, 'speciale' ] );
+		$parser->setFunctionHook( 'tag', [ self::class, 'tagObj' ], Parser::SFH_OBJECT_ARGS );
+		$parser->setFunctionHook( 'formatdate', [ self::class, 'formatDate' ] );
 
 		if ( $allowDisplayTitle ) {
 			$parser->setFunctionHook(
 				'displaytitle',
-				[ __CLASS__, 'displaytitle' ],
+				[ self::class, 'displaytitle' ],
 				Parser::SFH_NO_HASH
 			);
 		}
 		if ( $allowSlowParserFunctions ) {
 			$parser->setFunctionHook(
 				'pagesinnamespace',
-				[ __CLASS__, 'pagesinnamespace' ],
+				[ self::class, 'pagesinnamespace' ],
 				Parser::SFH_NO_HASH
 			);
 		}
@@ -196,6 +196,11 @@ class CoreParserFunctions {
 		return $date;
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $part1
+	 * @return array|string
+	 */
 	public static function ns( $parser, $part1 = '' ) {
 		if ( intval( $part1 ) || $part1 == "0" ) {
 			$index = intval( $part1 );
@@ -209,6 +214,11 @@ class CoreParserFunctions {
 		}
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $part1
+	 * @return array|string
+	 */
 	public static function nse( $parser, $part1 = '' ) {
 		$ret = self::ns( $parser, $part1 );
 		if ( is_string( $ret ) ) {
@@ -257,10 +267,20 @@ class CoreParserFunctions {
 		return $func( $parser->killMarkers( $s ) );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @return array|string
+	 */
 	public static function lcfirst( $parser, $s = '' ) {
 		return $parser->getContentLanguage()->lcfirst( $s );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @return array|string
+	 */
 	public static function ucfirst( $parser, $s = '' ) {
 		return $parser->getContentLanguage()->ucfirst( $s );
 	}
@@ -283,10 +303,22 @@ class CoreParserFunctions {
 		return $parser->markerSkipCallback( $s, [ $parser->getContentLanguage(), 'uc' ] );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function localurl( $parser, $s = '', $arg = null ) {
 		return self::urlFunction( 'getLocalURL', $s, $arg );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function localurle( $parser, $s = '', $arg = null ) {
 		$temp = self::urlFunction( 'getLocalURL', $s, $arg );
 		if ( !is_string( $temp ) ) {
@@ -296,10 +328,22 @@ class CoreParserFunctions {
 		}
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function fullurl( $parser, $s = '', $arg = null ) {
 		return self::urlFunction( 'getFullURL', $s, $arg );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function fullurle( $parser, $s = '', $arg = null ) {
 		$temp = self::urlFunction( 'getFullURL', $s, $arg );
 		if ( !is_string( $temp ) ) {
@@ -309,10 +353,22 @@ class CoreParserFunctions {
 		}
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function canonicalurl( $parser, $s = '', $arg = null ) {
 		return self::urlFunction( 'getCanonicalURL', $s, $arg );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function canonicalurle( $parser, $s = '', $arg = null ) {
 		$temp = self::urlFunction( 'getCanonicalURL', $s, $arg );
 		if ( !is_string( $temp ) ) {
@@ -322,6 +378,12 @@ class CoreParserFunctions {
 		}
 	}
 
+	/**
+	 * @param string $func
+	 * @param string $s
+	 * @param string|null $arg
+	 * @return array|string
+	 */
 	public static function urlFunction( $func, $s = '', $arg = null ) {
 		# Due to order of execution of a lot of bits, the values might be encoded
 		# before arriving here; if that's true, then the title can't be created
@@ -347,20 +409,43 @@ class CoreParserFunctions {
 	/**
 	 * @param Parser $parser
 	 * @param string $num
-	 * @param string|null $arg
+	 * @param string $arg1
+	 * @param string $arg2
 	 * @return string
 	 */
-	public static function formatnum( $parser, $num = '', $arg = null ) {
-		if ( self::matchAgainstMagicword( $parser->getMagicWordFactory(), 'rawsuffix', $arg ) ) {
-			$func = [ $parser->getTargetLanguage(), 'parseFormattedNumber' ];
-		} elseif (
-			self::matchAgainstMagicword( $parser->getMagicWordFactory(), 'nocommafysuffix', $arg )
-		) {
-			$func = [ $parser->getTargetLanguage(), 'formatNumNoSeparators' ];
-			$func = self::getLegacyFormatNum( $parser, $func );
+	public static function formatnum( $parser, $num = '', $arg1 = '', $arg2 = '' ) {
+		static $magicWords = null;
+		if ( $magicWords === null ) {
+			$magicWords = $parser->getMagicWordFactory()->newArray( [
+				'rawsuffix',
+				'nocommafysuffix',
+				'lossless',
+			] );
+		}
+
+		$modifiers = [ $magicWords->matchStartToEnd( $arg1 ), $magicWords->matchStartToEnd( $arg2 ) ];
+		$targetLanguage = $parser->getTargetLanguage();
+		if ( in_array( 'rawsuffix', $modifiers, true ) ) {
+			$func = [ $targetLanguage, 'parseFormattedNumber' ];
 		} else {
-			$func = [ $parser->getTargetLanguage(), 'formatNum' ];
-			$func = self::getLegacyFormatNum( $parser, $func );
+			if ( in_array( 'nocommafysuffix', $modifiers, true ) ) {
+				$func = [ $targetLanguage, 'formatNumNoSeparators' ];
+			} else {
+				$func = [ $targetLanguage, 'formatNum' ];
+				$func = self::getLegacyFormatNum( $parser, $func );
+			}
+			if ( in_array( 'lossless', $modifiers, true ) ) {
+				$potentiallyLossyFunc = $func;
+				$func = static function ( $num ) use ( $targetLanguage, $potentiallyLossyFunc ) {
+					$formatted = $potentiallyLossyFunc( $num );
+					$parsed = $targetLanguage->parseFormattedNumber( $formatted );
+					if ( $num === $parsed ) {
+						return $formatted;
+					} else {
+						return (string)$num;
+					}
+				};
+			}
 		}
 		return $parser->markerSkipCallback( $num, $func );
 	}
@@ -437,7 +522,7 @@ class CoreParserFunctions {
 		$genderCache = MediaWikiServices::getInstance()->getGenderCache();
 		if ( $user ) {
 			$gender = $genderCache->getGenderOf( $user, __METHOD__ );
-		} elseif ( $username === '' && $parser->getOptions()->getInterfaceMessage() ) {
+		} elseif ( $username === '' && $parser->getOptions()->isMessage() ) {
 			$gender = $genderCache->getGenderOf( $parser->getOptions()->getUserIdentity(), __METHOD__ );
 		}
 		$ret = $parser->getTargetLanguage()->gender( $gender, $forms );
@@ -612,26 +697,56 @@ class CoreParserFunctions {
 		return $language->formatNum( $num );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofpages( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::pages(), $raw, $parser->getTargetLanguage() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofusers( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::users(), $raw, $parser->getTargetLanguage() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofactiveusers( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::activeUsers(), $raw, $parser->getTargetLanguage() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofarticles( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::articles(), $raw, $parser->getTargetLanguage() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberoffiles( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::images(), $raw, $parser->getTargetLanguage() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofadmins( $parser, $raw = null ) {
 		return self::formatRaw(
 			SiteStats::numberingroup( 'sysop' ),
@@ -640,11 +755,22 @@ class CoreParserFunctions {
 		);
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberofedits( $parser, $raw = null ) {
 		return self::formatRaw( SiteStats::edits(), $raw, $parser->getTargetLanguage() );
 	}
 
-	public static function pagesinnamespace( $parser, $namespace = 0, $raw = null ) {
+	/**
+	 * @param Parser $parser
+	 * @param string $namespace
+	 * @param string|null $raw
+	 * @return array|string
+	 */
+	public static function pagesinnamespace( $parser, $namespace = '0', $raw = null ) {
 		return self::formatRaw(
 			SiteStats::pagesInNs( intval( $namespace ) ),
 			$raw,
@@ -652,6 +778,12 @@ class CoreParserFunctions {
 		);
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $name
+	 * @param string|null $raw
+	 * @return array|string
+	 */
 	public static function numberingroup( $parser, $name = '', $raw = null ) {
 		return self::formatRaw(
 			SiteStats::numberingroup( strtolower( $name ) ),
@@ -694,6 +826,11 @@ class CoreParserFunctions {
 		return str_replace( '_', ' ', $t->getNsText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function namespacee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -702,6 +839,11 @@ class CoreParserFunctions {
 		return wfUrlencode( $t->getNsText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function namespacenumber( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -710,6 +852,11 @@ class CoreParserFunctions {
 		return (string)$t->getNamespace();
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function talkspace( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null || !$t->canHaveTalkPage() ) {
@@ -718,6 +865,11 @@ class CoreParserFunctions {
 		return str_replace( '_', ' ', $t->getTalkNsText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function talkspacee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null || !$t->canHaveTalkPage() ) {
@@ -726,6 +878,11 @@ class CoreParserFunctions {
 		return wfUrlencode( $t->getTalkNsText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function subjectspace( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -734,6 +891,11 @@ class CoreParserFunctions {
 		return str_replace( '_', ' ', $t->getSubjectNsText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return array|string
+	 */
 	public static function subjectspacee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -757,6 +919,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function pagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -765,6 +932,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getPartialURL() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function fullpagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -773,6 +945,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getPrefixedText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function fullpagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -781,6 +958,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getPrefixedURL() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function subpagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -789,6 +971,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getSubpageText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function subpagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -797,6 +984,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getSubpageUrlForm() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function rootpagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -805,6 +997,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getRootText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function rootpagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -813,6 +1010,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( wfUrlencode( str_replace( ' ', '_', $t->getRootText() ) ) );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function basepagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -821,6 +1023,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getBaseText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function basepagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -829,6 +1036,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( wfUrlencode( str_replace( ' ', '_', $t->getBaseText() ) ) );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function talkpagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null || !$t->canHaveTalkPage() ) {
@@ -837,6 +1049,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getTalkPage()->getPrefixedText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function talkpagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null || !$t->canHaveTalkPage() ) {
@@ -845,6 +1062,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getTalkPage()->getPrefixedURL() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function subjectpagename( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -853,6 +1075,11 @@ class CoreParserFunctions {
 		return wfEscapeWikiText( $t->getSubjectPage()->getPrefixedText() );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string|null $title
+	 * @return string
+	 */
 	public static function subjectpagenamee( $parser, $title = null ) {
 		$t = self::makeTitle( $parser, $title );
 		if ( $t === null ) {
@@ -1052,7 +1279,7 @@ class CoreParserFunctions {
 			}
 			try {
 				$lang = $languageFactory->getLanguage( $code );
-			} catch ( InvalidArgumentException $ex ) {
+			} catch ( InvalidArgumentException ) {
 				$parser->addTrackingCategory( 'bad-language-code-category' );
 				return 'ltr';
 			}
@@ -1118,11 +1345,25 @@ class CoreParserFunctions {
 		}
 	}
 
-	public static function padleft( $parser, $string = '', $length = 0, $padding = '0' ) {
+	/**
+	 * @param Parser $parser
+	 * @param string $string
+	 * @param string $length
+	 * @param string $padding
+	 * @return string
+	 */
+	public static function padleft( $parser, $string = '', $length = '0', $padding = '0' ) {
 		return self::pad( $parser, $string, $length, $padding, STR_PAD_LEFT );
 	}
 
-	public static function padright( $parser, $string = '', $length = 0, $padding = '0' ) {
+	/**
+	 * @param Parser $parser
+	 * @param string $string
+	 * @param string $length
+	 * @param string $padding
+	 * @return string
+	 */
+	public static function padright( $parser, $string = '', $length = '0', $padding = '0' ) {
 		return self::pad( $parser, $string, $length, $padding );
 	}
 
@@ -1137,6 +1378,11 @@ class CoreParserFunctions {
 		return Sanitizer::safeEncodeAttribute( $section );
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $text
+	 * @return string
+	 */
 	public static function special( $parser, $text ) {
 		[ $page, $subpage ] = MediaWikiServices::getInstance()->getSpecialPageFactory()->
 			resolveAlias( $text );
@@ -1150,6 +1396,11 @@ class CoreParserFunctions {
 		}
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $text
+	 * @return string
+	 */
 	public static function speciale( $parser, $text ) {
 		return wfUrlencode( str_replace( ' ', '_', self::special( $parser, $text ) ) );
 	}
@@ -1317,7 +1568,7 @@ class CoreParserFunctions {
 	 *
 	 * @param Parser $parser
 	 * @param Title $title
-	 * @param string $vary ParserOutput vary-* flag
+	 * @param ParserOutputFlags $vary ParserOutput vary-* flag
 	 * @return RevisionRecord|null
 	 * @since 1.23
 	 */
@@ -1368,13 +1619,13 @@ class CoreParserFunctions {
 		}
 
 		if ( $isSelfReferential ) {
-			wfDebug( __METHOD__ . ": used current revision, setting $vary" );
+			wfDebug( __METHOD__ . ": used current revision, setting {$vary->value}" );
 			// Upon page save, the result of the parser function using this might change
 			$parserOutput->setOutputFlag( $vary );
 			if ( $vary === ParserOutputFlags::VARY_REVISION_SHA1 && $revisionRecord ) {
 				try {
 					$sha1 = $revisionRecord->getSha1();
-				} catch ( RevisionAccessException $e ) {
+				} catch ( RevisionAccessException ) {
 					$sha1 = null;
 				}
 				$parserOutput->setRevisionUsedSha1Base36( $sha1 );
@@ -1699,6 +1950,13 @@ class CoreParserFunctions {
 		return '';
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $prefix
+	 * @param string $title
+	 * @param string|null $linkText
+	 * @return array|string
+	 */
 	public static function interwikilink( $parser, $prefix = '', $title = '', $linkText = null ) {
 		$services = MediaWikiServices::getInstance();
 		if (
@@ -1724,6 +1982,13 @@ class CoreParserFunctions {
 		return [ 'found' => false ];
 	}
 
+	/**
+	 * @param Parser $parser
+	 * @param string $prefix
+	 * @param string $title
+	 * @param string|null $linkText
+	 * @return array|string
+	 */
 	public static function interlanguagelink( $parser, $prefix = '', $title = '', $linkText = null ) {
 		$services = MediaWikiServices::getInstance();
 		$extraInterlanguageLinkPrefixes = $services->getMainConfig()->get(

@@ -28,6 +28,7 @@ use MediaWiki\Language\RawMessage;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MediaWikiServices;
 use MediaWiki\Message\Message;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\Request\WebRequest;
 use Throwable;
 use Wikimedia\AtEase;
@@ -120,6 +121,7 @@ class MWExceptionRenderer {
 		} else {
 			ob_start();
 			self::statusHeader( 500 );
+			self::cspHeader();
 			self::header( 'Content-Type: text/html; charset=UTF-8' );
 			if ( $eNew ) {
 				$message = "MediaWiki internal error.\n\n";
@@ -196,6 +198,7 @@ class MWExceptionRenderer {
 			// Content-Type is set by OutputPage::output
 			$out->output();
 		} else {
+			self::cspHeader();
 			self::header( 'Content-Type: text/html; charset=UTF-8' );
 			$pageTitle = self::msg( 'internalerror', 'Internal error' );
 			echo "<!DOCTYPE html>\n" .
@@ -279,7 +282,7 @@ class MWExceptionRenderer {
 		// NOTE: Keep logic in sync with MWException::msg.
 		try {
 			$res = wfMessage( $key, ...$params );
-		} catch ( Exception $e ) {
+		} catch ( Exception ) {
 			// Fallback to static message text and generic sitename.
 			// Avoid live config as this must work before Setup/MediaWikiServices finish.
 			$res = new RawMessage( $fallback, $params );
@@ -351,7 +354,7 @@ class MWExceptionRenderer {
 				return null;
 			}
 			$text = $msg->text();
-		} catch ( Exception $e2 ) {
+		} catch ( Exception ) {
 			return null;
 		}
 		return $text;
@@ -440,8 +443,15 @@ class MWExceptionRenderer {
 		}
 
 		$html .= '</body></html>';
+		self::cspHeader();
 		self::header( 'Content-Type: text/html; charset=UTF-8' );
 		echo $html;
+	}
+
+	private static function cspHeader(): void {
+		if ( !headers_sent() ) {
+			ContentSecurityPolicy::sendRestrictiveHeader();
+		}
 	}
 }
 

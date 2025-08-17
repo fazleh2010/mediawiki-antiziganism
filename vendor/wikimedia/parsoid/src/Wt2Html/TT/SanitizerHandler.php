@@ -15,16 +15,19 @@ namespace Wikimedia\Parsoid\Wt2Html\TT;
 
 use Wikimedia\Parsoid\Config\SiteConfig;
 use Wikimedia\Parsoid\Core\Sanitizer;
+use Wikimedia\Parsoid\Tokens\CompoundTk;
+use Wikimedia\Parsoid\Tokens\EmptyLineTk;
 use Wikimedia\Parsoid\Tokens\EndTagTk;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\TokenUtils;
 use Wikimedia\Parsoid\Wikitext\Consts;
 use Wikimedia\Parsoid\Wt2Html\Frame;
 use Wikimedia\Parsoid\Wt2Html\TokenHandlerPipeline;
 
-class SanitizerHandler extends TokenHandler {
+class SanitizerHandler extends UniversalTokenHandler {
 	/** @var bool */
 	private $inTemplate;
 
@@ -48,16 +51,14 @@ class SanitizerHandler extends TokenHandler {
 	private function sanitizeToken(
 		SiteConfig $siteConfig, Frame $frame, $token, bool $inTemplate
 	) {
-		$i = null;
-		$l = null;
-		$kv = null;
 		$attribs = $token->attribs ?? null;
 		$allowedTags = Consts::$Sanitizer['AllowedLiteralTags'];
 
-		if ( TokenUtils::isHTMLTag( $token )
-			&& ( empty( $allowedTags[$token->getName()] )
-				|| ( $token instanceof EndTagTk && !empty( self::NO_END_TAG_SET[$token->getName()] ) )
-			)
+		if (
+			$token instanceof XMLTagTk &&
+			TokenUtils::isHTMLTag( $token ) &&
+			( empty( $allowedTags[$token->getName()] ) ||
+				( $token instanceof EndTagTk && !empty( self::NO_END_TAG_SET[$token->getName()] ) ) )
 		) { // unknown tag -- convert to plain text
 			if ( !$inTemplate && !empty( $token->dataParsoid->tsr ) ) {
 				// Just get the original token source, so that we can avoid
@@ -124,6 +125,14 @@ class SanitizerHandler extends TokenHandler {
 		$this->inTemplate = $options['inTemplate'];
 	}
 
+	/** @inheritDoc */
+	public function onCompoundTk( CompoundTk $ctk, TokenHandler $tokensHandler ): ?array {
+		if ( !( $ctk instanceof EmptyLineTk ) ) {
+			$ctk->setNestedTokens( $tokensHandler->process( $ctk->getNestedTokens() ) );
+		}
+		return null;
+	}
+
 	/**
 	 * @inheritDoc
 	 */
@@ -133,12 +142,6 @@ class SanitizerHandler extends TokenHandler {
 		}
 		$env = $this->env;
 		$env->trace( 'sanitizer', $this->pipelineId, $token );
-
-		// Pass through a transparent line meta-token
-		if ( TokenUtils::isEmptyLineMetaToken( $token ) ) {
-			$env->trace( 'sanitizer', $this->pipelineId, '--unchanged--' );
-			return null;
-		}
 
 		$newToken = $this->sanitizeToken(
 			$env->getSiteConfig(), $this->manager->getFrame(), $token, $this->inTemplate

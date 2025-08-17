@@ -25,6 +25,7 @@
  * @ingroup Maintenance
  */
 
+use MediaWiki\MainConfigNames;
 use MediaWiki\Title\Title;
 use Wikimedia\Rdbms\IDBAccessObject;
 
@@ -104,15 +105,30 @@ class TitleCleanup extends TableCleanup {
 	 * @return bool
 	 */
 	protected function fileExists( $name ) {
-		// XXX: Doesn't actually check for file existence, just presence of image record.
-		// This is reasonable, since cleanupImages.php only iterates over the image table.
+		// XXX: Doesn't actually check for file existence, just presence of image/file record.
+		// This is reasonable, since cleanupImages.php only iterates over the image/file table.
 		$dbr = $this->getReplicaDB();
-		$row = $dbr->newSelectQueryBuilder()
-			->select( '*' )
-			->from( 'image' )
-			->where( [ 'img_name' => $name ] )
-			->caller( __METHOD__ )
-			->fetchRow();
+		$migrationStage = $this->getServiceContainer()->getMainConfig()->get(
+			MainConfigNames::FileSchemaMigrationStage
+		);
+		if ( $migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+			$row = $dbr->newSelectQueryBuilder()
+				->select( '*' )
+				->from( 'image' )
+				->where( [ 'img_name' => $name ] )
+				->caller( __METHOD__ )
+				->fetchRow();
+		} else {
+			$row = $dbr->newSelectQueryBuilder()
+				->select( '*' )
+				->from( 'file' )
+				->where( [
+					'file_name' => $name,
+					'file_deleted' => 0,
+				] )
+				->caller( __METHOD__ )
+				->fetchRow();
+		}
 
 		return $row !== false;
 	}
@@ -123,7 +139,7 @@ class TitleCleanup extends TableCleanup {
 	protected function moveIllegalPage( $row ) {
 		$legalChars = Title::legalChars();
 		$legalizedUnprefixed = preg_replace_callback( "/([^$legalChars])/",
-			[ $this, 'hexChar' ],
+			$this->hexChar( ... ),
 			$row->page_title );
 		if ( $legalizedUnprefixed == '.' ) {
 			$legalizedUnprefixed = '(dot)';
@@ -167,7 +183,7 @@ class TitleCleanup extends TableCleanup {
 			// characters, but if we don't do this the result will be
 			// falling back to the Broken/id:foo failsafe below which is worse
 			$legalizedUnprefixed = preg_replace_callback( '!([^A-Za-z0-9_:\\-])!',
-				[ $this, 'hexChar' ],
+				$this->hexChar( ... ),
 				$legalizedUnprefixed
 			);
 			$title = Title::newFromText( $this->prefix . $legalizedUnprefixed );

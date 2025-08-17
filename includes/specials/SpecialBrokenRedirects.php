@@ -27,7 +27,7 @@ use MediaWiki\SpecialPage\QueryPage;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -76,22 +76,27 @@ class SpecialBrokenRedirects extends QueryPage {
 		$this->setLinkBatchFactory( $linkBatchFactory );
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function getPageHeader() {
 		return $this->msg( 'brokenredirectstext' )->parseAsBlock();
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$dbr = $this->getDatabaseProvider()->getReplicaDatabase();
 
@@ -137,7 +142,7 @@ class SpecialBrokenRedirects extends QueryPage {
 	/**
 	 * Preload LinkRenderer for source and destination
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -199,7 +204,7 @@ class SpecialBrokenRedirects extends QueryPage {
 
 		$linkRenderer = $this->getLinkRenderer();
 
-		if ( $toObj === null || $toObj->exists() ) {
+		if ( $toObj === null || $toObj->isKnown() ) {
 			return '<del>' . $linkRenderer->makeLink( $fromObj ) . '</del>';
 		}
 
@@ -253,11 +258,13 @@ class SpecialBrokenRedirects extends QueryPage {
 		return $out;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->addHelpLink( 'Help:Redirects' );
 		parent::execute( $par );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
 	}

@@ -136,7 +136,7 @@ class DeleteLogFormatter extends LogFormatter {
 		return $this->parsedParametersDeleteLog;
 	}
 
-	protected function parseBitField( $string ) {
+	protected function parseBitField( string $string ): int {
 		// Input is like ofield=2134 or just the number
 		if ( strpos( $string, 'field=' ) === 1 ) {
 			[ , $field ] = explode( '=', $string );
@@ -147,6 +147,7 @@ class DeleteLogFormatter extends LogFormatter {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getActionLinks() {
 		$linkRenderer = $this->getLinkRenderer();
 		if ( !$this->context->getAuthority()->isAllowed( 'deletedhistory' )
@@ -259,6 +260,7 @@ class DeleteLogFormatter extends LogFormatter {
 		}
 	}
 
+	/** @inheritDoc */
 	protected function getParametersForApi() {
 		$entry = $this->entry;
 		$params = [];
@@ -326,6 +328,7 @@ class DeleteLogFormatter extends LogFormatter {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function formatParametersForApi() {
 		$ret = parent::formatParametersForApi();
 		if ( isset( $ret['ids'] ) ) {

@@ -69,7 +69,7 @@ class Status extends StatusValue {
 	 * @endcode
 	 *
 	 * @param StatusValue|Status $sv
-	 * @return Status
+	 * @return static
 	 */
 	public static function wrap( $sv ) {
 		if ( $sv instanceof static ) {
@@ -157,21 +157,10 @@ class Status extends StatusValue {
 	}
 
 	/**
-	 * Splits this Status object into two new Status objects, one which contains only
-	 * the error messages, and one that contains the warnings, only. The returned array is
-	 * defined as:
-	 * [
-	 *     0 => object(Status) # The Status with error messages, only
-	 *     1 => object(Status) # The Status with warning messages, only
-	 * ]
-	 *
-	 * @return Status[]
+	 * @inheritDoc
 	 */
 	public function splitByErrorType() {
 		[ $errorsOnlyStatus, $warningsOnlyStatus ] = parent::splitByErrorType();
-		// phan/phan#2133?
-		'@phan-var Status $errorsOnlyStatus';
-		'@phan-var Status $warningsOnlyStatus';
 
 		if ( $this->messageLocalizer ) {
 			$errorsOnlyStatus->setMessageLocalizer = $this->messageLocalizer;

@@ -19,7 +19,7 @@
  */
 
 use MediaWiki\Language\LanguageConverter;
-use MediaWiki\Language\ReplacementArray;
+use Wikimedia\ReplacementArray;
 
 /**
  * Gan Chinese specific code.
@@ -75,6 +75,7 @@ class GanConverter extends LanguageConverter {
 		];
 	}
 
+	/** @inheritDoc */
 	public function convertCategoryKey( $key ) {
 		return $this->autoConvert( $key, 'gan' );
 	}

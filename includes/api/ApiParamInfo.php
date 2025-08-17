@@ -301,7 +301,6 @@ class ApiParamInfo extends ApiBase {
 		if ( isset( $ret['helpurls'][0] ) && $ret['helpurls'][0] === false ) {
 			$ret['helpurls'] = [];
 		}
-		// @phan-suppress-next-line PhanTypePossiblyInvalidDimOffset False positive
 		ApiResult::setIndexedTagName( $ret['helpurls'], 'helpurl' );
 
 		if ( $this->helpFormat !== 'none' ) {
@@ -415,10 +414,12 @@ class ApiParamInfo extends ApiBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	public function isReadMode() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		// back compat
 		$querymodules = $this->getMain()->getModuleManager()
@@ -455,6 +456,7 @@ class ApiParamInfo extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=paraminfo&modules=parse|phpfm|query%2Ballpages|query%2Bsiteinfo'
@@ -464,6 +466,7 @@ class ApiParamInfo extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Parameter_information';
 	}

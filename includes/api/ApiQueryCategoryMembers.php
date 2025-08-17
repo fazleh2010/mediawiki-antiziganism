@@ -55,10 +55,12 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 		$this->run();
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode( $params ) {
 		return 'public';
 	}
 
+	/** @inheritDoc */
 	public function executeGenerator( $resultPageSet ) {
 		$this->run( $resultPageSet );
 	}
@@ -103,7 +105,8 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 
 		$this->addFieldsIf( 'cl_timestamp', $fld_timestamp || $params['sort'] == 'timestamp' );
 
-		$this->addTables( [ 'page', 'categorylinks' ] ); // must be in this order for 'USE INDEX'
+		$this->addTables( [ 'page', 'categorylinks' ] );
+		$this->addJoinConds( [ 'categorylinks' => [ 'JOIN', 'cl_from=page_id' ] ] );
 		if ( $this->migrationStage & SCHEMA_COMPAT_READ_OLD ) {
 			$this->addWhereFld( 'cl_to', $categoryTitle->getDBkey() );
 		} else {
@@ -147,7 +150,9 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 				] ) );
 			}
 
-			$this->addOption( 'USE INDEX', [ 'categorylinks' => 'cl_timestamp' ] );
+			if ( $this->migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+				$this->addOption( 'USE INDEX', [ 'categorylinks' => 'cl_timestamp' ] );
+			}
 		} else {
 			if ( $params['continue'] ) {
 				$cont = $this->parseContinueParamOrDie( $params['continue'], [ 'string', 'string', 'int' ] );
@@ -198,10 +203,12 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 					$endsortkey );
 				$this->addWhereRange( 'cl_from', $dir, null, null );
 			}
-			$this->addOption( 'USE INDEX', [ 'categorylinks' => 'cl_sortkey' ] );
+			if ( $this->migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+				$this->addOption( 'USE INDEX', [ 'categorylinks' => 'cl_sortkey' ] );
+			} else {
+				$this->addOption( 'USE INDEX', [ 'categorylinks' => 'cl_sortkey_id' ] );
+			}
 		}
-
-		$this->addWhere( 'cl_from=page_id' );
 
 		$limit = $params['limit'];
 		$this->addOption( 'LIMIT', $limit + 1 );
@@ -322,6 +329,7 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$ret = [
 			'title' => [
@@ -412,6 +420,7 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=query&list=categorymembers&cmtitle=Category:Physics'
@@ -421,6 +430,7 @@ class ApiQueryCategoryMembers extends ApiQueryGeneratorBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Categorymembers';
 	}

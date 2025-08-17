@@ -20,7 +20,6 @@
 
 namespace MediaWiki\Page;
 
-use MediaWiki\Cache\LinkBatchFactory;
 use MediaWiki\FileRepo\File\File;
 use MediaWiki\Html\Html;
 use MediaWiki\MediaWikiServices;
@@ -78,7 +77,7 @@ class ImageHistoryPseudoPager extends ReverseChronologicalPager {
 		$this->mRange = [ 0, 0 ]; // display range
 
 		// Only display 10 revisions at once by default, otherwise the list is overwhelming
-		$this->mLimitsShown = array_merge( [ 10 ], $this->mLimitsShown );
+		array_unshift( $this->mLimitsShown, 10 );
 		$this->mDefaultLimit = 10;
 		[ $this->mLimit, /* $offset */ ] =
 			$this->mRequest->getLimitOffsetForUser(
@@ -96,6 +95,7 @@ class ImageHistoryPseudoPager extends ReverseChronologicalPager {
 		return $this->mTitle;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return [];
 	}
@@ -195,7 +195,7 @@ class ImageHistoryPseudoPager extends ReverseChronologicalPager {
 		if ( $this->mOffset !== null ) {
 			try {
 				$this->mDb->timestamp( $this->mOffset );
-			} catch ( TimestampException $e ) {
+			} catch ( TimestampException ) {
 				$this->mOffset = null;
 			}
 		}
@@ -206,7 +206,7 @@ class ImageHistoryPseudoPager extends ReverseChronologicalPager {
 			// The current rev may not meet the offset/limit
 			$numRows = count( $this->mHist );
 			if ( $numRows <= $this->mLimit && $this->mImg->getTimestamp() > $this->mOffset ) {
-				$this->mHist = array_merge( [ $this->mImg ], $this->mHist );
+				array_unshift( $this->mHist, $this->mImg );
 			}
 		} else {
 			// The current rev may not meet the offset

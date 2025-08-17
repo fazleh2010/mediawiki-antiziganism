@@ -8,10 +8,12 @@ use InvalidArgumentException;
 use stdClass;
 use TypeError;
 use UnexpectedValueException;
+use WeakMap;
 use Wikimedia\Assert\Assert;
 use Wikimedia\Assert\UnreachableException;
 use Wikimedia\JsonCodec\Hint;
 use Wikimedia\Parsoid\Config\Env;
+use Wikimedia\Parsoid\Core\BasePageBundle;
 use Wikimedia\Parsoid\Core\DomPageBundle;
 use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
@@ -40,16 +42,66 @@ class DOMDataUtils {
 	/** The internal property prefix used for rich attribute type hints. */
 	private const RICH_ATTR_HINT_PREFIX = 'rich-hint-';
 
+	/** Backing storage for "extension data" on a Document. */
+	private static array $docMap = [];
+
+	/**
+	 * Associate additional data with a Document, without resorting to
+	 * a dynamic property.
+	 *
+	 * Note that our data is hung off the top-level Document because it is
+	 * the only object guaranteed to be kept live during the duration of a
+	 * parse.  Individual Nodes and Elements will be garbage collected as
+	 * soon as local variable references are dropped (the fact that backing
+	 * data is referenced from the Document does not prevent this) which
+	 * would erase the entry from the WeakMap used here.
+	 *
+	 * @param Document $doc
+	 * @param string $key
+	 * @param mixed $value
+	 */
+	private static function setExtensionData( Document $doc, string $key, $value ): void {
+		if ( !isset( self::$docMap[$key] ) ) {
+			self::$docMap[$key] = new WeakMap();
+		}
+		self::$docMap[$key]->offsetSet( $doc, $value );
+	}
+
+	/**
+	 * Retrieve additional data associated with a Document.
+	 *
+	 * See discussion in ::setExtensionData() above.
+	 *
+	 * @param Document $doc
+	 * @param string $key
+	 * @return mixed
+	 * @throws \Error if $key is not found.
+	 */
+	private static function getExtensionData( Document $doc, string $key ) {
+		if ( !isset( self::$docMap[$key] ) ) {
+			throw new \Error( "$key not found" );
+		}
+		return self::$docMap[$key]->offsetGet( $doc );
+	}
+
+	/**
+	 * Determine if there is extension data for $key associated with the
+	 * given document.
+	 */
+	private static function hasExtensionData( Document $doc, string $key ): bool {
+		if ( !isset( self::$docMap[$key] ) ) {
+			return false;
+		}
+		return self::$docMap[$key]->offsetExists( $doc );
+	}
+
 	/**
 	 * Return the dynamic "bag" property of a Document.
 	 * @param Document $doc
 	 * @return DataBag
 	 */
 	public static function getBag( Document $doc ): DataBag {
-		// This is a dynamic property; it is not declared.
-		// All references go through here so we can suppress phan's complaint.
-		// @phan-suppress-next-line PhanUndeclaredProperty
-		return $doc->bag;
+		return self::getExtensionData( $doc, "bag" );
 	}
 
 	/**
@@ -60,16 +112,11 @@ class DOMDataUtils {
 	public static function getCodec( Node $node ): DOMDataCodec {
 		// Owner document is set for all nodes except Document itself.
 		$doc = $node->ownerDocument ?? $node;
-		// This is a dynamic property; it is not declared.
-		// All references go through here so we can suppress phan's complaint.
-		// @phan-suppress-next-line PhanUndeclaredProperty
-		return $doc->codec;
+		return self::getExtensionData( $doc, "codec" );
 	}
 
 	public static function isPrepared( Document $doc ): bool {
-		// `bag` is a deliberate dynamic property; see DOMDataUtils::getBag()
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		return isset( $doc->bag );
+		return self::hasExtensionData( $doc, "bag" );
 	}
 
 	public static function isPreparedAndLoaded( Document $doc ): bool {
@@ -77,12 +124,10 @@ class DOMDataUtils {
 	}
 
 	public static function prepareDoc( Document $doc ): void {
-		// `bag` is a deliberate dynamic property; see DOMDataUtils::getBag()
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		$doc->bag = new DataBag();
-		// `codec` is a deliberate dynamic property; see DOMDataUtils::getCodec()
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		$doc->codec = new DOMDataCodec( $doc, [] );
+		$bag = new DataBag();
+		$codec = new DOMDataCodec( $doc, [] );
+		self::setExtensionData( $doc, "bag", $bag );
+		self::setExtensionData( $doc, "codec", $codec );
 
 		// Cache the head and body.
 		DOMCompat::getHead( $doc );
@@ -93,13 +138,9 @@ class DOMDataUtils {
 	 * @param Document $topLevelDoc
 	 * @param Document $childDoc
 	 */
-	public static function prepareChildDoc( Document $topLevelDoc, Document $childDoc ) {
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		Assert::invariant( $topLevelDoc->bag instanceof DataBag, 'doc bag not set' );
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		$childDoc->bag = $topLevelDoc->bag;
-		// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
-		$childDoc->codec = $topLevelDoc->codec;
+	public static function prepareChildDoc( Document $topLevelDoc, Document $childDoc ): void {
+		self::setExtensionData( $childDoc, "bag", self::getExtensionData( $topLevelDoc, "bag" ) );
+		self::setExtensionData( $childDoc, "codec", self::getExtensionData( $topLevelDoc, "codec" ) );
 	}
 
 	/**
@@ -112,32 +153,54 @@ class DOMDataUtils {
 		return self::getBag( $doc )->stashObject( $obj );
 	}
 
-	public static function dedupeNodeData( Node ...$nodes ): void {
-		if ( count( $nodes ) === 0 ) {
-			return;
-		}
-		$seen = [];
-		$bag = self::getBag( $nodes[0]->ownerDocument );
-		foreach ( $nodes as $node ) {
-			self::dedupeNodeDataVisitor( $bag, $seen, $node );
-		}
+	public static function dedupeNodeData( Node $clonedRoot ): void {
+		$bag = self::getBag( $clonedRoot->ownerDocument );
+		$aboutMap = [];
+		self::dedupeNodeDataVisitor( $bag, $aboutMap, $clonedRoot );
 	}
 
 	private static function dedupeNodeDataVisitor(
-		DataBag $bag, array &$seen, Node $node
-	) {
-		if ( $node instanceof Element && $node->hasAttribute( self::DATA_OBJECT_ATTR_NAME ) ) {
-			$id = (int)DOMCompat::getAttribute( $node, self::DATA_OBJECT_ATTR_NAME );
-			if ( $seen[$id] ?? false ) {
-				// dedupe!
+		DataBag $bag, array &$aboutMap, Node $node
+	): void {
+		if ( $node instanceof Element ) {
+			if ( $node->hasAttribute( self::DATA_OBJECT_ATTR_NAME ) ) {
+				$id = (int)DOMCompat::getAttribute( $node, self::DATA_OBJECT_ATTR_NAME );
+				// Object IDs should always be unique, so we don't have
+				// to remember what the new ID is.
+				// (Note that UnpackDOMFragments may call us with nodes which
+				// don't have unique ids, though!)
 				$nd = $bag->getObject( $id );
 				$node->removeAttribute( self::DATA_OBJECT_ATTR_NAME );
-				self::setNodeData( $node, $nd->cloneNodeData() );
+				$nd = $nd->cloneNodeData();
+				self::setNodeData( $node, $nd );
+
+				// Deduplicate annotation range ids
+				// These can occur multiple times in a given subtree, so we
+				// need to record the mapping for future use.
+				// (There's no DataMw unless there was a DATA_OBJECT_ATTR_NAME)
+				if ( isset( $nd->mw->rangeId ) ) {
+					$oldAbout = $nd->mw->rangeId;
+					$isStart = false;
+					$type = WTUtils::extractAnnotationType( $node, $isStart );
+					if ( $type !== null && $isStart ) {
+						$aboutMap[$oldAbout] = $bag->newAnnotationId();
+					}
+					$nd->mw->rangeId = $aboutMap[$oldAbout] ?? $oldAbout;
+				}
 			}
-			$seen[$id] = true;
+			if ( $node->hasAttribute( 'about' ) ) {
+				// Deduplicate transclusion ids
+				// As with annotation ranges, these can occur multiple times
+				// in a given subtree, so we need to record the mapping used.
+				$oldAbout = DOMCompat::getAttribute( $node, 'about' );
+				if ( WTUtils::isFirstEncapsulationWrapperNode( $node ) ) {
+					$aboutMap[$oldAbout] = $bag->newAboutId();
+				}
+				$node->setAttribute( 'about', $aboutMap[$oldAbout] ?? $oldAbout );
+			}
 		}
-		foreach ( $node->childNodes as $child ) {
-			self::dedupeNodeDataVisitor( $bag, $seen, $child );
+		foreach ( DOMUtils::childNodes( $node ) as $child ) {
+			self::dedupeNodeDataVisitor( $bag, $aboutMap, $child );
 		}
 	}
 
@@ -160,10 +223,10 @@ class DOMDataUtils {
 	 * Get data object from a node.
 	 *
 	 * @param Element $node node
-	 * @param ?DomPageBundle $pb Optional source for node data
+	 * @param ?BasePageBundle $pb Optional source for node data
 	 * @return NodeData
 	 */
-	public static function getNodeData( Element $node, ?DomPageBundle $pb = null ): NodeData {
+	public static function getNodeData( Element $node, ?BasePageBundle $pb = null ): NodeData {
 		$nodeId = DOMCompat::getAttribute( $node, self::DATA_OBJECT_ATTR_NAME );
 		if ( $nodeId === null ) {
 			// Initialized on first request
@@ -600,6 +663,7 @@ class DOMDataUtils {
 		if ( !( $node instanceof Element ) ) {
 			return;
 		}
+		$bag = self::getBag( $node->ownerDocument ?? $node );
 		$nodeData = self::getNodeData( $node, $options['loadFromPageBundle'] ?? null );
 		$codec = self::getCodec( $node );
 		$dataParsoidAttr = DOMCompat::getAttribute( $node, 'data-parsoid' );
@@ -635,6 +699,14 @@ class DOMDataUtils {
 			$node->removeAttribute( 'data-mw' );
 		}
 
+		$about = DOMCompat::getAttribute( $node, 'about' );
+		if ( $about !== null ) {
+			$bag->seenAboutId( $about );
+		}
+		if ( isset( $nodeData->mw->rangeId ) ) {
+			$bag->seenAnnotationId( $nodeData->mw->rangeId );
+		}
+
 		// We don't load rich attributes here: that will be done lazily as
 		// getAttributeObject()/etc methods are called because we don't
 		// know the true types of the rich values yet.  In the future
@@ -644,13 +716,15 @@ class DOMDataUtils {
 
 	/**
 	 * Builds an index of id attributes seen in the DOM
+	 *
 	 * @param Env|ParsoidExtensionAPI|null $env Provide an env or a parsoid
 	 *  extension API in order to properly traverse
 	 *  document fragments embedded in extension DOM.
 	 * @param Document $doc
-	 * @return array
+	 * @param array<string,DocumentFragment> $fragments
+	 * @return array<string, true>
 	 */
-	public static function usedIdIndex( $env, Document $doc ): array {
+	public static function usedIdIndex( $env, Document $doc, array $fragments = [] ): array {
 		$index = [];
 		$t = new DOMTraverser( false, $env !== null );
 		$t->addHandler( null, static function ( $n, $state ) use ( &$index ) {
@@ -664,6 +738,9 @@ class DOMDataUtils {
 		} );
 		$extApi = ( $env instanceof Env ) ? new ParsoidExtensionAPI( $env ) : $env;
 		$t->traverse( $extApi, DOMCompat::getBody( $doc ) );
+		foreach ( $fragments as $name => $f ) {
+			$t->traverse( $extApi, $f );
+		}
 		return $index;
 	}
 
@@ -805,48 +882,36 @@ class DOMDataUtils {
 	}
 
 	/**
-	 * Clones a node and its data bag
-	 * @param Element $elt
-	 * @param bool $deep
-	 * @return Element
+	 * Clones a node and its data bag.
 	 */
-	public static function cloneNode( Element $elt, bool $deep ): Element {
+	public static function cloneNode( Node $elt, bool $deep ): Node {
 		$clone = $elt->cloneNode( $deep );
 		'@phan-var Element $clone'; // @var Element $clone
 		// We do not need to worry about $deep because a shallow clone does not have child nodes,
 		// so it's always cloning data on the cloned tree (which may be empty).
-		self::fixClonedData( $clone );
+		self::dedupeNodeData( $clone );
+		return $clone;
+	}
+
+	// Two specific helper methods to work around the lack of constrainted
+	// templated types in phan.
+
+	/**
+	 * Clones an element and its data bag(s)
+	 */
+	public static function cloneElement( Element $elt, bool $deep ): Element {
+		$clone = self::cloneNode( $elt, $deep );
+		'@phan-var Element $clone'; // @var Element $clone
 		return $clone;
 	}
 
 	/**
-	 * Clones a DocumentFragment and its associated data bags
+	 * Deep clone a DocumentFragment and its associated data bags
 	 */
 	public static function cloneDocumentFragment( DocumentFragment $df ): DocumentFragment {
-		$clone = $df->cloneNode( true );
+		$clone = self::cloneNode( $df, true );
 		'@phan-var DocumentFragment $clone'; // @var DocumentFragment $clone
-		foreach ( $clone->childNodes as $child ) {
-			if ( $child instanceof Element ) {
-				self::fixClonedData( $child );
-			}
-		}
 		return $clone;
-	}
-
-	/**
-	 * Recursively fixes cloned data from $elt: to avoid conflicts of element IDs, we clone the
-	 * data and set it in the node with a new element ID (which setNodeData does).
-	 * @param Element $elt
-	 */
-	private static function fixClonedData( Element $elt ): void {
-		if ( $elt->hasAttribute( self::DATA_OBJECT_ATTR_NAME ) ) {
-			self::setNodeData( $elt, clone self::getNodeData( $elt ) );
-		}
-		foreach ( $elt->childNodes as $child ) {
-			if ( $child instanceof Element ) {
-				self::fixClonedData( $child );
-			}
-		}
 	}
 
 	// This is a generic (and somewhat optimistic) interface for
@@ -945,7 +1010,7 @@ class DOMDataUtils {
 	 * @param Element $node The node on which the attribute is to be found.
 	 * @param string $name The name of the attribute.
 	 * @param class-string<T>|Hint<T> $classHint
-	 * @return ?T The attribute value, or null if not present.
+	 * @return T|null The attribute value, or null if not present.
 	 */
 	public static function getAttributeObject(
 		Element $node, string $name, $classHint
@@ -998,7 +1063,7 @@ class DOMDataUtils {
 	 * @param Element $node The node on which the attribute is to be found.
 	 * @param string $name The name of the attribute.
 	 * @param class-string<T>|Hint<T> $classHint
-	 * @return ?T The attribute value, or null if not present.
+	 * @return T|null The attribute value, or null if not present.
 	 */
 	public static function getAttributeObjectDefault(
 		Element $node, string $name, $classHint
@@ -1351,7 +1416,6 @@ class DOMDataUtils {
 				) {
 					continue; // skip this for now
 				}
-				$flat = null;
 				if ( is_array( $v ) ) {
 					// If $v is an array, it was never decoded.
 					$json = $v[0];
@@ -1377,7 +1441,7 @@ class DOMDataUtils {
 					$encoded = PHPUtils::jsonEncode( $json );
 					$node->setAttribute( $attrName, $encoded );
 				} else {
-					// For compatibility, store the rich value in data-mw.attrs
+					// For compatibility, store the rich value in data-mw.attribs
 					// and store a flattened version in the $attrName.
 					if ( $flat !== null ) {
 						$node->setAttribute( $attrName, $flat );
@@ -1412,7 +1476,7 @@ class DOMDataUtils {
 		$codec = self::getCodec( $node );
 		// Reset to a default set of codec options
 		// (in particular, make sure 'useFragmentBank' is not set)
-		$oldOptions = $codec->setOptions( [] );
+		$oldOptions = $codec->setOptions( [ 'noSideEffects' => true, ] );
 		foreach ( get_object_vars( $nodeData ) as $k => $v ) {
 			// Look for dynamic properties with names w/ the proper prefix
 			if ( str_starts_with( $k, self::RICH_ATTR_DATA_PREFIX ) ) {

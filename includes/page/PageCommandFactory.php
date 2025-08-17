@@ -41,7 +41,6 @@ use MediaWiki\Revision\ArchivedRevisionLookup;
 use MediaWiki\Revision\RevisionStoreFactory;
 use MediaWiki\Storage\PageUpdaterFactory;
 use MediaWiki\Title\NamespaceInfo;
-use MediaWiki\Title\Title;
 use MediaWiki\Title\TitleFactory;
 use MediaWiki\Title\TitleFormatter;
 use MediaWiki\User\ActorMigration;
@@ -174,12 +173,6 @@ class PageCommandFactory implements
 		$this->logFormatterFactory = $logFormatterFactory;
 	}
 
-	/**
-	 * @param Authority $performer
-	 * @param PageIdentity $page
-	 * @param string $newContentModel
-	 * @return ContentModelChange
-	 */
 	public function newContentModelChange(
 		Authority $performer,
 		PageIdentity $page,
@@ -224,12 +217,6 @@ class PageCommandFactory implements
 		);
 	}
 
-	/**
-	 * @param PageIdentity $source
-	 * @param PageIdentity $destination
-	 * @param string|null $timestamp
-	 * @return MergeHistory
-	 */
 	public function newMergeHistory(
 		PageIdentity $source,
 		PageIdentity $destination,
@@ -241,24 +228,17 @@ class PageCommandFactory implements
 			$timestamp,
 			$this->lbFactory,
 			$this->contentHandlerFactory,
-			$this->revisionStoreFactory->getRevisionStore(),
 			$this->watchedItemStore,
 			$this->spamChecker,
 			$this->hookContainer,
-			$this->wikiPageFactory,
+			$this->pageUpdaterFactory,
 			$this->titleFormatter,
 			$this->titleFactory,
-			$this->linkTargetLookup,
 			$this
 		);
 	}
 
-	/**
-	 * @param Title $from
-	 * @param Title $to
-	 * @return MovePage
-	 */
-	public function newMovePage( Title $from, Title $to ): MovePage {
+	public function newMovePage( PageIdentity $from, PageIdentity $to ): MovePage {
 		return new MovePage(
 			$from,
 			$to,
@@ -286,11 +266,6 @@ class PageCommandFactory implements
 
 	/**
 	 * Create a new command instance for page rollback.
-	 *
-	 * @param PageIdentity $page
-	 * @param Authority $performer
-	 * @param UserIdentity $byUser
-	 * @return RollbackPage
 	 */
 	public function newRollbackPage(
 		PageIdentity $page,

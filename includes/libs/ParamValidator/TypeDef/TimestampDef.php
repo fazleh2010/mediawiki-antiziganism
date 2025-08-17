@@ -74,6 +74,7 @@ class TimestampDef extends TypeDef {
 		}
 	}
 
+	/** @inheritDoc */
 	public function validate( $name, $value, array $settings, array $options ) {
 		// Confusing synonyms for the current time accepted by ConvertibleTimestamp
 		if ( !$value ) {
@@ -110,12 +111,11 @@ class TimestampDef extends TypeDef {
 		}
 	}
 
+	/** @inheritDoc */
 	public function checkSettings( string $name, $settings, array $options, array $ret ): array {
 		$ret = parent::checkSettings( $name, $settings, $options, $ret );
 
-		$ret['allowedKeys'] = array_merge( $ret['allowedKeys'], [
-			self::PARAM_TIMESTAMP_FORMAT,
-		] );
+		$ret['allowedKeys'][] = self::PARAM_TIMESTAMP_FORMAT;
 
 		$f = $settings[self::PARAM_TIMESTAMP_FORMAT] ?? $this->defaultFormat;
 		if ( $f !== 'ConvertibleTimestamp' && $f !== 'DateTime' &&
@@ -127,6 +127,7 @@ class TimestampDef extends TypeDef {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	public function stringifyValue( $name, $value, array $settings, array $options ) {
 		if ( !$value instanceof ConvertibleTimestamp ) {
 			$value = new ConvertibleTimestamp( $value );
@@ -134,6 +135,7 @@ class TimestampDef extends TypeDef {
 		return $value->getTimestamp( $this->stringifyFormat );
 	}
 
+	/** @inheritDoc */
 	public function getHelpInfo( $name, array $settings, array $options ) {
 		$info = parent::getHelpInfo( $name, $settings, $options );
 

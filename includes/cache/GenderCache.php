@@ -26,6 +26,7 @@ use MediaWiki\Linker\LinkTarget;
 use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\User\UserIdentity;
+use Wikimedia\Rdbms\IResultWrapper;
 
 /**
  * Look up "gender" user preference.
@@ -75,7 +76,7 @@ class GenderCache {
 	 * Get the gender option for given username.
 	 *
 	 * @param string|UserIdentity $username
-	 * @param string|null $caller Calling method for database profiling
+	 * @param string|null $caller Unused since 1.44
 	 * @return string
 	 */
 	public function getGenderOf( $username, $caller = '' ) {
@@ -89,7 +90,7 @@ class GenderCache {
 				RequestContext::getMain()->getUser()->getName() === $username
 			) {
 				$this->misses++;
-				$this->doQuery( $username, $caller );
+				$this->doQuery( $username );
 			}
 			if ( $this->misses === $this->missLimit ) {
 				// Log only once and don't bother incrementing beyond limit+1
@@ -105,7 +106,7 @@ class GenderCache {
 	 * Wrapper for doQuery that processes raw LinkBatch data.
 	 *
 	 * @param array<int,array<string,mixed>> $data
-	 * @param string|null $caller
+	 * @param string|null $caller Unused since 1.44
 	 */
 	public function doLinkBatch( array $data, $caller = '' ) {
 		$users = [];
@@ -114,7 +115,7 @@ class GenderCache {
 				$users += $pagenames;
 			}
 		}
-		$this->doQuery( array_keys( $users ), $caller );
+		$this->doQuery( array_keys( $users ) );
 	}
 
 	/**
@@ -122,7 +123,7 @@ class GenderCache {
 	 *
 	 * @since 1.20
 	 * @param LinkTarget[] $titles
-	 * @param string|null $caller Calling method for database profiling
+	 * @param string|null $caller Unused since 1.44
 	 */
 	public function doTitlesArray( $titles, $caller = '' ) {
 		$users = [];
@@ -131,14 +132,30 @@ class GenderCache {
 				$users[] = $titleObj->getText();
 			}
 		}
-		$this->doQuery( $users, $caller );
+		$this->doQuery( $users );
+	}
+
+	/**
+	 * Process a set of rows from the page table
+	 *
+	 * @since 1.45
+	 * @param iterable<\stdClass>|IResultWrapper $rows
+	 */
+	public function doPageRows( $rows ) {
+		$users = [];
+		foreach ( $rows as $row ) {
+			if ( $this->nsInfo->hasGenderDistinction( (int)$row->page_namespace ) ) {
+				$users[] = $row->page_title;
+			}
+		}
+		$this->doQuery( $users );
 	}
 
 	/**
 	 * Preload gender option for multiple user names.
 	 *
 	 * @param string[]|string $users Usernames
-	 * @param string|null $caller Calling method for database profiling
+	 * @param string|null $caller Unused since 1.44
 	 */
 	public function doQuery( $users, $caller = '' ) {
 		$usersToFetch = [];
@@ -152,9 +169,14 @@ class GenderCache {
 			return;
 		}
 
-		$genders = $this->userOptionsLookup->getOptionBatchForUserNames( $usersToFetch, 'gender' );
-		foreach ( $genders as $userName => $gender ) {
-			$this->cache[$userName] = $gender;
+		// Limit batch size to 1000 since the usernames need to be put into an
+		// IN() expression in SQL. Could be done closer to the backend, but
+		// there are multiple backends.
+		foreach ( array_chunk( array_unique( $usersToFetch ), 1000 ) as $batch ) {
+			$genders = $this->userOptionsLookup->getOptionBatchForUserNames( $batch, 'gender' );
+			foreach ( $genders as $userName => $gender ) {
+				$this->cache[$userName] = $gender;
+			}
 		}
 	}
 

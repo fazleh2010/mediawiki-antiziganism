@@ -125,11 +125,11 @@ codex:
   license: GPL-2.0+
   homepage: https://doc.wikimedia.org/codex/
   authors: Design System team, Wikimedia Foundation
-  version: 1.23.0
-  purl: pkg:npm/@wikimedia/codex@1.23.0
+  version: 2.2.1
+  purl: pkg:npm/@wikimedia/codex@2.2.1
   type: tar
-  src: https://registry.npmjs.org/@wikimedia/codex/-/codex-1.23.0.tgz
-  integrity: sha384-cmoeYhSAHpbpsMfGutyu7XwurDOr99/PUCC/HgEkff41bMxqZwCNBIIEkXYlZrY5
+  src: https://registry.npmjs.org/@wikimedia/codex/-/codex-2.2.1.tgz
+  integrity: sha384-sO+W1PpPXx+M3HHluijEhCK/q4+KRz3L0m5ihB9gnhfqzbjBpGjouZYCcSwQV+dt
   dest:
     package/dist/codex.cjs:
     package/dist/codex.js:
@@ -146,11 +146,11 @@ codex-design-tokens:
   license: GPL-2.0+
   homepage: https://doc.wikimedia.org/codex/
   authors: Design System team, Wikimedia Foundation
-  version: 1.23.0
-  purl: pkg:npm/@wikimedia/codex-design-tokens@1.23.0
+  version: 2.2.1
+  purl: pkg:npm/@wikimedia/codex-design-tokens@2.2.1
   type: tar
-  src: https://registry.npmjs.org/@wikimedia/codex-design-tokens/-/codex-design-tokens-1.23.0.tgz
-  integrity: sha384-H5h3k6xfUFPCynK4LYTPcqR/bvZJlstIQgeZ3jptdDlOIusl5c1aEwIv1d3c6ooa
+  src: https://registry.npmjs.org/@wikimedia/codex-design-tokens/-/codex-design-tokens-2.2.1.tgz
+  integrity: sha384-RudBKSgD4xmhiZTj+lnarCeu05y3baWuCrMSB38SWI1fDeHzEEJDe8SHLCTStQJ7
   dest:
     package/dist/theme-*.less:
     package/dist/theme-wikimedia-ui-root.css:
@@ -162,11 +162,11 @@ codex-icons:
   license: MIT
   homepage: https://doc.wikimedia.org/codex/
   authors: Design System team, Wikimedia Foundation
-  version: 1.23.0
-  purl: pkg:npm/@wikimedia/codex-icons@1.23.0
+  version: 2.2.1
+  purl: pkg:npm/@wikimedia/codex-icons@2.2.1
   type: tar
-  src: https://registry.npmjs.org/@wikimedia/codex-icons/-/codex-icons-1.23.0.tgz
-  integrity: sha384-Hh/6MP3SarXmPe7HqKyXFUGW4JB9RDqBtkHlH0uPTXfcLqAAylTs/JxlUGnyOAQL
+  src: https://registry.npmjs.org/@wikimedia/codex-icons/-/codex-icons-2.2.1.tgz
+  integrity: sha384-aGI+6gDsKhT+Wyg4v2uad7OkZlVUTq+ED+liPtaJxfDqNy8mmSOdVkWrBlbentVu
   dest:
     package/dist/codex-icons.json:
     package/dist/codex-icon-paths.less:
@@ -345,11 +345,11 @@ ooui:
   license: MIT
   homepage: https://www.mediawiki.org/wiki/OOUI
   authors: OOUI Team and other contributors
-  version: 0.51.7
-  purl: pkg:npm/oojs-ui@0.51.7
+  version: 0.52.0
+  purl: pkg:npm/oojs-ui@0.52.0
   type: tar
-  src: https://registry.npmjs.org/oojs-ui/-/oojs-ui-0.51.7.tgz
-  integrity: sha384-4qCOHXoxweCN6ilkHmm2alWe91hQssdF3tieSwzFVTsPgGn57nNrMm0Zhp70TRvu
+  src: https://registry.npmjs.org/oojs-ui/-/oojs-ui-0.52.0.tgz
+  integrity: sha384-1w9QBNjWsd9L6Os2x84mErZ0wsK6kSO62X7pSiFaAIm+06q88L5xd2iqKO2nVzgt
 
   dest:
     # Main stuff
@@ -440,6 +440,27 @@ sinonjs:
   integrity: sha384-jx7JQ8andegP9KcpOdNfOJlARMaUaUGtHLHURZEpUWJSCkdlnp1bzr7De/O3XM60
   dest: sinon.js
 
+swagger-ui:
+  # For licenses of libraries included in the bundle, see docs/licenses/swagger-ui-licenses-5.15.5.md
+  # Update along with swagger-ui and remove when no longer needed. See T382086.
+  license: Apache-2.0
+  homepage: https://swagger.io/tools/swagger-ui/
+  version: 4.15.5
+  authors: Kyle Shockey, Tony Tam, Vladimír Gorej, and others
+  type: tar
+  src: https://codeload.github.com/swagger-api/swagger-ui/tar.gz/refs/tags/v4.15.5
+  integrity: sha384-pOwNNBDnfD+zlf8LtM3994vvCyIaaFpiyRhCRs3FI2GJ/ESZcfZ2YbJ8E4ECf+R7
+  dest:
+    swagger-ui-4.15.5/README.md:
+    swagger-ui-4.15.5/LICENSE:
+    swagger-ui-4.15.5/NOTICE:
+    swagger-ui-4.15.5/dist/swagger-ui-bundle.js:
+    swagger-ui-4.15.5/dist/swagger-ui-bundle.js.map:
+    swagger-ui-4.15.5/dist/swagger-ui-standalone-preset.js:
+    swagger-ui-4.15.5/dist/swagger-ui-standalone-preset.js.map:
+    swagger-ui-4.15.5/dist/swagger-ui.css:
+    swagger-ui-4.15.5/dist/swagger-ui.css.map:
+
 vue-demi:
   license: MIT
   homepage: https://github.com/vueuse/vue-demi/
@@ -468,6 +489,34 @@ vue:
     package/LICENSE:
     package/dist/vue.global.js:
     package/dist/vue.global.prod.js:
+
+vue-test-utils:
+   license: MIT
+   homepage: https://test-utils.vuejs.org/
+   authors: Lachlan Miller
+   version: 2.4.6
+   purl: pkg:npm/@vue/test-utils@2.4.6
+   type: tar
+   src: https://registry.npmjs.org/@vue/test-utils/-/test-utils-2.4.6.tgz
+   integrity: sha512-FMxEjOpYNYiFe0GkaHsnJPXFHxQ6m4t8vI/ElPGpMWxZKpmRvQ33OIrvRXemy6yha03RxhOlQuy+gZMC3CQSow==
+   dest:
+    package/README.md:
+    package/LICENSE:
+    package/dist/vue-test-utils.browser.js:
+
+vue-compiler-dom:
+  license: MIT
+  homepage: https://vuejs.org/
+  authors: Yuxi (Evan) You
+  version: 3.5.13
+  purl: pkg:npm/@vue/compiler-dom@3.5.13
+  type: tar
+  src: https://registry.npmjs.org/@vue/compiler-dom/-/compiler-dom-3.5.13.tgz
+  integrity: sha512-ZOJ46sMOKUjO3e94wPdCzQ6P1Lx/vhp2RSvfaab88Ajexs0AHeV0uasYhi99WPaogmBlRHNRuly8xV75cNTMDA==
+  dest:
+    package/README.md:
+    package/LICENSE:
+    package/dist/compiler-dom.global.js:
 
 vuex:
   license: MIT

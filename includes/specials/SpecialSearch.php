@@ -411,7 +411,8 @@ class SpecialSearch extends SpecialPage {
 			return;
 		}
 
-		$title = Title::newFromText( $term );
+		$titleNs = count( $this->namespaces ) === 1 ? reset( $this->namespaces ) : null;
+		$title = Title::newFromText( $term, $titleNs );
 		$languageConverter = $this->languageConverterFactory->getLanguageConverter( $this->getContentLanguage() );
 		if ( $languageConverter->hasVariants() ) {
 			// findVariantLink will replace the link arg as well but we want to keep our original
@@ -543,7 +544,7 @@ class SpecialSearch extends SpecialPage {
 			$sidebarResultWidget,
 			$linkRenderer,
 			$this->interwikiLookup,
-			$engine->getFeatureData( 'show-multimedia-search-results' )
+			$engine->getFeatureData( 'show-multimedia-search-results' ) ?? false
 		);
 
 		$widget = new BasicSearchResultSetWidget( $this, $mainResultWidget, $sidebarResultsWidget );
@@ -898,6 +899,7 @@ class SpecialSearch extends SpecialPage {
 		}
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'pages';
 	}

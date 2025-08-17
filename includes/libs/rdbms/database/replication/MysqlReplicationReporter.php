@@ -20,8 +20,10 @@
 namespace Wikimedia\Rdbms\Replication;
 
 use InvalidArgumentException;
+use Psr\Log\LoggerInterface;
 use RuntimeException;
 use stdClass;
+use Wikimedia\ObjectCache\BagOStuff;
 use Wikimedia\Rdbms\DBPrimaryPos;
 use Wikimedia\Rdbms\DBQueryError;
 use Wikimedia\Rdbms\IDatabase;
@@ -51,6 +53,14 @@ class MysqlReplicationReporter extends ReplicationReporter {
 	/** @var float Warn if lag estimates are made for transactions older than this many seconds */
 	private const LAG_STALE_WARN_THRESHOLD = 0.100;
 
+	/**
+	 * @param string $topologyRole
+	 * @param LoggerInterface $logger
+	 * @param BagOStuff $srvCache
+	 * @param string $lagDetectionMethod
+	 * @param array $lagDetectionOptions
+	 * @param bool $useGTIDs
+	 */
 	public function __construct(
 		$topologyRole,
 		$logger,
@@ -65,6 +75,7 @@ class MysqlReplicationReporter extends ReplicationReporter {
 		$this->useGTIDs = $useGTIDs;
 	}
 
+	/** @inheritDoc */
 	protected function doGetLag( IDatabase $conn ) {
 		if ( $this->lagDetectionMethod === 'pt-heartbeat' ) {
 			return $this->getLagFromPtHeartbeat( $conn );
@@ -169,6 +180,7 @@ class MysqlReplicationReporter extends ReplicationReporter {
 		return $row ? ( $row->us_ago / 1e6 ) : null;
 	}
 
+	/** @inheritDoc */
 	public function getApproximateLagStatus( IDatabase $conn ) {
 		if ( $this->lagDetectionMethod === 'pt-heartbeat' ) {
 			// Disable caching since this is fast enough and we don't want
@@ -214,6 +226,7 @@ class MysqlReplicationReporter extends ReplicationReporter {
 		return $this->useGTIDs;
 	}
 
+	/** @inheritDoc */
 	public function primaryPosWait( IDatabase $conn, DBPrimaryPos $pos, $timeout ) {
 		if ( !( $pos instanceof MySQLPrimaryPos ) ) {
 			throw new InvalidArgumentException( "Position not an instance of MySQLPrimaryPos" );
@@ -263,7 +276,7 @@ class MysqlReplicationReporter extends ReplicationReporter {
 			}
 			// Wait on the GTID set
 			$gtidArg = $conn->addQuotes( implode( ',', $gtidsWait ) );
-			if ( strpos( $gtidArg, ':' ) !== false ) {
+			if ( str_contains( $gtidArg, ':' ) ) {
 				// MySQL GTIDs, e.g "source_id:transaction_id"
 				$query = new Query(
 					"SELECT WAIT_FOR_EXECUTED_GTID_SET($gtidArg, $timeout)",

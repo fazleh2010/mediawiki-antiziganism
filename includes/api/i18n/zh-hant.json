@@ -9,6 +9,7 @@
 			"Diskdance",
 			"EagerLin",
 			"Jasonzhuocn",
+			"Key0121",
 			"Kly",
 			"LNDDYL",
 			"Lakejason0",
@@ -31,8 +32,7 @@
 			"張詠涵",
 			"捍粵者",
 			"星海",
-			"烈羽",
-			"Key0121"
+			"烈羽"
 		]
 	},
 	"apihelp-main-extended-description": "<div class=\"hlist plainlinks api-main-links\">\n* [[mw:Special:MyLanguage/API:Main_page|說明文件]]\n* [[mw:Special:MyLanguage/API:Etiquette|Etiquette 與使用指南]]\n* [[mw:Special:MyLanguage/API:FAQ|常見問題]]\n* [https://lists.wikimedia.org/mailman/listinfo/mediawiki-api 郵寄清單]\n* [https://lists.wikimedia.org/mailman/listinfo/mediawiki-api-announce API公告]\n* [https://phabricator.wikimedia.org/maniphest/query/GebfyV4uCaLd/#R 報告錯誤及請求功能]\n</div>\n<strong>狀態資訊：</strong>MediaWiki API 已是成熟、穩定，並積極支援以改善的介面。儘管我們儘可能避免，但仍偶有需要重大變更的情況，請訂閱[https://lists.wikimedia.org/hyperkitty/list/mediawiki-api-announce@lists.wikimedia.org/ mediawiki-api-announce 郵寄清單]以便獲得更新通知。\n\n<strong>錯誤的請求：</strong>當 API 收到錯誤的請求，會發出以「MediaWiki-API-Error」為鍵的 HTTP 標頭欄位，隨後標頭欄位的值，以及傳回的錯誤碼會設為相同值。詳細資訊請參閱 [[mw:Special:MyLanguage/API:Errors_and_warnings|API: 錯誤與警告]]。\n\n<p class=\"mw-apisandbox-link\"><strong>測試：</strong>要簡化 API 請求的測試過程，請見 [[Special:ApiSandbox]]。</p>",
@@ -373,7 +373,7 @@
 	"apihelp-options-param-change": "更改清單，格式化為「名稱 = 值」（例如：skin=vector）。如果未提供值（甚至沒有等號），像是：optionname|otheroption|...，那麼選項將會重新設定成預設值。如果傳遞的任何值包含豎線字元（<kbd>|</kbd>），請使用[[Special:ApiHelp/main#main/datatypes|替代多值分隔符號]]以便正確操作。",
 	"apihelp-options-param-optionname": "選項名稱，其應設定為由 <var>$1optionvalue</var> 所提供的值。",
 	"apihelp-options-param-optionvalue": "由 <var>$1optionname</var> 所指定，用於選項的值。當設定了 <var>$1optionname</var>；但省略了 <var>$1optionvalue</var> 時，該選項會重設成預設值。",
-	"apihelp-options-param-global": "該如何使用 GlobalPreferences 擴充來全域設定選項。\n\n* <kbd>ignore</kbd>：不做出任何行為，會保持選項先前的值。\n* <kbd>override</kbd>：新增一個本地端覆蓋\n* <kbd>update</kbd>：全域更改選項",
+	"apihelp-options-param-global": "該如何使用 GlobalPreferences 擴充來全域設定選項。\n\n* <kbd>ignore</kbd>：不做出任何行為，會保持選項先前的值。\n* <kbd>override</kbd>：新增本地覆蓋。\n* <kbd>update</kbd>：全域更改選項。\n* <kbd>create</kbd>：全域設定選項，覆蓋任何本地值。",
 	"apihelp-options-example-reset": "重設所有偏好設定",
 	"apihelp-options-example-change": "更改<kbd>skin</kbd>和<kbd>hideminor</kbd>偏好設定。",
 	"apihelp-options-example-complex": "重置所有偏好設定，然後再設定 <kbd>skin</kbd> 與 <kbd>nickname</kbd>。",

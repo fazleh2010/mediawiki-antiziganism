@@ -30,7 +30,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 	}
 
 	private static function pWrapOptionalChildren( Env $env, Node $n ): bool {
-		foreach ( $n->childNodes as $c ) {
+		foreach ( DOMUtils::childNodes( $n ) as $c ) {
 			if ( !self::pWrapOptional( $env, $c ) ) {
 				return false;
 			}
@@ -60,9 +60,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 			DOMDataUtils::getDataParsoid( $n )->getTempFlag( TempData::WRAPPER )
 		) {
 			if ( DOMUtils::hasTypeOf( $n, 'mw:DOMFragment' ) ) {
-				$domFragment = $env->getDOMFragment(
-					DOMDataUtils::getDataParsoid( $n )->html
-				);
+				$domFragment = DOMDataUtils::getDataParsoid( $n )->html;
 				return self::pWrapOptionalChildren( $env, $domFragment );
 			} else {
 				return self::pWrapOptionalChildren( $env, $n );
@@ -97,7 +95,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 	 *
 	 * @param Element $n
 	 * @param array $a
-	 * @return array
+	 * @return list<array{pwrap: mixed, node?: Element}>
 	 */
 	private function mergeRuns( Element $n, array $a ): array {
 		$ret = [];
@@ -120,7 +118,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 				$dp = DOMDataUtils::getDataParsoid( $ret[$i]['node'] );
 				$dp->autoInsertedEnd = true;
 				unset( $dp->tmp->endTSR );
-				$cnode = DOMDataUtils::cloneNode( $n, false );
+				$cnode = DOMDataUtils::cloneElement( $n, false );
 				$ret[] = [ 'pwrap' => $v['pwrap'], 'node' => $cnode ];
 				$i++;
 				DOMDataUtils::getDataParsoid( $ret[$i]['node'] )->autoInsertedStart = true;
@@ -163,18 +161,17 @@ class PWrap implements Wt2HtmlDOMProcessor {
 			return [ [ 'pwrap' => null, 'node' => $n ] ];
 		} elseif ( $n instanceof Text ) {
 			return [ [ 'pwrap' => true, 'node' => $n ] ];
-		} elseif ( !$this->isSplittableTag( $n ) || count( $n->childNodes ) === 0 ) {
+		} elseif ( !$this->isSplittableTag( $n ) || $n->firstChild === null ) {
 			// block tag OR non-splittable inline tag
 			return [
 				[ 'pwrap' => !DOMUtils::hasBlockTag( $n ), 'node' => $n ]
 			];
 		} else {
-			DOMUtils::assertElt( $n );
+			'@phan-var Element $n'; // @var Element $n
 			// splittable inline tag
 			// split for each child and merge runs
-			$children = $n->childNodes;
 			$splits = [];
-			foreach ( $children as $child ) {
+			foreach ( DOMUtils::childNodes( $n ) as $child ) {
 				$splits[] = $this->split( $env, $child );
 			}
 			return $this->mergeRuns( $n, $this->flatten( $splits ) );
@@ -222,7 +219,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 	 * @param Env $env
 	 * @param Element|DocumentFragment $root
 	 */
-	private function pWrapDOM( Env $env, Node $root ) {
+	private function pWrapDOM( Env $env, Node $root ): void {
 		$state = new PWrapState( $env );
 		$c = $root->firstChild;
 		while ( $c ) {
@@ -268,7 +265,7 @@ class PWrap implements Wt2HtmlDOMProcessor {
 	 * @param Element|DocumentFragment $root
 	 * @param string $tagName
 	 */
-	private function pWrapInsideTag( Env $env, Node $root, string $tagName ) {
+	private function pWrapInsideTag( Env $env, Node $root, string $tagName ): void {
 		$c = $root->firstChild;
 		while ( $c ) {
 			$next = $c->nextSibling;

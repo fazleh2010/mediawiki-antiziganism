@@ -32,7 +32,7 @@ class MainConfigDependency extends CacheDependency {
 	/** @var mixed */
 	private $value;
 
-	public function __construct( $name ) {
+	public function __construct( string $name ) {
 		$this->name = $name;
 		$this->value = $this->getConfig()->get( $this->name );
 	}
@@ -41,6 +41,7 @@ class MainConfigDependency extends CacheDependency {
 		return MediaWikiServices::getInstance()->getMainConfig();
 	}
 
+	/** @inheritDoc */
 	public function isExpired() {
 		if ( !$this->getConfig()->has( $this->name ) ) {
 			return true;

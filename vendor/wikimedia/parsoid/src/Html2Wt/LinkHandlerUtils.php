@@ -126,7 +126,7 @@ class LinkHandlerUtils {
 				// even though "|" is an invalid character, we still need to ensure
 				// it doesn't appear in there.  The percent encoded version is fine
 				// in the fragment, since it won't break the parse.
-				strpos( $linkTarget, '|' ) !== false,
+				str_contains( $linkTarget, '|' ),
 		];
 	}
 
@@ -227,7 +227,7 @@ class LinkHandlerUtils {
 		// handling code.)
 		if ( $rtData->type === 'mw:WikiLink' &&
 			( preg_match( '#^(\w+:)?//#', $rtData->href ) ||
-				substr( $rtData->origHref ?? '', 0, 1 ) === '/' )
+				str_starts_with( $rtData->origHref ?? '', '/' ) )
 		) {
 			$rtData->type = 'mw:ExtLink';
 		}
@@ -326,7 +326,7 @@ class LinkHandlerUtils {
 			// but gets percent encoded on the way out since it has special
 			// semantics in a url.  That will break the url we're serializing, so
 			// protect it.
-			strpos( $targetForQmarkCheck, '?' ) === false &&
+			!str_contains( $targetForQmarkCheck, '?' ) &&
 			// Ensure we have a valid link target, otherwise falling back to extlink
 			// is preferable, since it won't serialize as a link.
 			(
@@ -510,7 +510,7 @@ class LinkHandlerUtils {
 	 * @return bool
 	 */
 	private static function hasAutoUrlTerminatingChars( string $url ): bool {
-		$sep = TokenizerUtils::getAutoUrlTerminatingChars( strpos( $url, '(' ) !== false );
+		$sep = TokenizerUtils::getAutoUrlTerminatingChars( str_contains( $url, '(' ) );
 		return str_contains( $sep, substr( $url, -1 ) );
 	}
 
@@ -623,7 +623,6 @@ class LinkHandlerUtils {
 	private static function serializeAsWikiLink(
 		Element $node, SerializerState $state, stdClass $linkData
 	): void {
-		$contentParts = null;
 		$contentSrc = '';
 		$isPiped = false;
 		$needsEscaping = true;
@@ -830,7 +829,6 @@ class LinkHandlerUtils {
 			$state->redirectText = 'unbuffered';
 		}
 
-		$pipedText = null;
 		if ( $escapedTgt && $escapedTgt->invalidLink ) {
 			// If the link target was invalid, instead of emitting an invalid link,
 			// omit the link and serialize just the content instead. But, log the
@@ -897,7 +895,7 @@ class LinkHandlerUtils {
 
 		$siteConfig = $state->getEnv()->getSiteConfig();
 
-		$pureHashMatch = substr( $urlStr, 0, 1 ) === '#';
+		$pureHashMatch = str_starts_with( $urlStr, '#' );
 		// Fully serialize the content
 		$contentStr = $state->serializeLinkChildrenToString(
 			$node,
@@ -906,8 +904,6 @@ class LinkHandlerUtils {
 
 		// serialize as auto-numbered external link
 		// [http://example.com]
-		$linktext = null;
-		$class = null;
 		// If it's just anchor text, serialize as an internal link.
 		if ( $pureHashMatch ) {
 			$class = WikiLinkText::class;
@@ -990,7 +986,7 @@ class LinkHandlerUtils {
 			];
 
 			$isComplexLink = false;
-			foreach ( DOMUtils::attributes( $node ) as $name => $value ) {
+			foreach ( DOMCompat::attributes( $node ) as $name => $_value ) {
 				// XXX: Don't drop rel and class in every case once a tags are
 				// actually supported in the MW default config?
 				if ( !isset( $safeAttr[$name] ) ) {
@@ -1018,7 +1014,6 @@ class LinkHandlerUtils {
 			$hrefStr = self::escapeExtLinkURL( self::getHref( $env, $node ) );
 			$handler = [ $state->serializer->wteHandlers, 'aHandler' ];
 			$str = $state->serializeLinkChildrenToString( $node, $handler );
-			$chunk = null;
 			if ( !$hrefStr ) {
 				// Without an href, we just emit the string as text.
 				// However, to preserve targets for anchor links,
@@ -1143,7 +1138,6 @@ class LinkHandlerUtils {
 		};
 
 		// Try to identify the local title to use for the link.
-		$link = null;
 
 		$linkFromDataMw = WTSUtils::getAttrFromDataMw( $outerDMW, 'link', true );
 		if ( $linkFromDataMw !== null ) {
@@ -1299,7 +1293,6 @@ class LinkHandlerUtils {
 		// can also be "extra" classes added by `img_class` as well.)
 		$classes = DOMCompat::getClassList( $outerElt );
 		$extra = []; // 'extra' classes
-		$val = null;
 
 		foreach ( $classes as $c ) {
 			switch ( $c ) {

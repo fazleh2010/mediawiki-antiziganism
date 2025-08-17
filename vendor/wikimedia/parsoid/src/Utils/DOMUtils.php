@@ -8,12 +8,13 @@ use Wikimedia\Parsoid\Core\ClientError;
 use Wikimedia\Parsoid\DOM\Comment;
 use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
+use Wikimedia\Parsoid\DOM\DOMParser;
 use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
 use Wikimedia\Parsoid\DOM\Text;
 use Wikimedia\Parsoid\Wikitext\Consts;
 use Wikimedia\Parsoid\Wt2Html\TreeBuilder\DOMBuilder;
-use Wikimedia\Parsoid\Wt2Html\XMLSerializer;
+use Wikimedia\Parsoid\Wt2Html\XHtmlSerializer;
 use Wikimedia\RemexHtml\Tokenizer\Tokenizer;
 use Wikimedia\RemexHtml\TreeBuilder\Dispatcher;
 use Wikimedia\RemexHtml\TreeBuilder\TreeBuilder;
@@ -41,6 +42,10 @@ class DOMUtils {
 			// elements.
 			$html = '<body>' . $html;
 		}
+		if ( DOMCompat::isUsingDodo() ) {
+			return ( new DOMParser() )->parseFromString( $html, 'text/html' );
+		}
+		// If DOMCompat::isUsing84Dom use Remex to parse.
 
 		$domBuilder = new DOMBuilder; // our DOMBuilder, not remex's
 		$treeBuilder = new TreeBuilder( $domBuilder, [ 'ignoreErrors' => true ] );
@@ -90,6 +95,26 @@ class DOMUtils {
 	}
 
 	/**
+	 * Many DOM implementations will de-optimize the representation of a
+	 * Node if `$node->childNodes` is accessed, converting the linked list
+	 * of node children to an array which is then expensive to mutate.
+	 *
+	 * This method returns an array of child nodes, but uses the
+	 * `->firstChild`/`->nextSibling` accessors to obtain it, avoiding
+	 * deoptimization.  This is also robust against concurrent mutation.
+	 *
+	 * @param Node $n
+	 * @return list<Node> the child nodes
+	 */
+	public static function childNodes( Node $n ): array {
+		$result = [];
+		for ( $child = $n->firstChild; $child !== null; $child = $child->nextSibling ) {
+			$result[] = $child;
+		}
+		return $result;
+	}
+
+	/**
 	 * Copy 'from'.childNodes to 'to' adding them before 'beforeNode'
 	 * 'from' and 'to' belong to different documents.
 	 *
@@ -119,10 +144,11 @@ class DOMUtils {
 	/**
 	 * Assert that this is a DOM element node.
 	 * This is primarily to help phan analyze variable types.
+	 *
 	 * @phan-assert Element $node
+	 *
 	 * @param ?Node $node
-	 * @return bool Always returns true
-	 * @phan-assert Element $node
+	 * @return true Always returns true
 	 */
 	public static function assertElt( ?Node $node ): bool {
 		Assert::invariant( $node instanceof Element, "Expected an element" );
@@ -756,7 +782,7 @@ class DOMUtils {
 	 * Defined similarly to DOMCompat::getInnerHTML()
 	 */
 	public static function getFragmentInnerHTML( DocumentFragment $frag ): string {
-		return XMLSerializer::serialize(
+		return XHtmlSerializer::serialize(
 			$frag, [ 'innerXML' => true ]
 		)['html'];
 	}
@@ -800,28 +826,11 @@ class DOMUtils {
 	}
 
 	/**
-	 * Get an associative array of attributes, suitable for serialization.
-	 *
-	 * Add the xmlns attribute if available, to workaround PHP's surprising
-	 * behavior with the xmlns attribute: HTML is *not* an XML document,
-	 * but various parts of PHP (including our misnamed XMLSerializer) pretend
-	 * that it is, sort of.
-	 *
-	 * @param Element $element
-	 * @return array<string,string>
-	 * @see https://phabricator.wikimedia.org/T235295
+	 * @see DOMCompat::attributes()
+	 * @deprecated Use DOMCompat::attributes
 	 */
 	public static function attributes( Element $element ): array {
-		$result = [];
-		// The 'xmlns' attribute is "invisible" T235295
-		$xmlns = DOMCompat::getAttribute( $element, 'xmlns' );
-		if ( $xmlns !== null ) {
-			$result['xmlns'] = $xmlns;
-		}
-		foreach ( $element->attributes as $attr ) {
-			$result[$attr->name] = $attr->value;
-		}
-		return $result;
+		return DOMCompat::attributes( $element );
 	}
 
 	public static function isMetaDataTag( Element $node ): bool {

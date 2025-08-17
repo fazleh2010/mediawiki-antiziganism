@@ -539,8 +539,6 @@ c</p>
 Multiple newlines after tables are converted to p-br-p tags
 !!options
 parsoid=wt2html,wt2wt
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !!wikitext
 {|
 |x
@@ -2385,8 +2383,6 @@ Dummy article to suppress redlinks in tests
 ## FIXME: Title part of filename is interpreted in php
 !! test
 Link with double quotes in title part (literal) and alternate part (interpreted)
-!! config
-wgParserEnableLegacyMediaDOM=false
 !! wikitext
 [[File:Denys_Savchenko_''Pentecoste''.jpg]]
 
@@ -3726,8 +3722,6 @@ List items from template
 
 !! test
 List interrupted by empty line or heading
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 *foo
 
@@ -4082,6 +4076,30 @@ parsoid=wt2html,wt2wt,html2html
 <p><small data-parsoid='{"stx":"html","autoInsertedEnd":true}'></small></p>
 
 <ul><li><ul><li data-parsoid='{}'><small data-parsoid='{"stx":"html","autoInsertedStart":true}'> 123</small></li></ul></li></ul>
+!! end
+
+# T390629: category used to be moved outside of the <body>!
+!! test
+4. Category at the end of a bare <li> list item
+!! options
+parsoid=wt2html
+!! wikitext
+<li>Broken list
+== Section ==
+* Proper list
+
+[[Category:Foo]]
+!! html/php
+<li>Broken list
+<div class="mw-heading mw-heading2"><h2 id="Section">Section</h2><span class="mw-editsection"><span class="mw-editsection-bracket">[</span><a href="/index.php?title=Parser_test&amp;action=edit&amp;section=1" title="Edit section: Section">edit</a><span class="mw-editsection-bracket">]</span></span></div>
+<ul><li>Proper list</li></ul></li>
+!! html/parsoid
+<li>Broken list
+<h2 id="Section">Section</h2>
+<ul>
+<li>Proper list</li>
+</ul>
+<link rel="mw:PageProp/Category" href="./Category:Foo"/></li>
 !! end
 
 !! test
@@ -5233,8 +5251,6 @@ Unbalanced includeonly and noinclude tags
 includeonly / noinclude / onlyinclude and headers
 !! options
 parsoid = wt2html
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 <includeonly><!--hello1 --></includeonly>== test 1 == <includeonly><!--hello2 --></includeonly>
 <noinclude><!--hello3 --></noinclude>== test 2 == <noinclude><!--hello4 --></noinclude>
@@ -5294,8 +5310,6 @@ Un-closed <includeonly>
 Includes and comments at SOL
 !! options
 parsoid=wt2html,html2html
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 <!-- comment --><noinclude><!-- comment --></noinclude><!-- comment -->==hu==
 
@@ -6939,8 +6953,6 @@ subpage title=[[Subpage test/1/2/3/4]]
 T335847: Resolve forward slash title
 !! options
 subpage title=[[/]]
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 ===123===
 !! html/php
@@ -7747,8 +7759,6 @@ ill=fr:1
 Single-line or multiline-comments can follow headings
 !! options
 parsoid=wt2html,wt2wt
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 ==foo==<!---->
 ==bar==<!--c1-->
@@ -8243,8 +8253,6 @@ Media link to nonexistent file (T3702)
 
 !! test
 Media link with nested wikilinks
-!! config
-wgParserEnableLegacyMediaDOM=false
 !! wikitext
 [[Media:Foobar.jpg|[[Test]]]]
 [[Media:Foobar.jpg|[[File:Foobar.jpg]]]]
@@ -11131,7 +11139,7 @@ parsoid={ "modes": ["wt2html","html2html"], "normalizePhp": true }
 <dt>This is an okay multi-codepoint HTML5 entity</dt>
 <dd>&#8766;&#819;</dd>
 <dt>This are valid wikitext-specific entities</dt>
-<dd>&#8207; &#8207;</dd>
+<dd>&rlm; &rlm;</dd>
 <dt>Highest valid characters</dt>
 <dd>&#x10fffd; &#x10fffe; &#x10ffff;</dd></dl>
 !! end
@@ -11459,7 +11467,6 @@ wgFragmentMode=[ "html5", "legacy" ]
 anchorencode encodes like the TOC generator: (T20431)
 !! config
 wgFragmentMode=[ "html5", "legacy" ]
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 ===_ +:.3A%3A _ &&amp;]] x===
 {{anchorencode: _ +:.3A%3A _ &&amp;]] x}}
@@ -11484,7 +11491,6 @@ __NOEDITSECTION__
 anchorencode encodes like the TOC generator: (T20431) (legacy)
 !! config
 wgFragmentMode=[ "legacy" ]
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 ===_ +:.3A%3A&&amp;]]===
 {{anchorencode: _ +:.3A%3A&&amp;]] }}
@@ -12570,8 +12576,6 @@ Strip reserved data attributes
 
 !! test
 percent-encoding and + signs in internal links (T28410)
-!! config
-wgParserEnableLegacyMediaDOM=false
 !! wikitext
 [[User:+%]] [[Page+title%]]
 [[%+]] [[%+|%20]] [[%+ ]] [[%+r]]
@@ -12727,8 +12731,6 @@ MediaWiki:T34057
 T34057: Title needed when expanding <h> nodes.
 !! options
 title=[[Main Page]]
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 {{int:T34057}}
 !! html/php
@@ -12814,6 +12816,50 @@ language=be-tarask
 !! html/parsoid+integrated
 <p><span about="#mwt1" typeof="mw:Transclusion" data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:123456.78","function":"formatnum"},"params":{},"i":0}}]}'>123 456,78</span>
 <span about="#mwt2" typeof="mw:Transclusion" data-parsoid='{"pi":[[{"k":"1"}]]}' data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:123456.78","function":"formatnum"},"params":{"1":{"wt":"NOSEP"}},"i":0}}]}'>123456.78</span></p>
+!! end
+
+!! test
+Check lossless in formatNum
+!! wikitext
+{{formatnum:9999999999999999}}
+{{formatnum:9999999999999999|LOSSLESS}}
+!! html/php
+<p>10,000,000,000,000,000
+9999999999999999
+</p>
+!! html/parsoid+integrated
+<p><span about="#mwt1" typeof="mw:Transclusion" data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:9999999999999999","function":"formatnum"},"params":{},"i":0}}]}'>10,000,000,000,000,000</span>
+<span about="#mwt2" typeof="mw:Transclusion" data-parsoid='{"pi":[[{"k":"1"}]]}' data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:9999999999999999","function":"formatnum"},"params":{"1":{"wt":"LOSSLESS"}},"i":0}}]}'>9999999999999999</span></p>
+!! end
+
+!! test
+Check bn lossless in formatNum
+!! options
+language=bn
+!! wikitext
+{{formatnum:9999999999999999}}
+{{formatnum:9999999999999999|LOSSLESS}}
+!! html/php
+<p>১০,০০,০০,০০,০০,০০,০০,০০০
+9999999999999999
+</p>
+!! html/parsoid+integrated
+<p><span about="#mwt1" typeof="mw:Transclusion" data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:9999999999999999","function":"formatnum"},"params":{},"i":0}}]}'>১০,০০,০০,০০,০০,০০,০০,০০০</span>
+<span about="#mwt2" typeof="mw:Transclusion" data-parsoid='{"pi":[[{"k":"1"}]]}' data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:9999999999999999","function":"formatnum"},"params":{"1":{"wt":"LOSSLESS"}},"i":0}}]}'>9999999999999999</span></p>
+!! end
+
+!! test
+Check noCommafy + lossless in formatNum
+!! wikitext
+{{formatnum:999999999999999|NOSEP|LOSSLESS}}
+{{formatnum:9999999999999999|NOSEP|LOSSLESS}}
+!! html/php
+<p>999999999999999
+9999999999999999
+</p>
+!! html/parsoid+integrated
+<p><span about="#mwt1" typeof="mw:Transclusion" data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:999999999999999","function":"formatnum"},"params":{"1":{"wt":"NOSEP"},"2":{"wt":"LOSSLESS"}},"i":0}}]}'>999999999999999</span>
+<span about="#mwt2" typeof="mw:Transclusion" data-parsoid='{"pi":[[{"k":"1"}]]}' data-mw='{"parts":[{"template":{"target":{"wt":"formatnum:9999999999999999","function":"formatnum"},"params":{"1":{"wt":"NOSEP"},"2":{"wt":"LOSSLESS"}},"i":0}}]}'>9999999999999999</span></p>
 !! end
 
 !! test
@@ -13414,10 +13460,12 @@ parsoid=wt2html,wt2wt
 
 !! test
 Empty LI and TR nodes should not be stripped from top-level content
+!! options
+parsoid=wt2html,html2wt
 !! wikitext
-*a
+* a
 *
-*b
+* b
 
 {|
 |-
@@ -16782,8 +16830,6 @@ parsoid={
 	"modes": ["wt2html"],
 	"preserveIEW": true
 }
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 __NOTOC__
 ==    <!--c1-->  <!--c2--> Spaces   <!--c3--> <!--c4-->  ==
@@ -16866,8 +16912,6 @@ parsoid={
 	"modes": ["wt2html"],
 	"preserveIEW": true
 }
-!! config
-wgParserEnableLegacyHeadingDOM=false
 !! wikitext
 __NOTOC__
 <h2>    <!--c1-->   <!--c2--> Heading    <!--c3--> <!--c4-->  </h2>

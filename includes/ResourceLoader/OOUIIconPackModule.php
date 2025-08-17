@@ -29,7 +29,7 @@ use InvalidArgumentException;
  * @since 1.34
  */
 class OOUIIconPackModule extends OOUIImageModule {
-	public function __construct( array $options = [], $localBasePath = null ) {
+	public function __construct( array $options = [], ?string $localBasePath = null ) {
 		parent::__construct( $options, $localBasePath );
 
 		if ( !isset( $this->definition['icons'] ) || !$this->definition['icons'] ) {
@@ -46,6 +46,7 @@ class OOUIIconPackModule extends OOUIImageModule {
 		return $this->definition['icons'];
 	}
 
+	/** @inheritDoc */
 	protected function loadOOUIDefinition( $theme, $unused ): array {
 		// This is shared between instances of this class, so we only have to load the JSON files once
 		static $data = [];
@@ -76,6 +77,7 @@ class OOUIIconPackModule extends OOUIImageModule {
 		return $definition;
 	}
 
+	/** @inheritDoc */
 	public static function extractLocalBasePath( array $options, $localBasePath = null ) {
 		global $IP;
 		// Ignore any 'localBasePath' present in $options, this always refers to files in MediaWiki core

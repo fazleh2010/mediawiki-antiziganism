@@ -55,6 +55,7 @@ class WebPHandler extends BitmapHandler {
 	private const VP8X_XMP = 4;
 	private const VP8X_ANIM = 2;
 
+	/** @inheritDoc */
 	public function getSizeAndMetadata( $state, $filename ) {
 		$parsedWebPData = self::extractMetadata( $filename );
 		if ( !$parsedWebPData ) {
@@ -70,10 +71,12 @@ class WebPHandler extends BitmapHandler {
 		return $info;
 	}
 
+	/** @inheritDoc */
 	public function getMetadataType( $image ) {
 		return 'parsed-webp';
 	}
 
+	/** @inheritDoc */
 	public function isFileMetadataValid( $image ) {
 		$data = $image->getMetadataArray();
 		if ( $data === [ '_error' => self::BROKEN_FILE ] ) {
@@ -208,7 +211,7 @@ class WebPHandler extends BitmapHandler {
 			// The Exif section of a webp file is basically a tiff file without an image.
 			// Some files start with an Exif\0\0. This is wrong according to standard and
 			// will prevent us from reading file, so remove for compatibility.
-			if ( substr( $exifData, 0, 6 ) === "Exif\x00\x00" ) {
+			if ( str_starts_with( $exifData, "Exif\x00\x00" ) ) {
 				$exifData = substr( $exifData, 6 );
 			}
 			$tmpFile = MediaWikiServices::getInstance()->
@@ -278,13 +281,13 @@ class WebPHandler extends BitmapHandler {
 			return [];
 		}
 		// Bytes 9-12 contain the image size
-		// Bits 0-13 are width-1; bits 15-27 are height-1
+		// Bits 0-13 are width-1; bits 14-27 are height-1
 		$imageSize = unpack( 'C4', substr( $header, 9, 4 ) );
 		return [
 				'compression' => 'lossless',
 				'width' => ( $imageSize[1] | ( ( $imageSize[2] & 0x3F ) << 8 ) ) + 1,
 				'height' => ( ( ( $imageSize[2] & 0xC0 ) >> 6 ) |
-						( $imageSize[3] << 2 ) | ( ( $imageSize[4] & 0x03 ) << 10 ) ) + 1
+						( $imageSize[3] << 2 ) | ( ( $imageSize[4] & 0x0F ) << 10 ) ) + 1
 		];
 	}
 
@@ -344,6 +347,7 @@ class WebPHandler extends BitmapHandler {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function canAnimateThumbnail( $file ) {
 		return false;
 	}
@@ -360,15 +364,18 @@ class WebPHandler extends BitmapHandler {
 		return [ 'png', 'image/png' ];
 	}
 
+	/** @inheritDoc */
 	protected function hasGDSupport() {
 		return function_exists( 'gd_info' ) && ( gd_info()['WebP Support'] ?? false );
 	}
 
+	/** @inheritDoc */
 	public function getCommonMetaArray( File $image ) {
 		$meta = $image->getMetadataArray();
 		return $meta['media-metadata'] ?? [];
 	}
 
+	/** @inheritDoc */
 	public function formatMetadata( $image, $context = false ) {
 		$meta = $this->getCommonMetaArray( $image );
 		if ( !$meta ) {

@@ -31,6 +31,7 @@ use Wikimedia\AtEase\AtEase;
  * Parameters for this operation are outlined in FileBackend::doOperations().
  */
 class StoreFileOp extends FileOp {
+	/** @inheritDoc */
 	protected function allowedParams() {
 		return [
 			[ 'src', 'dst' ],
@@ -39,6 +40,7 @@ class StoreFileOp extends FileOp {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function doPrecheck(
 		FileStatePredicates $opPredicates,
 		FileStatePredicates $batchPredicates
@@ -76,6 +78,7 @@ class StoreFileOp extends FileOp {
 		return $status; // safe to call attempt()
 	}
 
+	/** @inheritDoc */
 	protected function doAttempt() {
 		if ( $this->overwriteSameCase ) {
 			$status = StatusValue::newGood(); // nothing to do
@@ -87,7 +90,7 @@ class StoreFileOp extends FileOp {
 		return $status;
 	}
 
-	protected function getSourceSize() {
+	protected function getSourceSize(): int {
 		AtEase::suppressWarnings();
 		$size = filesize( $this->params['src'] );
 		AtEase::restoreWarnings();
@@ -95,7 +98,7 @@ class StoreFileOp extends FileOp {
 		return $size;
 	}
 
-	protected function getSourceSha1Base36() {
+	protected function getSourceSha1Base36(): string {
 		AtEase::suppressWarnings();
 		$hash = sha1_file( $this->params['src'] );
 		AtEase::restoreWarnings();
@@ -106,6 +109,7 @@ class StoreFileOp extends FileOp {
 		return $hash;
 	}
 
+	/** @inheritDoc */
 	public function storagePathsChanged() {
 		return [ $this->params['dst'] ];
 	}

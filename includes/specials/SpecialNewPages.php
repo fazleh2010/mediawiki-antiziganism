@@ -24,6 +24,7 @@ use MediaWiki\Cache\LinkBatchFactory;
 use MediaWiki\ChangeTags\ChangeTagsStore;
 use MediaWiki\CommentFormatter\RowCommentFormatter;
 use MediaWiki\Content\IContentHandlerFactory;
+use MediaWiki\Feed\ChannelFeed;
 use MediaWiki\Feed\FeedItem;
 use MediaWiki\Html\FormOptions;
 use MediaWiki\Html\Html;
@@ -38,6 +39,7 @@ use MediaWiki\Title\NamespaceInfo;
 use MediaWiki\Title\Title;
 use MediaWiki\User\Options\UserOptionsLookup;
 use MediaWiki\User\TempUser\TempUserConfig;
+use stdClass;
 use Wikimedia\HtmlArmor\HtmlArmor;
 
 /**
@@ -231,7 +233,7 @@ class SpecialNewPages extends IncludableSpecialPage {
 		}
 	}
 
-	protected function filterLinks() {
+	protected function filterLinks(): string {
 		// show/hide links
 		$showhide = [ $this->msg( 'show' )->escaped(), $this->msg( 'hide' )->escaped() ];
 
@@ -409,6 +411,7 @@ class SpecialNewPages extends IncludableSpecialPage {
 		}
 
 		$feedClasses = $this->getConfig()->get( MainConfigNames::FeedClasses );
+		'@phan-var array<string,class-string<ChannelFeed>> $feedClasses';
 		if ( !isset( $feedClasses[$type] ) ) {
 			$this->getOutput()->addWikiMsg( 'feed-invalid' );
 
@@ -434,7 +437,7 @@ class SpecialNewPages extends IncludableSpecialPage {
 		$feed->outFooter();
 	}
 
-	protected function feedTitle() {
+	protected function feedTitle(): string {
 		$desc = $this->getDescription()->text();
 		$code = $this->getConfig()->get( MainConfigNames::LanguageCode );
 		$sitename = $this->getConfig()->get( MainConfigNames::Sitename );
@@ -442,30 +445,36 @@ class SpecialNewPages extends IncludableSpecialPage {
 		return "$sitename - $desc [$code]";
 	}
 
+	/**
+	 * @param stdClass $row
+	 * @return FeedItem
+	 */
 	protected function feedItem( $row ) {
 		$title = Title::makeTitle( intval( $row->rc_namespace ), $row->rc_title );
-		if ( $title ) {
-			$date = $row->rc_timestamp;
-			$comments = $title->getTalkPage()->getFullURL();
+		$date = $row->rc_timestamp;
+		$comments = $title->getTalkPage()->getFullURL();
 
-			return new FeedItem(
-				$title->getPrefixedText(),
-				$this->feedItemDesc( $row ),
-				$title->getFullURL(),
-				$date,
-				$this->feedItemAuthor( $row ),
-				$comments
-			);
-		} else {
-			return null;
-		}
+		return new FeedItem(
+			$title->getPrefixedText(),
+			$this->feedItemDesc( $row ),
+			$title->getFullURL(),
+			$date,
+			$this->feedItemAuthor( $row ),
+			$comments
+		);
 	}
 
-	protected function feedItemAuthor( $row ) {
+	/**
+	 * @param stdClass $row
+	 */
+	protected function feedItemAuthor( $row ): string {
 		return $row->rc_user_text ?? '';
 	}
 
-	protected function feedItemDesc( $row ) {
+	/**
+	 * @param stdClass $row
+	 */
+	protected function feedItemDesc( $row ): string {
 		$revisionRecord = $this->revisionLookup->getRevisionById( $row->rev_id );
 		if ( !$revisionRecord ) {
 			return '';
@@ -509,10 +518,12 @@ class SpecialNewPages extends IncludableSpecialPage {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'changes';
 	}
 
+	/** @inheritDoc */
 	protected function getCacheTTL() {
 		return 60 * 5;
 	}

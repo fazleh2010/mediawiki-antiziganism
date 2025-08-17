@@ -110,7 +110,7 @@ class SearchSqlite extends SearchDatabase {
 				}
 				$count = 0;
 				foreach ( $strippedVariants as $stripped ) {
-					if ( $nonQuoted && strpos( $stripped, ' ' ) !== false ) {
+					if ( $nonQuoted && str_contains( $stripped, ' ' ) ) {
 						// Hack for Chinese: we need to toss in quotes for
 						// multiple-character phrases since normalizeForSearch()
 						// added spaces between them to make word breaks.
@@ -160,6 +160,7 @@ class SearchSqlite extends SearchDatabase {
 		return $regex;
 	}
 
+	/** @inheritDoc */
 	public function legalSearchChars( $type = self::CHARS_ALL ) {
 		$searchChars = parent::legalSearchChars( $type );
 		if ( $type === self::CHARS_ALL ) {
@@ -189,7 +190,7 @@ class SearchSqlite extends SearchDatabase {
 		return $this->searchInternal( $term, false );
 	}
 
-	protected function searchInternal( $term, $fulltext ) {
+	protected function searchInternal( string $term, bool $fulltext ): ?SqlSearchResultSet {
 		if ( !$this->fulltextSearchSupported() ) {
 			return null;
 		}

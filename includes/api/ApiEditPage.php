@@ -374,9 +374,7 @@ class ApiEditPage extends ApiBase {
 			'wpEditToken' => $params['token'],
 			'wpIgnoreBlankSummary' => true,
 			'wpIgnoreBlankArticle' => true,
-			'wpIgnoreSelfRedirect' => true,
-			'wpIgnoreBrokenRedirects' => true,
-			'wpIgnoreDoubleRedirects' => true,
+			'wpIgnoreProblematicRedirects' => true,
 			'bot' => $params['bot'],
 			'wpUnicodeCheck' => EditPage::UNICODE_CHECK,
 		];
@@ -456,7 +454,11 @@ class ApiEditPage extends ApiBase {
 
 		if ( $watch ) {
 			$requestArray['wpWatchthis'] = true;
-			$watchlistExpiry = $this->getExpiryFromParams( $params );
+			$prefName = 'watchdefault-expiry';
+			if ( !$pageObj->exists() ) {
+				$prefName = 'watchcreations-expiry';
+			}
+			$watchlistExpiry = $this->getExpiryFromParams( $params, $titleObj, $user, $prefName );
 
 			if ( $watchlistExpiry ) {
 				$requestArray['wpWatchlistExpiry'] = $watchlistExpiry;
@@ -692,14 +694,17 @@ class ApiEditPage extends ApiBase {
 		$apiResult->addValue( null, $this->getModuleName(), $r );
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$params = [
 			'title' => [
@@ -788,10 +793,12 @@ class ApiEditPage extends ApiBase {
 		return $params;
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=edit&title=Test&summary=test%20summary&' .
@@ -806,6 +813,7 @@ class ApiEditPage extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Edit';
 	}

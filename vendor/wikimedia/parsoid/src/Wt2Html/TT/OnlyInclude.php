@@ -4,39 +4,42 @@ declare( strict_types = 1 );
 namespace Wikimedia\Parsoid\Wt2Html\TT;
 
 use Wikimedia\Parsoid\NodeData\DataParsoid;
+use Wikimedia\Parsoid\Tokens\CompoundTk;
 use Wikimedia\Parsoid\Tokens\EndTagTk;
 use Wikimedia\Parsoid\Tokens\EOFTk;
 use Wikimedia\Parsoid\Tokens\KV;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
-use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
+use Wikimedia\Parsoid\Wt2Html\TokenHandlerPipeline;
 
 /**
- * OnlyInclude sadly forces synchronous template processing, as it needs to
- * hold onto all tokens in case an onlyinclude block is encountered later.
- * This can fortunately be worked around by caching the tokens after
- * onlyinclude processing (which is a good idea anyway).
+ * OnlyInclude needs to buffer tokens in case an onlyinclude block is encountered later.
  */
-class OnlyInclude extends TokenHandler {
-	/** @var array */
-	private $accum = [];
+class OnlyInclude extends UniversalTokenHandler {
+	private array $accum = [];
+	private bool $inOnlyInclude = false;
+	private bool $foundOnlyInclude = false;
+	private bool $enabled = true;
 
-	/** @var bool */
-	private $inOnlyInclude = false;
+	public function __construct( TokenHandlerPipeline $manager, array $options ) {
+		parent::__construct( $manager, $options );
+		$this->enabled = $this->options['inTemplate'] &&
+			$this->env->nativeTemplateExpansionEnabled();
+	}
 
-	/** @var bool */
-	private $foundOnlyInclude = false;
+	/** @inheritDoc */
+	public function onCompoundTk( CompoundTk $ctk, TokenHandler $tokensHandler ): ?array {
+		return $this->enabled ? $this->onAnyInclude( $ctk ) : null;
+	}
 
-	/**
-	 * @inheritDoc
-	 */
+	/** @inheritDoc */
 	public function onAny( $token ): ?array {
-		return !empty( $this->options['inTemplate'] ) ?
-			$this->onAnyInclude( $token ) : null;
+		return $this->enabled ? $this->onAnyInclude( $token ) : null;
 	}
 
 	/**
-	 * @param Token|array $token
+	 * @param Token|string $token
 	 * @return ?array<string|Token>
 	 */
 	private function onAnyInclude( $token ): ?array {
@@ -54,11 +57,7 @@ class OnlyInclude extends TokenHandler {
 			}
 		}
 
-		$isTag = $token instanceof TagTk ||
-			$token instanceof EndTagTk ||
-			$token instanceof SelfclosingTagTk;
-
-		if ( $isTag && $token->getName() === 'onlyinclude' ) {
+		if ( $token instanceof XMLTagTk && $token->getName() === 'onlyinclude' ) {
 			// FIXME: This doesn't seem to consider self-closing tags
 			// or close really
 			if ( !$this->inOnlyInclude ) {

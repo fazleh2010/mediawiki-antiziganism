@@ -1021,7 +1021,9 @@ class SpecialVersion extends SpecialPage {
 		);
 
 		$moduleNames = array_map(
-			static fn ( $m )=>Html::element( 'code', [], $m->getConfig()['name'] ),
+			static fn ( $m )=>Html::element( 'code', [
+				'title' => $m->getConfig()['extension-name'] ?? null,
+			], $m->getConfig()['name'] ),
 			$modules
 		);
 
@@ -1045,7 +1047,7 @@ class SpecialVersion extends SpecialPage {
 		if ( $creditsGroup ) {
 			$out .= $this->openExtType( $text, 'credits-' . $type );
 
-			usort( $creditsGroup, [ $this, 'compare' ] );
+			usort( $creditsGroup, $this->compare( ... ) );
 
 			foreach ( $creditsGroup as $extension ) {
 				$out .= $this->getCreditsForExtension( $type, $extension );
@@ -1063,7 +1065,7 @@ class SpecialVersion extends SpecialPage {
 	 * @param array $b
 	 * @return int
 	 */
-	public function compare( $a, $b ) {
+	private function compare( $a, $b ) {
 		return $this->getLanguage()->lc( $a['name'] ) <=> $this->getLanguage()->lc( $b['name'] );
 	}
 
@@ -1092,12 +1094,12 @@ class SpecialVersion extends SpecialPage {
 		// ... such as extension names and links
 		if ( isset( $extension['namemsg'] ) ) {
 			// Localized name of extension
-			$extensionName = $this->msg( $extension['namemsg'] );
+			$extensionName = $this->msg( $extension['namemsg'] )->text();
 		} elseif ( isset( $extension['name'] ) ) {
 			// Non localized version
 			$extensionName = $extension['name'];
 		} else {
-			$extensionName = $this->msg( 'version-no-ext-name' );
+			$extensionName = $this->msg( 'version-no-ext-name' )->text();
 		}
 
 		if ( isset( $extension['url'] ) ) {
@@ -1467,7 +1469,7 @@ class SpecialVersion extends SpecialPage {
 		}
 
 		return $this->getLanguage()
-			->listToText( array_map( [ __CLASS__, 'arrayToString' ], $list ) );
+			->listToText( array_map( [ self::class, 'arrayToString' ], $list ) );
 	}
 
 	/**
@@ -1583,6 +1585,7 @@ class SpecialVersion extends SpecialPage {
 		return $out;
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'wiki';
 	}

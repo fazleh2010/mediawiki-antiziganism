@@ -408,7 +408,7 @@ class DifferenceEngine extends ContextSource {
 		}
 		try {
 			return $slot->getContent();
-		} catch ( BadRevisionException $e ) {
+		} catch ( BadRevisionException ) {
 			$this->addRevisionLoadError( $which );
 			return null;
 		}
@@ -610,18 +610,6 @@ class DifferenceEngine extends ContextSource {
 				$this->mOldRevisionRecord &&
 				$this->mOldRevisionRecord->isDeleted( RevisionRecord::DELETED_TEXT )
 			);
-	}
-
-	/**
-	 * Get the permission errors associated with the revisions for the current diff.
-	 *
-	 * @deprecated since 1.44 Use authorizeView() instead
-	 * @param Authority $performer
-	 * @return array[] Array of arrays of the arguments to wfMessage to explain permissions problems.
-	 */
-	public function getPermissionErrors( Authority $performer ) {
-		wfDeprecated( __METHOD__, '1.44' );
-		return $this->authorizeView( $performer )->toLegacyErrorArray();
 	}
 
 	/**
@@ -1854,7 +1842,7 @@ class DifferenceEngine extends ContextSource {
 				if ( $numUsers == 1 && $users[0]->getName() == $newRevUserText ) {
 					$numUsers = 0; // special case to say "by the same user" instead of "by one other user"
 				}
-			} catch ( InvalidArgumentException $e ) {
+			} catch ( InvalidArgumentException ) {
 				$numUsers = 0;
 			}
 
@@ -2264,7 +2252,7 @@ class DifferenceEngine extends ContextSource {
 			foreach ( $tagIds as $tagId ) {
 				try {
 					$tags[] = $changeTagDefStore->getName( (int)$tagId );
-				} catch ( NameTableAccessException $exception ) {
+				} catch ( NameTableAccessException ) {
 					continue;
 				}
 			}
@@ -2282,7 +2270,7 @@ class DifferenceEngine extends ContextSource {
 		foreach ( $tagIds as $tagId ) {
 			try {
 				$tags[] = $changeTagDefStore->getName( (int)$tagId );
-			} catch ( NameTableAccessException $exception ) {
+			} catch ( NameTableAccessException ) {
 				continue;
 			}
 		}

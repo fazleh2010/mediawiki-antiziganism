@@ -122,7 +122,7 @@ class LoadMonitor implements ILoadMonitor {
 		}
 
 		if ( $circuitBreakingEnabled ) {
-			throw new DBUnexpectedError(
+			throw new DBConnectionError(
 				null, 'Database servers in ' . $this->lb->getClusterName() . ' are overloaded. ' .
 				'In order to protect application servers, the circuit breaking to databases of this section ' .
 				'have been activated. Please try again a few seconds.'
@@ -175,7 +175,7 @@ class LoadMonitor implements ILoadMonitor {
 		return $stateByServerIndex;
 	}
 
-	protected function getStateFromWanCache( $i, ?array $srvPrevState ) {
+	protected function getStateFromWanCache( int $i, ?array $srvPrevState ): array {
 		$hit = true;
 		$key = $this->makeStateKey( $this->wanCache, $i );
 		$state = $this->wanCache->getWithSetCallback(
@@ -202,7 +202,7 @@ class LoadMonitor implements ILoadMonitor {
 		return $state;
 	}
 
-	protected function makeStateKey( IStoreKeyEncoder $cache, int $i ) {
+	protected function makeStateKey( IStoreKeyEncoder $cache, int $i ): string {
 		return $cache->makeGlobalKey(
 			'rdbms-gauge',
 			self::VERSION,
@@ -246,7 +246,7 @@ class LoadMonitor implements ILoadMonitor {
 		if ( $conn ) {
 			try {
 				$connCount = $this->getConnCountForDb( $conn );
-			} catch ( DBError $e ) {
+			} catch ( DBError ) {
 				$connCount = false;
 			}
 		} else {

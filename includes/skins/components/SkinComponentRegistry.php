@@ -18,6 +18,7 @@
 
 namespace MediaWiki\Skin;
 
+use MediaWiki\Parser\ParserOutputFlags;
 use MediaWiki\SpecialPage\SpecialPage;
 use RuntimeException;
 
@@ -103,7 +104,14 @@ class SkinComponentRegistry {
 				break;
 			case 'last-modified':
 				$component = new SkinComponentLastModified(
-					$skin, $skin->getOutput()->getRevisionTimestamp()
+					$skin,
+					$skin->getOutput()->getRevisionTimestamp()
+				);
+				break;
+			case 'rendered-with':
+				$component = new SkinComponentRenderedWith(
+					$skin,
+					$skin->getOutput()->getOutputFlag( ParserOutputFlags::USE_PARSOID )
 				);
 				break;
 			case 'footer':

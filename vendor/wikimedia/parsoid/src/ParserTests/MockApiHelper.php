@@ -508,11 +508,15 @@ class MockApiHelper extends ApiHelper {
 	/** @var callable(string):string A helper to normalize titles. */
 	private $normalizeTitle = null;
 
+	/**
+	 * @param ?string $prefix
+	 * @param ?callable(string):string $normalizeTitleFunc
+	 */
 	public function __construct( ?string $prefix = null, ?callable $normalizeTitleFunc = null ) {
 		$this->prefix = $prefix ?? $this->prefix;
 		$this->normalizeTitle = $normalizeTitleFunc ??
 			// poor man's normalization
-			( static fn ( $t ) => str_replace( ' ', '_', $t ) );
+			( static fn ( string $t ): string => str_replace( ' ', '_', $t ) );
 	}
 
 	/**
@@ -526,14 +530,15 @@ class MockApiHelper extends ApiHelper {
 	/**
 	 * Register an article defined in parsertests so that we can return
 	 * the proper known/missing information about that title.
+	 *
 	 * @param string $key The normalized title of the article
 	 * @param Article $article The contents of the article
-	 * @return callable
+	 * @return callable():void
 	 */
 	public function addArticle( string $key, Article $article ): callable {
 		$oldVal = $this->articleCache[$key] ?? null;
 		$this->articleCache[$key] = $article;
-		return function () use ( $key, $oldVal ) {
+		return function () use ( $key, $oldVal ): void {
 			$this->articleCache[$key] = $oldVal;
 		};
 	}
@@ -575,6 +580,7 @@ class MockApiHelper extends ApiHelper {
 	 * image may become 883px in 2x mode.  Resist the temptation to "optimize"
 	 * this by computing the transformed size once and then scaling that;
 	 * always scale the input dimensions instead.
+	 *
 	 * @see ImageHandler::normaliseParams, MediaHandler::fitBoxWidth,
 	 * File::scaleHeight, etc, in core.
 	 *
@@ -586,7 +592,7 @@ class MockApiHelper extends ApiHelper {
 	 * @param int|float|null &$twidth Thumbnail width (inout parameter)
 	 * @param int|float|null &$theight Thumbnail height (inout parameter)
 	 */
-	public static function transformHelper( $width, $height, &$twidth, &$theight ) {
+	public static function transformHelper( $width, $height, &$twidth, &$theight ): void {
 		if ( $theight === null ) {
 			// File::scaleHeight in PHP
 			$theight = round( $height * $twidth / $width );
@@ -918,7 +924,7 @@ class MockApiHelper extends ApiHelper {
 		if ( ( $params['prop'] ?? null ) === 'imageinfo' ) {
 			$response = [ 'query' => [] ];
 			$filename = $params['titles']; // assumes this is a single file
-			$tonum = static function ( $x ) {
+			$tonum = static function ( $x ): ?int {
 				return $x ? (int)$x : null;
 			};
 			$ii = self::imageInfo(
@@ -972,7 +978,6 @@ class MockApiHelper extends ApiHelper {
 			return [ 'text' => preg_replace( '/\{\{subst:1x\|([^}]+)\}\}/', '$1', $text, 1 ) ];
 		}
 
-		$res = null;
 		// Render to html the contents of known extension tags
 		// These are the only known extensions (besides native extensions)
 		// used in parser tests currently. This would need to be updated
@@ -1008,6 +1013,9 @@ class MockApiHelper extends ApiHelper {
 		return [ 'parse' => $parse ];
 	}
 
+	/**
+	 * @return ?array{wikitext: string}
+	 */
 	private function preProcess(
 		string $title, string $text, ?int $revid
 	): ?array {

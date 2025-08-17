@@ -28,6 +28,7 @@ use MediaWiki\Html\Html;
 use MediaWiki\Parser\ParserOptions;
 use MediaWiki\Parser\ParserOutput;
 use MediaWiki\Permissions\Authority;
+use Psr\Log\LoggerAwareInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use Wikimedia\Rdbms\ILoadBalancer;
@@ -42,7 +43,7 @@ use Wikimedia\Rdbms\ILoadBalancer;
  *
  * @since 1.32
  */
-class RevisionRenderer {
+class RevisionRenderer implements LoggerAwareInterface {
 
 	/** @var LoggerInterface */
 	private $saveParseLogger;
@@ -78,16 +79,17 @@ class RevisionRenderer {
 		$this->saveParseLogger = new NullLogger();
 	}
 
-	public function setLogger( LoggerInterface $saveParseLogger ) {
+	/** @inheritDoc */
+	public function setLogger( LoggerInterface $saveParseLogger ): void {
 		$this->saveParseLogger = $saveParseLogger;
 	}
 
-	// phpcs:disable Generic.Files.LineLength.TooLong
 	/**
 	 * @param RevisionRecord $rev
 	 * @param ParserOptions|null $options
 	 * @param Authority|null $forPerformer User for privileged access. Default is unprivileged
 	 *        (public) access, unless the 'audience' hint is set to something else RevisionRecord::RAW.
+	 * @phpcs:ignore Generic.Files.LineLength.TooLong
 	 * @param array{use-master?:bool,audience?:int,known-revision-output?:ParserOutput,causeAction?:?string,previous-output?:?ParserOutput} $hints
 	 *   Hints given as an associative array. Known keys:
 	 *      - 'use-master' Use primary DB when rendering for the parser cache during save.
@@ -109,7 +111,6 @@ class RevisionRenderer {
 	 * @throws BadRevisionException
 	 * @throws RevisionAccessException
 	 */
-	// phpcs:enable Generic.Files.LineLength.TooLong
 	public function getRenderedRevision(
 		RevisionRecord $rev,
 		?ParserOptions $options = null,

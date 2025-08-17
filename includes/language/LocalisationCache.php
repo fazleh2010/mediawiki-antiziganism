@@ -964,6 +964,7 @@ class LocalisationCache {
 
 		return [
 			'core' => "$IP/languages/i18n",
+			'botpasswords' => "$IP/languages/i18n/botpasswords",
 			'codex' => "$IP/languages/i18n/codex",
 			'datetime' => "$IP/languages/i18n/datetime",
 			'exif' => "$IP/languages/i18n/exif",
@@ -1086,7 +1087,7 @@ class LocalisationCache {
 		$deps = $coreData['deps'];
 		$coreData += $this->readPluralFilesAndRegisterDeps( $code, $deps );
 
-		$codeSequence = array_merge( [ $code ], $coreData['fallbackSequence'] );
+		$codeSequence = [ $code, ...$coreData['fallbackSequence'] ];
 		$messageDirs = $this->getMessagesDirs();
 		$translationAliasesDirs = $this->options->get( MainConfigNames::TranslationAliasesDirs );
 

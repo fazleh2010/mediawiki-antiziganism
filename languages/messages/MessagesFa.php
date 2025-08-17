@@ -141,6 +141,7 @@ $specialPageAliases = [
 	'RemoveCredentials'         => [ 'حذف_اعتبارنامه‌ها' ],
 	'Renameuser'                => [ 'تغییر_نام_کاربر' ],
 	'ResetTokens'               => [ 'بازنشانی_نشانه‌ها' ],
+	'RestSandbox'               => [ 'آزمایش_رست' ],
 	'Revisiondelete'            => [ 'حذف_نسخه' ],
 	'RunJobs'                   => [ 'اجرای_کارها' ],
 	'Search'                    => [ 'جستجو' ],

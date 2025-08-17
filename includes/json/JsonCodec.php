@@ -66,7 +66,6 @@ class JsonCodec
 	 */
 	protected function codecFor( string $className ): ?JsonClassCodec {
 		static $deserializableCodec = null;
-		static $serializableCodec = null;
 		$codec = parent::codecFor( $className );
 		if ( $codec !== null ) {
 			return $codec;
@@ -128,7 +127,6 @@ class JsonCodec
 		) {
 			$classHint = 'array';
 		}
-		// @phan-suppress-next-line PhanUndeclaredClassReference 'array'
 		$className = parent::unmarkArray( $value, $classHint );
 		// Remove the temporarily added COMPLEX_ANNOTATION
 		if ( $this->backCompat ) {
@@ -142,6 +140,7 @@ class JsonCodec
 		return $this->deserialize( $json, $expectedClass );
 	}
 
+	/** @inheritDoc */
 	public function deserialize( $json, ?string $expectedClass = null ) {
 		Assert::parameterType( [ 'stdClass', 'array', 'string' ], $json, '$json' );
 		Assert::precondition(
@@ -203,6 +202,7 @@ class JsonCodec
 		}
 	}
 
+	/** @inheritDoc */
 	public function serialize( $value ) {
 		// Recursively convert stdClass, JsonSerializable, and JsonCodecable
 		// to serializable arrays

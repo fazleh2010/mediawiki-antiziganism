@@ -56,6 +56,9 @@ abstract class Handler {
 	/** @var array */
 	private $config;
 
+	/** @var array */
+	private $openApiSpec;
+
 	/** @var ResponseFactory */
 	private $responseFactory;
 
@@ -90,10 +93,16 @@ abstract class Handler {
 	 * @param Module $module
 	 * @param string $path
 	 * @param array $routeConfig information about the route declaration.
+	 * @param array $openApiSpec OpenAPI meta-data, such as the description.
 	 *
 	 * @internal
 	 */
-	final public function initContext( Module $module, string $path, array $routeConfig ) {
+	final public function initContext(
+		Module $module,
+		string $path,
+		array $routeConfig,
+		array $openApiSpec = []
+	) {
 		Assert::precondition(
 			$this->authority === null,
 			'initContext() must be called before initServices()'
@@ -102,6 +111,7 @@ abstract class Handler {
 		$this->module = $module;
 		$this->path = $path;
 		$this->config = $routeConfig;
+		$this->openApiSpec = $openApiSpec;
 	}
 
 	/**
@@ -668,8 +678,7 @@ abstract class Handler {
 
 		// TODO: Allow additional information about parameters and responses to
 		//       be provided in the route definition.
-		$oas = $this->getConfig()['OAS'] ?? [];
-		$spec += $oas;
+		$spec += $this->openApiSpec;
 
 		return $spec;
 	}
@@ -837,11 +846,10 @@ abstract class Handler {
 			$ok['content']['application/json']['schema'] = $bodySchema;
 		}
 
-		// XXX: we should add info about redirects, and maybe a default for errors?
+		// XXX: we should add info about redirects
 		return [
 			'200' => $ok,
-			'400' => [ '$ref' => '#/components/responses/GenericErrorResponse' ],
-			'500' => [ '$ref' => '#/components/responses/GenericErrorResponse' ],
+			'default' => [ '$ref' => '#/components/responses/GenericErrorResponse' ],
 		];
 	}
 
@@ -953,7 +961,7 @@ abstract class Handler {
 			case RequestInterface::MULTIPART_FORM_DATA_CONTENT_TYPE:
 				$params = $request->getPostParams();
 				foreach ( $params as $key => $value ) {
-					$params[ $key ] = UtfNormalValidator::cleanUp( $value );
+					$params[ $key ] = $this->recursiveUtfCleanup( $value );
 					// TODO: Warn if normalization was applied
 				}
 				return $params;
@@ -984,6 +992,29 @@ abstract class Handler {
 					new MessageValue( 'rest-unsupported-content-type', [ $contentType ?? '(null)' ] ),
 					415
 				);
+		}
+	}
+
+	/**
+	 * Recursively applies unicode normalization
+	 *
+	 * @param mixed $value
+	 *
+	 * @return mixed
+	 */
+	private function recursiveUtfCleanup( $value ) {
+		if ( is_string( $value ) ) {
+			return UtfNormalValidator::cleanUp( $value );
+		} elseif ( is_array( $value ) ) {
+			foreach ( $value as $k => $v ) {
+				$value[ $k ] = $this->recursiveUtfCleanup( $v );
+				// TODO: Warn if normalization was applied
+				// TODO: also normalize key
+			}
+
+			return $value;
+		} else {
+			return $value;
 		}
 	}
 

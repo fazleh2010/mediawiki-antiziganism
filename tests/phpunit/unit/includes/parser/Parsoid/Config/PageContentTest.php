@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 /**
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,7 +24,6 @@ namespace MediaWiki\Tests\Unit\Parser\Parsoid\Config;
 
 use DummyContentForTesting;
 use InvalidArgumentException;
-use MediaWiki\DAO\WikiAwareEntity;
 use MediaWiki\Page\PageIdentityValue;
 use MediaWiki\Parser\Parsoid\Config\PageContent;
 use MediaWiki\Revision\MutableRevisionRecord;
@@ -57,7 +57,7 @@ class PageContentTest extends MediaWikiUnitTestCase {
 	public function testGetRoles() {
 		$record = new MutableRevisionRecord(
 		// Create a new mock revision record for a page.
-			new PageIdentityValue( 1, NS_MAIN, 'Foo', WikiAwareEntity::LOCAL )
+			PageIdentityValue::localIdentity( 1, NS_MAIN, 'Foo' )
 		);
 		$mainSlot = new SlotRecord(
 			// Creating a dummy slot record.
@@ -90,7 +90,7 @@ class PageContentTest extends MediaWikiUnitTestCase {
 	public function testHasRole() {
 		$record = new MutableRevisionRecord(
 			// Create a new mock revision record for a page.
-			new PageIdentityValue( 1, NS_MAIN, 'Foo', WikiAwareEntity::LOCAL )
+			PageIdentityValue::localIdentity( 1, NS_MAIN, 'Foo' )
 		);
 		// Creating a dummy slot record.
 		$mainSlot = new SlotRecord(
@@ -122,7 +122,7 @@ class PageContentTest extends MediaWikiUnitTestCase {
 	public function testGetModel() {
 		// Create a new mock revision record for a page.
 		$record = new MutableRevisionRecord(
-			new PageIdentityValue( 1, NS_MAIN, 'Foo', WikiAwareEntity::LOCAL )
+			PageIdentityValue::localIdentity( 1, NS_MAIN, 'Foo' )
 		);
 		// Creating a dummy slot record.
 		$mainSlot = new SlotRecord(

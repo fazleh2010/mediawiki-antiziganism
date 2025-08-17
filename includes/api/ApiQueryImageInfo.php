@@ -93,6 +93,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	public function execute() {
 		$params = $this->extractRequestParams();
 
+		/** @var array<string,true> $prop */
 		$prop = array_fill_keys( $params['prop'], true );
 
 		$scale = $this->getScale( $params );
@@ -299,22 +300,17 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	 */
 	public function getScale( $params ) {
 		if ( $params['urlwidth'] != -1 ) {
-			$scale = [];
-			$scale['width'] = $params['urlwidth'];
-			$scale['height'] = $params['urlheight'];
+			return [ 'width' => $params['urlwidth'], 'height' => $params['urlheight'] ];
 		} elseif ( $params['urlheight'] != -1 ) {
 			// Height is specified but width isn't
 			// Don't set $scale['width']; this signals mergeThumbParams() to fill it with the image's width
-			$scale = [];
-			$scale['height'] = $params['urlheight'];
+			return [ 'height' => $params['urlheight'] ];
 		} elseif ( $params['urlparam'] ) {
 			// Audio files might not have a width/height.
-			$scale = [];
+			return [];
 		} else {
-			$scale = null;
+			return null;
 		}
-
-		return $scale;
 	}
 
 	/** Validate and merge scale parameters with handler thumb parameters, give error if invalid.
@@ -418,7 +414,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	 * Get result information for an image revision
 	 *
 	 * @param File $file
-	 * @param array $prop Array of properties to get (in the keys)
+	 * @param array<string,true> $prop Array of properties to get (in the keys)
 	 * @param ApiResult $result
 	 * @param array|null $thumbParams Containing 'width' and 'height' items, or null
 	 * @param array|false|string $opts Options for data fetching.
@@ -693,7 +689,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	/**
 	 * @param array $metadata
 	 * @param ApiResult $result
-	 * @return array
+	 * @return array[]
 	 */
 	public static function processMetaData( $metadata, $result ) {
 		$retval = [];
@@ -716,6 +712,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 		return $retval;
 	}
 
+	/** @inheritDoc */
 	public function getCacheMode( $params ) {
 		if ( $this->userCanSeeRevDel() ) {
 			return 'private';
@@ -733,6 +730,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 		return $img->getOriginalTitle()->getDBkey() . '|' . ( $start ?? $img->getTimestamp() );
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'prop' => [
@@ -803,8 +801,8 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	/**
 	 * Returns all possible parameters to iiprop
 	 *
-	 * @param array $filter List of properties to filter out
-	 * @return array
+	 * @param string[] $filter List of properties to filter out
+	 * @return string[]
 	 */
 	public static function getPropertyNames( $filter = [] ) {
 		return array_keys( static::getPropertyMessages( $filter ) );
@@ -813,8 +811,8 @@ class ApiQueryImageInfo extends ApiQueryBase {
 	/**
 	 * Returns messages for all possible parameters to iiprop
 	 *
-	 * @param array $filter List of properties to filter out
-	 * @return array
+	 * @param string[] $filter List of properties to filter out
+	 * @return array<string,string>
 	 */
 	public static function getPropertyMessages( $filter = [] ) {
 		return array_diff_key(
@@ -844,6 +842,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 		);
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=query&titles=File:Albert%20Einstein%20Head.jpg&prop=imageinfo'
@@ -854,6 +853,7 @@ class ApiQueryImageInfo extends ApiQueryBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Imageinfo';
 	}

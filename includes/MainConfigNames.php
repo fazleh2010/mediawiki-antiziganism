@@ -468,6 +468,12 @@ class MainConfigNames {
 	public const HashedUploadDirectory = 'HashedUploadDirectory';
 
 	/**
+	 * Name constant for the CSPUploadEntryPoint setting, for use with Config::get()
+	 * @see MainConfigSchema::CSPUploadEntryPoint
+	 */
+	public const CSPUploadEntryPoint = 'CSPUploadEntryPoint';
+
+	/**
 	 * Name constant for the FileExtensions setting, for use with Config::get()
 	 * @see MainConfigSchema::FileExtensions
 	 */
@@ -1038,18 +1044,6 @@ class MainConfigNames {
 	public const EnotifMinorEdits = 'EnotifMinorEdits';
 
 	/**
-	 * Name constant for the EnotifImpersonal setting, for use with Config::get()
-	 * @see MainConfigSchema::EnotifImpersonal
-	 */
-	public const EnotifImpersonal = 'EnotifImpersonal';
-
-	/**
-	 * Name constant for the EnotifMaxRecips setting, for use with Config::get()
-	 * @see MainConfigSchema::EnotifMaxRecips
-	 */
-	public const EnotifMaxRecips = 'EnotifMaxRecips';
-
-	/**
 	 * Name constant for the EnotifUseRealName setting, for use with Config::get()
 	 * @see MainConfigSchema::EnotifUseRealName
 	 */
@@ -1260,12 +1254,6 @@ class MainConfigNames {
 	public const VirtualDomainsMapping = 'VirtualDomainsMapping';
 
 	/**
-	 * Name constant for the PageLinksSchemaMigrationStage setting, for use with Config::get()
-	 * @see MainConfigSchema::PageLinksSchemaMigrationStage
-	 */
-	public const PageLinksSchemaMigrationStage = 'PageLinksSchemaMigrationStage';
-
-	/**
 	 * Name constant for the FileSchemaMigrationStage setting, for use with Config::get()
 	 * @see MainConfigSchema::FileSchemaMigrationStage
 	 */
@@ -1330,12 +1318,6 @@ class MainConfigNames {
 	 * @see MainConfigSchema::RevisionCacheExpiry
 	 */
 	public const RevisionCacheExpiry = 'RevisionCacheExpiry';
-
-	/**
-	 * Name constant for the RevisionSlotsCacheExpiry setting, for use with Config::get()
-	 * @see MainConfigSchema::RevisionSlotsCacheExpiry
-	 */
-	public const RevisionSlotsCacheExpiry = 'RevisionSlotsCacheExpiry';
 
 	/**
 	 * Name constant for the PageLanguageUseDB setting, for use with Config::get()
@@ -1956,13 +1938,6 @@ class MainConfigNames {
 	public const RawHtmlMessages = 'RawHtmlMessages';
 
 	/**
-	 * Name constant for the AllowRawHtmlCopyrightMessages setting, for use with Config::get()
-	 * @see MainConfigSchema::AllowRawHtmlCopyrightMessages
-	 * @deprecated since 1.44
-	 */
-	public const AllowRawHtmlCopyrightMessages = 'AllowRawHtmlCopyrightMessages';
-
-	/**
 	 * Name constant for the Localtimezone setting, for use with Config::get()
 	 * @see MainConfigSchema::Localtimezone
 	 */
@@ -2400,27 +2375,6 @@ class MainConfigNames {
 	 * @see MainConfigSchema::ParsoidExperimentalParserFunctionOutput
 	 */
 	public const ParsoidExperimentalParserFunctionOutput = 'ParsoidExperimentalParserFunctionOutput';
-
-	/**
-	 * Name constant for the ParserEnableLegacyMediaDOM setting, for use with Config::get()
-	 * @see MainConfigSchema::ParserEnableLegacyMediaDOM
-	 * @deprecated since 1.41
-	 */
-	public const ParserEnableLegacyMediaDOM = 'ParserEnableLegacyMediaDOM';
-
-	/**
-	 * Name constant for the ParserEnableLegacyHeadingDOM setting, for use with Config::get()
-	 * @see MainConfigSchema::ParserEnableLegacyHeadingDOM
-	 * @deprecated since 1.44
-	 */
-	public const ParserEnableLegacyHeadingDOM = 'ParserEnableLegacyHeadingDOM';
-
-	/**
-	 * Name constant for the UseContentMediaStyles setting, for use with Config::get()
-	 * @see MainConfigSchema::UseContentMediaStyles
-	 * @deprecated since 1.41
-	 */
-	public const UseContentMediaStyles = 'UseContentMediaStyles';
 
 	/**
 	 * Name constant for the UseLegacyMediaStyles setting, for use with Config::get()
@@ -3505,8 +3459,15 @@ class MainConfigNames {
 	/**
 	 * Name constant for the SitemapNamespacesPriorities setting, for use with Config::get()
 	 * @see MainConfigSchema::SitemapNamespacesPriorities
+	 * @deprecated since 1.45 and ignored
 	 */
 	public const SitemapNamespacesPriorities = 'SitemapNamespacesPriorities';
+
+	/**
+	 * Name constant for the SitemapApiConfig setting, for use with Config::get()
+	 * @see MainConfigSchema::SitemapApiConfig
+	 */
+	public const SitemapApiConfig = 'SitemapApiConfig';
 
 	/**
 	 * Name constant for the EnableSearchContributorsByIP setting, for use with Config::get()
@@ -4292,6 +4253,12 @@ class MainConfigNames {
 	public const RestAPIAdditionalRouteFiles = 'RestAPIAdditionalRouteFiles';
 
 	/**
+	 * Name constant for the RestSandboxSpecs setting, for use with Config::get()
+	 * @see MainConfigSchema::RestSandboxSpecs
+	 */
+	public const RestSandboxSpecs = 'RestSandboxSpecs';
+
+	/**
 	 * Name constant for the MaxShellMemory setting, for use with Config::get()
 	 * @see MainConfigSchema::MaxShellMemory
 	 */
@@ -4496,6 +4463,12 @@ class MainConfigNames {
 	public const SpecialContributeSkinsEnabled = 'SpecialContributeSkinsEnabled';
 
 	/**
+	 * Name constant for the SpecialContributeNewPageTarget setting, for use with Config::get()
+	 * @see MainConfigSchema::SpecialContributeNewPageTarget
+	 */
+	public const SpecialContributeNewPageTarget = 'SpecialContributeNewPageTarget';
+
+	/**
 	 * Name constant for the EnableEditRecovery setting, for use with Config::get()
 	 * @see MainConfigSchema::EnableEditRecovery
 	 */
@@ -4536,5 +4509,11 @@ class MainConfigNames {
 	 * @see MainConfigSchema::FeatureShutdown
 	 */
 	public const FeatureShutdown = 'FeatureShutdown';
+
+	/**
+	 * Name constant for the UseLeximorph setting, for use with Config::get()
+	 * @see MainConfigSchema::UseLeximorph
+	 */
+	public const UseLeximorph = 'UseLeximorph';
 
 }

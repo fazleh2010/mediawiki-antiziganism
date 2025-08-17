@@ -21,6 +21,8 @@
 namespace MediaWiki\Specials;
 
 use MediaWiki\Cache\LinkBatchFactory;
+use MediaWiki\MainConfigNames;
+use MediaWiki\MediaWikiServices;
 use MediaWiki\Skin\Skin;
 use MediaWiki\SpecialPage\QueryPage;
 use MediaWiki\Title\Title;
@@ -34,6 +36,8 @@ use Wikimedia\Rdbms\IConnectionProvider;
  */
 class SpecialUnusedCategories extends QueryPage {
 
+	private int $migrationStage;
+
 	public function __construct(
 		IConnectionProvider $dbProvider,
 		LinkBatchFactory $linkBatchFactory
@@ -41,23 +45,54 @@ class SpecialUnusedCategories extends QueryPage {
 		parent::__construct( 'Unusedcategories' );
 		$this->setDatabaseProvider( $dbProvider );
 		$this->setLinkBatchFactory( $linkBatchFactory );
+		$this->migrationStage = MediaWikiServices::getInstance()->getMainConfig()->get(
+			MainConfigNames::CategoryLinksSchemaMigrationStage
+		);
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	protected function getPageHeader() {
 		return $this->msg( 'unusedcategoriestext' )->parseAsBlock();
 	}
 
+	/** @inheritDoc */
 	protected function getOrderFields() {
 		return [ 'title' ];
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
+		if ( $this->migrationStage & SCHEMA_COMPAT_READ_OLD ) {
+			$tables = [ 'page', 'categorylinks', 'page_props' ];
+			$joinConds = [
+				'categorylinks' => [ 'LEFT JOIN', 'cl_to = page_title' ],
+				'page_props' => [ 'LEFT JOIN', [
+					'page_id = pp_page',
+					'pp_propname' => 'expectunusedcategory'
+				] ]
+			];
+		} else {
+			$tables = [ 'page', 'linktarget', 'categorylinks', 'page_props' ];
+			$joinConds = [
+				'linktarget' => [ 'LEFT JOIN', [
+					'lt_title = page_title',
+					'lt_namespace = page_namespace',
+				] ],
+				'categorylinks' => [ 'LEFT JOIN', 'cl_target_id = lt_id' ],
+				'page_props' => [ 'LEFT JOIN', [
+					'page_id = pp_page',
+					'pp_propname' => 'expectunusedcategory'
+				] ]
+			];
+		}
+
 		return [
-			'tables' => [ 'page', 'categorylinks', 'page_props' ],
+			'tables' => $tables,
 			'fields' => [
 				'namespace' => 'page_namespace',
 				'title' => 'page_title',
@@ -68,13 +103,7 @@ class SpecialUnusedCategories extends QueryPage {
 				'page_is_redirect' => 0,
 				'pp_page' => null,
 			],
-			'join_conds' => [
-				'categorylinks' => [ 'LEFT JOIN', 'cl_to = page_title' ],
-				'page_props' => [ 'LEFT JOIN', [
-					'page_id = pp_page',
-					'pp_propname' => 'expectunusedcategory'
-				] ]
-			]
+			'join_conds' => $joinConds,
 		];
 	}
 
@@ -97,10 +126,12 @@ class SpecialUnusedCategories extends QueryPage {
 		return $this->getLinkRenderer()->makeLink( $title, $title->getText() );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
 	}
 
+	/** @inheritDoc */
 	public function preprocessResults( $db, $res ) {
 		$this->executeLBFromResultWrapper( $res );
 	}

@@ -27,8 +27,8 @@
  */
 
 use MediaWiki\FileRepo\File\File;
-use MediaWiki\Libs\UnpackFailedException;
 use Wikimedia\StringUtils\StringUtils;
+use Wikimedia\UnpackFailedException;
 
 /**
  * Handler for the Gimp's native file format; getimagesize() doesn't
@@ -104,7 +104,7 @@ class XCFHandler extends BitmapHandler {
 					"/Nbase_type", # /
 				$binaryHeader
 			);
-		} catch ( UnpackFailedException $_ ) {
+		} catch ( UnpackFailedException ) {
 			return null;
 		}
 
@@ -122,6 +122,7 @@ class XCFHandler extends BitmapHandler {
 		return $header;
 	}
 
+	/** @inheritDoc */
 	public function getSizeAndMetadata( $state, $filename ) {
 		$header = self::getXCFMetaData( $filename );
 		$metadata = [];
@@ -169,6 +170,7 @@ class XCFHandler extends BitmapHandler {
 		return self::METADATA_GOOD;
 	}
 
+	/** @inheritDoc */
 	protected function hasGDSupport() {
 		return false;
 	}

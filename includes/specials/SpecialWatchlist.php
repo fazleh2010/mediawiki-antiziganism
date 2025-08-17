@@ -103,6 +103,7 @@ class SpecialWatchlist extends ChangesListSpecialPage {
 		$this->changeTagsStore = $changeTagsStore;
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -937,6 +938,14 @@ class SpecialWatchlist extends ChangesListSpecialPage {
 		$this->getOutput()->addHTML( $form );
 	}
 
+	/**
+	 * @param array $options
+	 * @param string $message
+	 * @param string $name
+	 * @param string $value
+	 * @param bool $inStructuredUi
+	 * @return string
+	 */
 	protected function showHideCheck( $options, $message, $name, $value, $inStructuredUi ) {
 		$options[$name] = 1 - (int)$value;
 

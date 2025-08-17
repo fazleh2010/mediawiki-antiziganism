@@ -37,17 +37,18 @@ class FileAwareNodeVisitor extends PhpParser\NodeVisitorAbstract {
 	/** @var string|null */
 	private $currentFile = null;
 
+	/** @inheritDoc */
 	public function enterNode( PhpParser\Node $node ) {
 		$retVal = parent::enterNode( $node );
 		$node->filename = $this->currentFile;
 		return $retVal;
 	}
 
-	public function setCurrentFile( $filename ) {
+	public function setCurrentFile( ?string $filename ) {
 		$this->currentFile = $filename;
 	}
 
-	public function getCurrentFile() {
+	public function getCurrentFile(): ?string {
 		return $this->currentFile;
 	}
 }
@@ -63,7 +64,7 @@ class DeprecatedInterfaceFinder extends FileAwareNodeVisitor {
 	/** @var array[] */
 	private $foundNodes = [];
 
-	public function getFoundNodes() {
+	public function getFoundNodes(): array {
 		// Sort results by version, then by filename, then by name.
 		foreach ( $this->foundNodes as &$nodes ) {
 			uasort( $nodes, static function ( $a, $b ) {
@@ -99,6 +100,7 @@ class DeprecatedInterfaceFinder extends FileAwareNodeVisitor {
 		}
 	}
 
+	/** @inheritDoc */
 	public function enterNode( PhpParser\Node $node ) {
 		$retVal = parent::enterNode( $node );
 

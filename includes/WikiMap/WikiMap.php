@@ -27,6 +27,8 @@ use Wikimedia\Rdbms\DatabaseDomain;
 
 /**
  * Tools for dealing with other locally-hosted wikis.
+ *
+ * @ingroup Site
  */
 class WikiMap {
 
@@ -75,7 +77,7 @@ class WikiMap {
 		// If we don't have a canonical server or a path containing $1, the
 		// WikiReference isn't going to function properly. Just return null in
 		// that case.
-		if ( !is_string( $canonicalServer ) || !is_string( $path ) || strpos( $path, '$1' ) === false ) {
+		if ( !is_string( $canonicalServer ) || !is_string( $path ) || !str_contains( $path, '$1' ) ) {
 			return null;
 		}
 
@@ -233,14 +235,16 @@ class WikiMap {
 	public static function getWikiFromUrl( $url ) {
 		global $wgCanonicalServer;
 
-		if ( strpos( $url, "$wgCanonicalServer/" ) === 0 ) {
+		if ( str_starts_with( $url, "$wgCanonicalServer/" ) ) {
 			// Optimisation: Handle the common case.
 			// (Duplicates self::getCanonicalServerInfoForAllWikis)
 			return self::getCurrentWikiId();
 		}
 
 		$urlPartsCheck = wfGetUrlUtils()->parse( $url );
-		if ( $urlPartsCheck === null ) {
+		if ( $urlPartsCheck === null
+			|| !in_array( $urlPartsCheck['scheme'], [ '', 'http', 'https' ], true )
+		) {
 			return false;
 		}
 

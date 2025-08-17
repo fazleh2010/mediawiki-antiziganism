@@ -49,6 +49,11 @@ class EntryPointEnvironment {
 		return false;
 	}
 
+	/**
+	 * @param string $key
+	 * @param mixed|null $default
+	 * @return mixed|null
+	 */
 	public function getServerInfo( string $key, $default = null ) {
 		return $_SERVER[$key] ?? $default;
 	}
@@ -58,7 +63,7 @@ class EntryPointEnvironment {
 	 *
 	 * @return never
 	 */
-	public function exit( int $code = 0 ) {
+	public function exit( int $code = 0 ): never {
 		exit( $code );
 	}
 

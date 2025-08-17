@@ -58,8 +58,6 @@ class SpecialUnblock extends SpecialPage {
 	private UserNamePrefixSearch $userNamePrefixSearch;
 	private WatchlistManager $watchlistManager;
 
-	protected bool $useCodex = false;
-
 	public function __construct(
 		UnblockUserFactory $unblockUserFactory,
 		BlockTargetFactory $blockTargetFactory,
@@ -75,14 +73,14 @@ class SpecialUnblock extends SpecialPage {
 		$this->userNameUtils = $userNameUtils;
 		$this->userNamePrefixSearch = $userNamePrefixSearch;
 		$this->watchlistManager = $watchlistManager;
-		$this->useCodex = $this->getConfig()->get( MainConfigNames::UseCodexSpecialBlock ) ||
-			$this->getRequest()->getBool( 'usecodex' );
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->checkPermissions();
 		$this->checkReadOnly();
@@ -90,7 +88,9 @@ class SpecialUnblock extends SpecialPage {
 		$this->target = $this->getTargetFromRequest( $par, $this->getRequest() );
 
 		// T382539
-		if ( $this->useCodex ) {
+		if ( $this->getConfig()->get( MainConfigNames::UseCodexSpecialBlock )
+			|| $this->getRequest()->getBool( 'usecodex' )
+		) {
 			// If target is null, redirect to Special:Block
 			if ( $this->target === null ) {
 				// Use 301 (Moved Permanently) as this is a deprecation
@@ -230,7 +230,7 @@ class SpecialUnblock extends SpecialPage {
 		return $target;
 	}
 
-	protected function getFields() {
+	protected function getFields(): array {
 		$fields = [
 			'Target' => [
 				'type' => 'text',
@@ -329,6 +329,7 @@ class SpecialUnblock extends SpecialPage {
 			->search( UserNamePrefixSearch::AUDIENCE_PUBLIC, $search, $limit, $offset );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'users';
 	}

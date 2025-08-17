@@ -1001,8 +1001,7 @@ class ChangeTags {
 		// pipe (used as a delimiter between multiple tags in
 		// SpecialRecentchanges and friends), or slashes (would break tag description messages in
 		// MediaWiki namespace)
-		if ( strpos( $tag, ',' ) !== false || strpos( $tag, '|' ) !== false
-			|| strpos( $tag, '/' ) !== false ) {
+		if ( str_contains( $tag, ',' ) || str_contains( $tag, '|' ) || str_contains( $tag, '/' ) ) {
 			return Status::newFatal( 'tags-create-invalid-chars' );
 		}
 

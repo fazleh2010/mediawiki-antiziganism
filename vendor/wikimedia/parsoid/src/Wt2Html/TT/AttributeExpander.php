@@ -8,11 +8,14 @@ use Wikimedia\Assert\UnreachableException;
 use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\NodeData\DataMw;
 use Wikimedia\Parsoid\NodeData\DataMwAttrib;
+use Wikimedia\Parsoid\Tokens\CompoundTk;
+use Wikimedia\Parsoid\Tokens\EmptyLineTk;
 use Wikimedia\Parsoid\Tokens\KV;
 use Wikimedia\Parsoid\Tokens\NlTk;
 use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\PHPUtils;
 use Wikimedia\Parsoid\Utils\PipelineUtils;
 use Wikimedia\Parsoid\Utils\TokenUtils;
@@ -25,7 +28,7 @@ use Wikimedia\Parsoid\Wt2Html\TokenHandlerPipeline;
 /**
  * Generic attribute expansion handler.
  */
-class AttributeExpander extends TokenHandler {
+class AttributeExpander extends UniversalTokenHandler {
 	private const META_TYPE_MATCHER = '#(mw:(LanguageVariant|Transclusion|Param|Includes|Annotation/)(.*)$)#D';
 
 	/**
@@ -88,13 +91,18 @@ class AttributeExpander extends TokenHandler {
 		return -1;
 	}
 
+	// phpcs:disable Generic.Files.LineLength.TooLong
+
+	/**
+	 * @return array{metaTokens: list{0?: SelfclosingTagTk}, preNLBuf: list<string|Token>, postNLBuf: list<string|Token>}
+	 */
 	private static function splitTokens(
-		Frame $frame, Token $token, int $nlTkPos, array $tokens, bool $wrapTemplates
+		// phpcs:enable Generic.Files.LineLength.TooLong
+		Frame $frame, XMLTagTk $token, int $nlTkPos, array $tokens, bool $wrapTemplates
 	): array {
 		$preNLBuf = [];
-		$postNLBuf = null;
+		$postNLBuf = [];
 		$startMeta = null;
-		$metaTokens = null;
 
 		// Split the token array around the first newline token.
 		$startMetaIndex = null;
@@ -132,6 +140,7 @@ class AttributeExpander extends TokenHandler {
 		// Since we no longer know where this token now ends tsr-wise,
 		// set tsr->end to null
 		$token->dataParsoid->tsr->end = null;
+		$token->dataParsoid->getTemp()->attrSrc = '';
 
 		if ( $startMeta ) {
 			// Support template wrapping with the following steps:
@@ -172,6 +181,8 @@ class AttributeExpander extends TokenHandler {
 		}
 	}
 
+	// phpcs:disable Generic.Files.LineLength.TooLong
+
 	/**
 	 * This helper method strips all meta tags introduced by
 	 * transclusions, etc. and returns the content.
@@ -179,9 +190,11 @@ class AttributeExpander extends TokenHandler {
 	 * @param Env $env
 	 * @param array $tokens
 	 * @param bool $wrapTemplates
-	 * @return array
+	 *
+	 * @return array{hasGeneratedContent: bool, annotationType: list<string>, value: list<Token|string>}
 	 */
 	private static function stripMetaTags(
+		// phpcs:enable Generic.Files.LineLength.TooLong
 		Env $env, array $tokens, bool $wrapTemplates
 	): array {
 		$buf = [];
@@ -249,11 +262,11 @@ class AttributeExpander extends TokenHandler {
 
 	/**
 	 * Callback for attribute expansion in AttributeTransformManager
-	 * @param Token $token
+	 * @param XMLTagTk $token
 	 * @param KV[] $expandedAttrs
 	 * @return array<string|Token>
 	 */
-	private function buildExpandedAttrs( Token $token, array $expandedAttrs ) {
+	private function buildExpandedAttrs( XMLTagTk $token, array $expandedAttrs ): array {
 		// If we're not in a template, we'll be doing template wrapping in dom
 		// post-processing (same conditional there), so take care of meta markers
 		// found while processing tokens.
@@ -267,7 +280,6 @@ class AttributeExpander extends TokenHandler {
 		// objects in the common case where nothing of significance
 		// happens in this code.
 		$newAttrs = null;
-		$nlTkPos = -1;
 		$nlTkOkay = TokenUtils::isHTMLTag( $token ) || !TokenUtils::isTableTag( $token );
 		$annotationTypes = [];
 
@@ -375,6 +387,7 @@ class AttributeExpander extends TokenHandler {
 						// We split up this attribute's key into pieces.
 						if ( $expandedA->srcOffsets->key ) {
 							$expandedA->srcOffsets->key->end = null;
+							$expandedA->ksrc = null;
 						}
 					} else {
 						// Maybe scenario 2 from the documentation comment above.
@@ -465,6 +478,7 @@ class AttributeExpander extends TokenHandler {
 						// We split up this attribute's value into pieces.
 						if ( $expandedA->srcOffsets->value ) {
 							$expandedA->srcOffsets->value->end = null;
+							$expandedA->vsrc = null;
 						}
 					} else {
 						// Maybe scenario 2 from the documentation comment above.
@@ -613,10 +627,10 @@ class AttributeExpander extends TokenHandler {
 	 * Processes any attribute keys and values that are not simple strings.
 	 * (Ex: Templated styles)
 	 *
-	 * @param Token $token Token whose attrs being expanded.
+	 * @param XMLTagTk $token Token whose attrs being expanded.
 	 * @return ?array<string|Token>
 	 */
-	private function processComplexAttributes( Token $token ): ?array {
+	private function processComplexAttributes( XMLTagTk $token ): ?array {
 		$expandedAttrs = AttributeTransformManager::process(
 			$this->manager->getFrame(),
 			[
@@ -634,10 +648,10 @@ class AttributeExpander extends TokenHandler {
 	 * Expand the first attribute of the token -- usually needed to support
 	 * tempate tokens where the template target itself is a complex attribute.
 	 *
-	 * @param Token $token Token whose first attribute is being expanded.
+	 * @param XMLTagTK $token Token whose first attribute is being expanded.
 	 * @return ?array<string|Token>
 	 */
-	public function expandFirstAttribute( Token $token ): ?array {
+	public function expandFirstAttribute( XMLTagTk $token ): ?array {
 		$expandedAttrs = AttributeTransformManager::process(
 			$this->manager->getFrame(),
 			[
@@ -657,11 +671,18 @@ class AttributeExpander extends TokenHandler {
 		}
 	}
 
+	/** @inheritDoc */
+	public function onCompoundTk( CompoundTk $ctk, TokenHandler $tokensHandler ): ?array {
+		if ( $ctk instanceof EmptyLineTk ) {
+			return null;
+		} else {
+			// default handling: in this case throws exception!
+			return parent::onCompoundTk( $ctk, $tokensHandler );
+		}
+	}
+
 	/**
-	 * Token handler.
-	 *
-	 * For tokens that might have complex attributes, this handler
-	 * processes / expands them.
+	 * For tokens that might have complex attributes, this handler processes / expands them.
 	 * (Ex: Templated styles)
 	 *
 	 * @inheritDoc

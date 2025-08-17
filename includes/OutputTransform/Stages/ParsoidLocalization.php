@@ -1,4 +1,5 @@
 <?php
+declare( strict_types = 1 );
 
 namespace MediaWiki\OutputTransform\Stages;
 
@@ -103,7 +104,9 @@ class ParsoidLocalization extends ContentDOMTransformStage {
 			$i18n = DOMDataUtils::getDataNodeI18n( $node );
 			if ( $i18n !== null ) {
 				$frag = $this->localizeI18n( $i18n, $lang, $doc, $node->tagName === 'span', $pageRef );
-				$node->appendChild( $frag );
+				if ( $frag->hasChildNodes() ) {
+					$node->appendChild( $frag );
+				}
 			} else {
 				$this->logger->warning( 'element with mw:I18n typeof does not contain i18n data', [
 					'pass' => 'Localization',
@@ -128,7 +131,11 @@ class ParsoidLocalization extends ContentDOMTransformStage {
 		} else {
 			$msg = $msg->inLanguage( new Bcp47CodeValue( $i18n->lang ) );
 		}
-		$txt = $inline ? $msg->parse() : $msg->parseAsBlock();
+		if ( $msg->isDisabled() ) {
+			$txt = '';
+		} else {
+			$txt = $inline ? $msg->parse() : $msg->parseAsBlock();
+		}
 
 		return ContentUtils::createAndLoadDocumentFragment( $doc, $txt );
 	}
@@ -148,7 +155,7 @@ class ParsoidLocalization extends ContentDOMTransformStage {
 		$pageRef = $this->titleFactory->newFromDBkey( $titleDbKey );
 		if ( !$pageRef ) {
 			$this->logger->error( __METHOD__ . ": Bad title information in ParserOutput" );
-			$pageRef = new PageReferenceValue( NS_SPECIAL, 'BadTitle/Localization', false );
+			$pageRef = PageReferenceValue::localReference( NS_SPECIAL, 'BadTitle/Localization' );
 		}
 		return $pageRef;
 	}

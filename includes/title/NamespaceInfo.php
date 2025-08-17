@@ -372,7 +372,7 @@ class NamespaceInfo {
 	 * Returns array of all defined namespaces with their canonical
 	 * (English) names.
 	 *
-	 * @return string[]
+	 * @return array<int,string>
 	 */
 	public function getCanonicalNamespaces() {
 		if ( $this->canonicalNamespaces === null ) {
@@ -504,10 +504,9 @@ class NamespaceInfo {
 			return [ NS_MAIN ];
 		} elseif ( !in_array( NS_MAIN, $contentNamespaces ) ) {
 			// always force NS_MAIN to be part of array (to match the algorithm used by isContent)
-			return array_merge( [ NS_MAIN ], $contentNamespaces );
-		} else {
-			return $contentNamespaces;
+			array_unshift( $contentNamespaces, NS_MAIN );
 		}
+		return $contentNamespaces;
 	}
 
 	/**
@@ -519,7 +518,7 @@ class NamespaceInfo {
 	public function getSubjectNamespaces() {
 		return array_filter(
 			$this->getValidNamespaces(),
-			[ $this, 'isSubject' ]
+			$this->isSubject( ... )
 		);
 	}
 
@@ -532,7 +531,7 @@ class NamespaceInfo {
 	public function getTalkNamespaces() {
 		return array_filter(
 			$this->getValidNamespaces(),
-			[ $this, 'isTalk' ]
+			$this->isTalk( ... )
 		);
 	}
 

@@ -48,7 +48,7 @@ use Wikimedia\Bcp47Code\Bcp47Code;
 use Wikimedia\Message\MessageValue;
 use Wikimedia\ParamValidator\ParamValidator;
 use Wikimedia\Parsoid\Core\ClientError;
-use Wikimedia\Parsoid\Core\PageBundle;
+use Wikimedia\Parsoid\Core\HtmlPageBundle;
 use Wikimedia\Parsoid\Core\ResourceLimitExceededException;
 use Wikimedia\Parsoid\Parsoid;
 use Wikimedia\Stats\StatsFactory;
@@ -372,7 +372,7 @@ class HtmlInputTransformHelper {
 			} else {
 				try {
 					$originalRendering = ParsoidRenderID::newFromKey( $key );
-				} catch ( InvalidArgumentException $e ) {
+				} catch ( InvalidArgumentException ) {
 					throw new LocalizedHttpException(
 						new MessageValue( 'rest-parsoid-bad-render-id', [ $key ] ),
 						400
@@ -380,9 +380,9 @@ class HtmlInputTransformHelper {
 				}
 			}
 		} elseif ( !empty( $original['html'] ) || !empty( $original['data-parsoid'] ) ) {
-			// NOTE: We might have an incomplete PageBundle here, with no HTML but with data-parsoid!
+			// NOTE: We might have an incomplete HtmlPageBundle here, with no HTML but with data-parsoid!
 			// XXX: Do we need to support that, or can that just be a 400?
-			$originalRendering = new PageBundle(
+			$originalRendering = new HtmlPageBundle(
 				$original['html']['body'] ?? '',
 				$original['data-parsoid']['body'] ?? null,
 				$original['data-mw']['body'] ?? null,
@@ -459,7 +459,7 @@ class HtmlInputTransformHelper {
 	 * the input HTML. This is used to apply selective serialization (selser), if possible.
 	 *
 	 * @param RevisionRecord|int|null $rev
-	 * @param ParsoidRenderID|PageBundle|ParserOutput|null $originalRendering
+	 * @param ParsoidRenderID|HtmlPageBundle|ParserOutput|null $originalRendering
 	 */
 	public function setOriginal( $rev, $originalRendering ) {
 		if ( $originalRendering instanceof ParsoidRenderID ) {
@@ -546,14 +546,14 @@ class HtmlInputTransformHelper {
 			$originalRendering = PageBundleParserOutputConverter::pageBundleFromParserOutput( $originalRendering );
 
 			// NOTE: Use the default if we got a ParserOutput object.
-			//       Don't apply the default if we got passed a PageBundle,
+			//       Don't apply the default if we got passed a HtmlPageBundle,
 			//       in that case, we want to require the version to be explicit.
 			if ( $originalRendering->version === null && !isset( $originalRendering->headers['content-type'] ) ) {
 				$originalRendering->version = Parsoid::defaultHTMLVersion();
 			}
 		}
 
-		if ( !$originalRendering instanceof PageBundle ) {
+		if ( !$originalRendering instanceof HtmlPageBundle ) {
 			return;
 		}
 
@@ -576,19 +576,21 @@ class HtmlInputTransformHelper {
 			$this->transform->setOriginalRevisionId( $rev );
 		}
 
-		// NOTE: We might have an incomplete PageBundle here, with no HTML.
-		//       PageBundle::$html is declared to not be nullable, so it would be set to the empty
+		// NOTE: We might have an incomplete HtmlPageBundle here, with no HTML.
+		//       HtmlPageBundle::$html is declared to not be nullable, so it would be set to the empty
 		//       string if not given.
 		if ( $originalRendering->html !== '' ) {
 			$this->transform->setOriginalHtml( $originalRendering->html );
 		}
 
-		if ( $originalRendering->parsoid !== null ) {
-			$this->transform->setOriginalDataParsoid( $originalRendering->parsoid );
+		$originalDataParsoid = $originalRendering->parsoid;
+		if ( $originalDataParsoid !== null ) {
+			$this->transform->setOriginalDataParsoid( $originalDataParsoid );
 		}
 
-		if ( $originalRendering->mw !== null ) {
-			$this->transform->setOriginalDataMW( $originalRendering->mw );
+		$originalDataMW = $originalRendering->mw;
+		if ( $originalDataMW !== null ) {
+			$this->transform->setOriginalDataMW( $originalDataMW );
 		}
 	}
 
@@ -632,7 +634,7 @@ class HtmlInputTransformHelper {
 				$content->getModel(),
 				$this->envOptions['outputContentVersion']
 			);
-		} catch ( InvalidArgumentException $e ) {
+		} catch ( InvalidArgumentException ) {
 			// If Parsoid doesn't know the content type,
 			// ask the ContentHandler!
 			$contentType = $content->getDefaultFormat();
@@ -768,7 +770,7 @@ class HtmlInputTransformHelper {
 
 				$pb = PageBundleParserOutputConverter::pageBundleFromParserOutput( $parserOutput );
 				return new SelserContext( $pb, $renderID->getRevisionID() );
-			} catch ( HttpException $e ) {
+			} catch ( HttpException ) {
 				$labels[ 'status' ] = 'failed-fallback_not_found';
 				$counter->setLabels( $labels )
 					->copyToStatsdAt(

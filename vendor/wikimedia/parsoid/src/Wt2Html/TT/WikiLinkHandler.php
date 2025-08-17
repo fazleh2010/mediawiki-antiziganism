@@ -28,6 +28,7 @@ use Wikimedia\Parsoid\Tokens\SelfclosingTagTk;
 use Wikimedia\Parsoid\Tokens\SourceRange;
 use Wikimedia\Parsoid\Tokens\TagTk;
 use Wikimedia\Parsoid\Tokens\Token;
+use Wikimedia\Parsoid\Tokens\XMLTagTk;
 use Wikimedia\Parsoid\Utils\DOMCompat;
 use Wikimedia\Parsoid\Utils\DOMUtils;
 use Wikimedia\Parsoid\Utils\PHPUtils;
@@ -37,32 +38,38 @@ use Wikimedia\Parsoid\Utils\TitleException;
 use Wikimedia\Parsoid\Utils\TokenUtils;
 use Wikimedia\Parsoid\Utils\Utils;
 use Wikimedia\Parsoid\Wikitext\Consts;
-use Wikimedia\Parsoid\Wt2Html\PegTokenizer;
+use Wikimedia\Parsoid\Wt2Html\PipelineContentCache;
 use Wikimedia\Parsoid\Wt2Html\TokenHandlerPipeline;
 
-class WikiLinkHandler extends TokenHandler {
+class WikiLinkHandler extends XMLTagBasedHandler {
+	/** Disable caching till we fix cloning of DOM fragments in data-parsoid */
+	private static bool $cachingEnabled = true;
+
 	/**
-	 * @var PegTokenizer
+	 * @return ?array{prefix: string, title: string}
 	 */
-	private $urlParser;
-
-	/** @inheritDoc */
-	public function __construct( TokenHandlerPipeline $manager, array $options ) {
-		parent::__construct( $manager, $options );
-
-		// Create a new peg parser for image options.
-		if ( !$this->urlParser ) {
-			// Actually the regular tokenizer, but we'll call it with the
-			// url rule only.
-			$this->urlParser = new PegTokenizer( $this->env );
-		}
-	}
-
 	private static function hrefParts( string $str ): ?array {
 		if ( preg_match( '/^([^:]+):(.*)$/D', $str, $matches ) ) {
 			return [ 'prefix' => $matches[1], 'title' => $matches[2] ];
 		} else {
 			return null;
+		}
+	}
+
+	private ?PipelineContentCache $wikilinkCache = null;
+
+	/** @inheritDoc */
+	public function __construct( TokenHandlerPipeline $manager, array $options ) {
+		parent::__construct( $manager, $options );
+
+		// Cache only on seeing the same source the fourth time.
+		// This minimizes cache bloat & token cloning penalties
+		// and reserving benefits for links seen at least 5 times.
+		if ( self::$cachingEnabled ) {
+			$this->wikilinkCache = $this->manager->getEnv()->getCache(
+				"wikilink",
+				[ "repeatThreshold" => 3, "cloneValue" => true ]
+			);
 		}
 	}
 
@@ -221,7 +228,7 @@ class WikiLinkHandler extends TokenHandler {
 		// the resulting href and transfer it to rlink.
 		$r = $this->onWikiLink( $wikiLinkTk );
 		$firstToken = ( $r[0] ?? null );
-		$isValid = $firstToken instanceof Token &&
+		$isValid = $firstToken instanceof XMLTagTk &&
 			in_array( $firstToken->getName(), [ 'a', 'link' ], true );
 		if ( $isValid ) {
 			$da = $r[0]->dataParsoid;
@@ -258,7 +265,7 @@ class WikiLinkHandler extends TokenHandler {
 		$frameSrc = $frame->getSrcText();
 		$linkSrc = $tsr->substr( $frameSrc );
 		$src = substr( $linkSrc, 1 );
-		if ( $src === false ) {
+		if ( $src === '' ) {
 			$manager->getEnv()->log(
 				'error', 'Unable to determine link source.',
 				"frame: $frameSrc", 'tsr: ', $tsr,
@@ -267,7 +274,7 @@ class WikiLinkHandler extends TokenHandler {
 			return [ $linkSrc ];  // Forget about trying to tokenize this
 		}
 		$startOffset = $tsr->start + 1;
-		$toks = PipeLineUtils::processContentInPipeline(
+		$toks = PipelineUtils::processContentInPipeline(
 			$manager->getEnv(), $frame, $src, [
 				// FIXME: Set toplevel when bailing
 				// 'toplevel' => $atTopLevel ?? false,
@@ -293,6 +300,24 @@ class WikiLinkHandler extends TokenHandler {
 	 */
 	private function onWikiLink( Token $token ): array {
 		$env = $this->env;
+		$tsrStart = $token->dataParsoid->tsr->start ?? null;
+
+		// Check if we have cached output for this wikilink source.
+		// Given wikilink-syntax source, token output is deterministic
+		// and so we can benefit from caching.
+		$src = $token->dataParsoid->src ?? '';
+		$isCacheable = ( $this->wikilinkCache && $tsrStart !== null && strlen( $src ) > 0 );
+		if ( $isCacheable ) {
+			$cachedOutput = $this->wikilinkCache->lookup( $src );
+			if ( $cachedOutput !== null ) {
+				$offset = $tsrStart - $cachedOutput['start'];
+				$toks = $cachedOutput['tokens'];
+				TokenUtils::shiftTokenTSR( $toks, $offset );
+				TokenUtils::dedupeAboutIds( $env, $toks );
+				return $toks;
+			}
+		}
+
 		$hrefKV = $token->getAttributeKV( 'href' );
 		$hrefTokenStr = TokenUtils::tokensToString( $hrefKV->v );
 
@@ -330,17 +355,21 @@ class WikiLinkHandler extends TokenHandler {
 			return self::bailTokens( $this->manager, $token );
 		}
 
-		$target = null;
 		try {
 			$target = $this->getWikiLinkTargetInfo( $token, $hrefTokenStr, $hrefKV->vsrc );
-		} catch ( TitleException | InternalException $e ) {
+		} catch ( TitleException | InternalException ) {
 			// Invalid title
 			return self::bailTokens( $this->manager, $token );
 		}
 
 		// Ok, it looks like we have a sensible href. Figure out which handler to use.
 		$isRedirect = (bool)$token->getAttributeV( 'redirect' );
-		return $this->wikiLinkHandler( $token, $target, $isRedirect );
+		$toks = $this->wikiLinkHandler( $token, $target, $isRedirect );
+		if ( $isCacheable ) {
+			$this->wikilinkCache->cache( $src, [ 'start' => $tsrStart, 'tokens' => $toks ] );
+		}
+
+		return $toks;
 	}
 
 	/**
@@ -415,11 +444,12 @@ class WikiLinkHandler extends TokenHandler {
 	 *   if one is provided (rdfaType)
 	 * - Collates about, typeof, and linkAttrs into a new attr. array
 	 *
-	 * @param array $attrs
+	 * @param list<KV> $attrs
 	 * @param bool $getLinkText
 	 * @param ?string $rdfaType
-	 * @param ?array $linkAttrs
-	 * @return array
+	 * @param ?list<KV> $linkAttrs
+	 *
+	 * @return array{attribs: list<KV>, contentKVs: list<KV>, hasRdfaType: bool}
 	 */
 	public static function buildLinkAttrs(
 		array $attrs, bool $getLinkText, ?string $rdfaType,
@@ -636,7 +666,7 @@ class WikiLinkHandler extends TokenHandler {
 		$newTk = new TagTk( 'a' );
 		try {
 			$content = $this->addLinkAttributesAndGetContent( $newTk, $token, $target, true );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			return self::bailTokens( $this->manager, $token );
 		}
 
@@ -660,7 +690,7 @@ class WikiLinkHandler extends TokenHandler {
 		$newTk = new SelfclosingTagTk( 'link' );
 		try {
 			$content = $this->addLinkAttributesAndGetContent( $newTk, $token, $target );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			return self::bailTokens( $this->manager, $token );
 		}
 		$env = $this->env;
@@ -742,7 +772,7 @@ class WikiLinkHandler extends TokenHandler {
 		$newTk = new SelfclosingTagTk( 'link', [], $token->dataParsoid );
 		try {
 			$this->addLinkAttributesAndGetContent( $newTk, $token, $target );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			return self::bailTokens( $this->manager, $token );
 		}
 
@@ -794,7 +824,7 @@ class WikiLinkHandler extends TokenHandler {
 		$newTk = new TagTk( 'a', [], $token->dataParsoid );
 		try {
 			$content = $this->addLinkAttributesAndGetContent( $newTk, $token, $target, true );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			return self::bailTokens( $this->manager, $token );
 		}
 
@@ -845,10 +875,12 @@ class WikiLinkHandler extends TokenHandler {
 	 * Get the style and class lists for an image's wrapper element.
 	 *
 	 * @param array $opts The option hash from renderFile.
-	 * @return array with boolean isInline Whether the image is inline after handling options.
-	 *               or classes The list of classes for the wrapper.
+	 *
+	 * @return array{classes: list<string>, isInline: bool}
+	 *  - isInline: Whether the image is inline after handling options
+	 *  - classes: The list of classes for the wrapper.
 	 */
-	private static function getWrapperInfo( array $opts ) {
+	private static function getWrapperInfo( array $opts ): array {
 		$format = self::getFormat( $opts );
 		$isInline = !in_array( $format, [ 'thumbnail', 'manualthumb', 'framed' ], true );
 		$classes = [];
@@ -889,11 +921,11 @@ class WikiLinkHandler extends TokenHandler {
 	 *
 	 * @param string $optStr
 	 * @param Env $env
-	 * @return array|null
-	 * 	 ck Canonical key for the image option.
-	 *   v Value of the option.
-	 *   ak Aliased key for the image option - includes `"$1"` for placeholder.
-	 *   s Whether it's a simple option or one with a value.
+	 * @return ?array{ck: string, v: string, ak: string, s: bool}
+	 * - ck: Canonical key for the image option.
+	 * - v: Value of the option.
+	 * - ak: Aliased key for the image option; includes `"$1"` for placeholder.
+	 * - s: Whether it's a simple option or one with a value.
 	 */
 	private static function getOptionInfo( string $optStr, Env $env ): ?array {
 		$oText = trim( $optStr );
@@ -909,7 +941,7 @@ class WikiLinkHandler extends TokenHandler {
 		// 'imgOption' is the key we'd put in opts; it names the 'group'
 		// for the option, and doesn't have an img_ prefix.
 		$imgOption = Consts::$Media['SimpleOptions'][$canonicalOption] ?? null;
-		if ( !empty( $imgOption ) ) {
+		if ( $imgOption !== null ) {
 			return [
 				'ck' => $imgOption,
 				'v' => $shortCanonicalOption,
@@ -979,13 +1011,10 @@ class WikiLinkHandler extends TokenHandler {
 	 * @param array $tstream
 	 * @param string $prefix Anything that came before this part of the recursive call stack.
 	 * @param Env $env
-	 * @return string|string[]|null
+	 * @return ?string
 	 */
-	private static function stringifyOptionTokens( array $tstream, string $prefix, Env $env ) {
+	private static function stringifyOptionTokens( array $tstream, string $prefix, Env $env ): ?string {
 		// Seems like this should be a more general "stripTags"-like function?
-		$tokenType = null;
-		$tkHref = null;
-		$nextResult = null;
 		$skipToEndOf = null;
 		$optInfo = null;
 		$resultStr = '';
@@ -1010,7 +1039,10 @@ class WikiLinkHandler extends TokenHandler {
 				}
 
 				$resultStr .= $nextResult;
-			} elseif ( !( $currentToken instanceof EndTagTk ) ) {
+			} elseif (
+				( $currentToken instanceof XMLTagTk ) &&
+				!( $currentToken instanceof EndTagTk )
+			) {
 				// This is actually a token
 				if ( TokenUtils::hasDOMFragmentType( $currentToken ) ) {
 					if ( self::isWikitextOpt( $env, $optInfo, $prefix, $resultStr ) ) {
@@ -1255,7 +1287,7 @@ class WikiLinkHandler extends TokenHandler {
 				}
 			}
 
-			$recordCaption = static function () use ( $oContent, $oText, $dataParsoid, &$opts ) {
+			$recordCaption = static function () use ( $oContent, $oText, $dataParsoid, &$opts ): void {
 				$optsCaption = [
 					'v' => $oContent->v,
 					'src' => $oContent->vsrc ?? $oText,
@@ -1381,7 +1413,6 @@ class WikiLinkHandler extends TokenHandler {
 
 			// Collect source wikitext for image options for possible template expansion.
 			$maybeOpt = !isset( self::getUsed()[$opt['ck']] );
-			$expOpt = null;
 			// Links more often than not show up as arrays here because they're
 			// tokenized as `autourl`.  To avoid unnecessarily considering them
 			// expanded, we'll use a more restrictive test, at the cost of
@@ -1624,7 +1655,7 @@ class WikiLinkHandler extends TokenHandler {
 
 		try {
 			$content = $this->addLinkAttributesAndGetContent( $link, $token, $target );
-		} catch ( InternalException $e ) {
+		} catch ( InternalException ) {
 			return self::bailTokens( $this->manager, $token );
 		}
 
@@ -1685,7 +1716,7 @@ class WikiLinkHandler extends TokenHandler {
 	}
 
 	/** @inheritDoc */
-	public function onTag( Token $token ): ?array {
+	public function onTag( XMLTagTk $token ): ?array {
 		switch ( $token->getName() ) {
 			case 'wikilink':
 				return $this->onWikiLink( $token );

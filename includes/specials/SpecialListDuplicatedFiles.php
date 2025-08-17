@@ -31,7 +31,7 @@ use MediaWiki\SpecialPage\SpecialPage;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -56,10 +56,12 @@ class SpecialListDuplicatedFiles extends QueryPage {
 		);
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
@@ -108,7 +110,7 @@ class SpecialListDuplicatedFiles extends QueryPage {
 	/**
 	 * Pre-fill the link cache
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -134,11 +136,13 @@ class SpecialListDuplicatedFiles extends QueryPage {
 		return $msg->parse();
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->addHelpLink( 'Help:Managing_files' );
 		parent::execute( $par );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'media';
 	}

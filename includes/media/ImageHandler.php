@@ -223,6 +223,7 @@ abstract class ImageHandler extends MediaHandler {
 		}
 	}
 
+	/** @inheritDoc */
 	public function getImageSize( $image, $path ) {
 		AtEase::suppressWarnings();
 		$gis = getimagesize( $path );
@@ -231,6 +232,7 @@ abstract class ImageHandler extends MediaHandler {
 		return $gis;
 	}
 
+	/** @inheritDoc */
 	public function getSizeAndMetadata( $state, $path ) {
 		// phpcs:ignore Generic.PHP.NoSilencedErrors.Discouraged
 		$gis = @getimagesize( $path );
@@ -270,9 +272,10 @@ abstract class ImageHandler extends MediaHandler {
 	 */
 	public function getShortDesc( $file ) {
 		global $wgLang;
-		$nbytes = htmlspecialchars( $wgLang->formatSize( $file->getSize() ) );
+		$nbytes = htmlspecialchars( $wgLang->formatSize( $file->getSize() ), ENT_QUOTES );
 		$widthheight = wfMessage( 'widthheight' )
-			->numParams( $file->getWidth(), $file->getHeight() )->escaped();
+			->numParams( $file->getWidth(), $file->getHeight() )
+			->escaped();
 
 		return "$widthheight ($nbytes)";
 	}
@@ -286,13 +289,17 @@ abstract class ImageHandler extends MediaHandler {
 	public function getLongDesc( $file ) {
 		$pages = $file->pageCount();
 		if ( $pages === false || $pages <= 1 ) {
-			$msg = wfMessage( 'file-info-size' )->numParams( $file->getWidth(),
-				$file->getHeight() )->sizeParams( $file->getSize() )->params(
-					'<span class="mime-type">' . $file->getMimeType() . '</span>' )->parse();
+			$msg = wfMessage( 'file-info-size' )
+				->numParams( $file->getWidth(), $file->getHeight() )
+				->sizeParams( $file->getSize() )
+				->params( '<span class="mime-type">' . $file->getMimeType() . '</span>' )
+				->parse();
 		} else {
-			$msg = wfMessage( 'file-info-size-pages' )->numParams( $file->getWidth(),
-				$file->getHeight() )->sizeParams( $file->getSize() )->params(
-					'<span class="mime-type">' . $file->getMimeType() . '</span>' )->numParams( $pages )->parse();
+			$msg = wfMessage( 'file-info-size-pages' )
+				->numParams( $file->getWidth(), $file->getHeight() )
+				->sizeParams( $file->getSize() )
+				->params( '<span class="mime-type">' . $file->getMimeType() . '</span>' )->numParams( $pages )
+				->parse();
 		}
 
 		return $msg;

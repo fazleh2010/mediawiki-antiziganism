@@ -53,8 +53,9 @@ class ApiSetPageLanguage extends ApiBase {
 		$this->languageNameUtils = $languageNameUtils;
 	}
 
-	// Check if change language feature is enabled
+	/** @inheritDoc */
 	protected function getExtendedDescription() {
+		// Check if change language feature is enabled
 		if ( !$this->getConfig()->get( MainConfigNames::PageLanguageUseDB ) ) {
 			return 'apihelp-setpagelanguage-extended-description-disabled';
 		}
@@ -122,14 +123,17 @@ class ApiSetPageLanguage extends ApiBase {
 		$this->getResult()->addValue( null, $this->getModuleName(), $r );
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'title' => null,
@@ -137,13 +141,13 @@ class ApiSetPageLanguage extends ApiBase {
 				ParamValidator::PARAM_TYPE => 'integer'
 			],
 			'lang' => [
-				ParamValidator::PARAM_TYPE => array_merge(
-					[ 'default' ],
-					array_keys( $this->languageNameUtils->getLanguageNames(
+				ParamValidator::PARAM_TYPE => [
+					'default',
+					...array_keys( $this->languageNameUtils->getLanguageNames(
 						LanguageNameUtils::AUTONYMS,
 						LanguageNameUtils::SUPPORTED
 					) )
-				),
+				],
 				ParamValidator::PARAM_REQUIRED => true,
 			],
 			'reason' => null,
@@ -154,10 +158,12 @@ class ApiSetPageLanguage extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		$title = Title::newMainPage()->getPrefixedText();
 		$mp = rawurlencode( $title );
@@ -170,6 +176,7 @@ class ApiSetPageLanguage extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:SetPageLanguage';
 	}

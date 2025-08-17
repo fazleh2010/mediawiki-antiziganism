@@ -24,7 +24,6 @@ use AllowDynamicProperties;
 use ArrayIterator;
 use BadMethodCallException;
 use InvalidArgumentException;
-use MailAddress;
 use MediaWiki\Auth\AuthenticationRequest;
 use MediaWiki\Auth\AuthManager;
 use MediaWiki\Block\AbstractBlock;
@@ -33,9 +32,11 @@ use MediaWiki\Block\DatabaseBlock;
 use MediaWiki\Block\SystemBlock;
 use MediaWiki\Context\RequestContext;
 use MediaWiki\DAO\WikiAwareEntityTrait;
+use MediaWiki\Deferred\DeferredUpdates;
 use MediaWiki\Exception\MWExceptionHandler;
 use MediaWiki\HookContainer\ProtectedHookAccessorTrait;
 use MediaWiki\Logger\LoggerFactory;
+use MediaWiki\Mail\MailAddress;
 use MediaWiki\Mail\UserEmailContact;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MainConfigSchema;
@@ -55,6 +56,7 @@ use MediaWiki\Status\Status;
 use MediaWiki\Title\Title;
 use MWCryptHash;
 use MWCryptRand;
+use Profiler;
 use RuntimeException;
 use stdClass;
 use Stringable;
@@ -237,11 +239,9 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	 */
 	/** @var string|null */
 	protected $mDatePreference;
-	/** @var string|false */
-	protected $mHash;
-	/** @var AbstractBlock */
+	/** @var AbstractBlock|false|null Null when uninitialized, false when there is no block */
 	protected $mGlobalBlock;
-	/** @var bool */
+	/** @var bool|null */
 	protected $mLocked;
 
 	/** @var WebRequest|null */
@@ -336,7 +336,8 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 		return array_diff(
 			array_keys( get_object_vars( $this ) ),
 			[
-				'mThisAsAuthority' // memoization, will be recreated on demand.
+				'mThisAsAuthority', // memoization, will be recreated on demand.
+				'mRequest', // contains Session, reloaded when needed, T400549
 			]
 		);
 	}
@@ -835,7 +836,6 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 		];
 		$validate = $options['validate'];
 
-		// @phan-suppress-next-line PhanSuspiciousValueComparison
 		if ( $validate === false ) {
 			$validation = UserRigorOptions::RIGOR_NONE;
 		} elseif ( array_key_exists( $validate, $validationLevels ) ) {
@@ -877,7 +877,6 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 
 		if ( !$row ) {
 			// No user. Create it?
-			// @phan-suppress-next-line PhanImpossibleCondition
 			if ( !$options['create'] ) {
 				// No.
 				return null;
@@ -895,7 +894,6 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 
 		if ( !$user->isSystemUser() ) {
 			// User exists. Steal it?
-			// @phan-suppress-next-line PhanRedundantCondition
 			if ( !$options['steal'] ) {
 				return null;
 			}
@@ -905,7 +903,10 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 			$user->invalidateEmail();
 			$user->mToken = self::INVALID_TOKEN;
 			$user->saveSettings();
-			SessionManager::singleton()->preventSessionsForUser( $user->getName() );
+			$manager = $services->getSessionManager();
+			if ( $manager instanceof SessionManager ) {
+				$manager->preventSessionsForUser( $user->getName() );
+			}
 		}
 
 		return $user;
@@ -913,32 +914,6 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 
 	/** @} */
 	// endregion -- end of newFrom*() static factory methods
-
-	/**
-	 * Get the username corresponding to a given user ID
-	 * @deprecated since 1.43, emits deprecation warnings since 1.44, Use UserIdentityLookup to get name from id
-	 * @param int $id User ID
-	 * @return string|false The corresponding username
-	 */
-	public static function whoIs( $id ) {
-		wfDeprecated( __METHOD__, '1.43' );
-		return MediaWikiServices::getInstance()->getUserCache()
-			->getProp( $id, 'name' );
-	}
-
-	/**
-	 * Get the real name of a user given their user ID
-	 *
-	 * @deprecated since 1.43, emits deprecation warnings since 1.44,
-	 *   Use UserFactory to get user instance and use User::getRealName
-	 * @param int $id User ID
-	 * @return string|false The corresponding user's real name
-	 */
-	public static function whoIsReal( $id ) {
-		wfDeprecated( __METHOD__, '1.43' );
-		return MediaWikiServices::getInstance()->getUserCache()
-			->getProp( $id, 'real_name' );
-	}
 
 	/**
 	 * Return the users who are members of the given group(s). In case of multiple groups,
@@ -1363,7 +1338,6 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 		global $wgFullyInitialised;
 
 		$this->mDatePreference = null;
-		$this->mHash = false;
 		$this->mThisAsAuthority = null;
 
 		if ( $wgFullyInitialised && $this->mFrom ) {
@@ -2206,10 +2180,12 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isAllowedAny( ...$permissions ): bool {
 		return $this->getThisAsAuthority()->isAllowedAny( ...$permissions );
 	}
 
+	/** @inheritDoc */
 	public function isAllowedAll( ...$permissions ): bool {
 		return $this->getThisAsAuthority()->isAllowedAll( ...$permissions );
 	}
@@ -2679,6 +2655,21 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	}
 
 	/**
+	 * Schedule a deferred update which will block the IP address of the current
+	 * user, if they are blocked with the autoblocking option.
+	 *
+	 * @since 1.45
+	 */
+	public function scheduleSpreadBlock() {
+		DeferredUpdates::addCallableUpdate( function () {
+			// Permit master queries in a GET request
+			$scope = Profiler::instance()->getTransactionProfiler()->silenceForScope();
+			$this->spreadAnyEditBlock();
+			ScopedCallback::consume( $scope );
+		} );
+	}
+
+	/**
 	 * If this user is logged-in and blocked, block any IP address they've successfully logged in from.
 	 * Calls the "SpreadAnyEditBlock" hook, so this may block the IP address using a non-core blocking mechanism.
 	 *
@@ -2846,6 +2837,7 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	/**
 	 * Generate a new e-mail confirmation token and send a confirmation/invalidation
 	 * mail to the user's given address.
+	 * Any preexisting e-mail confirmation token will be invalidated.
 	 *
 	 * @param string $type Message to send, either "created", "changed" or "set"
 	 * @return Status
@@ -2853,9 +2845,9 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	public function sendConfirmationMail( $type = 'created' ) {
 		global $wgLang;
 		$expiration = null; // gets passed-by-ref and defined in next line.
-		$token = $this->confirmationToken( $expiration );
-		$url = $this->confirmationTokenUrl( $token );
-		$invalidateURL = $this->invalidationTokenUrl( $token );
+		$token = $this->getConfirmationToken( $expiration );
+		$url = $this->getConfirmationTokenUrl( $token );
+		$invalidateURL = $this->getInvalidationTokenUrl( $token );
 		$this->saveSettings();
 
 		if ( $type == 'created' || $type === false ) {
@@ -2939,18 +2931,27 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	/**
 	 * Generate, store, and return a new e-mail confirmation code.
 	 * A hash (unsalted, since it's used as a key) is stored.
+	 * Any preexisting e-mail confirmation token will be invalidated.
 	 *
 	 * @note Call saveSettings() after calling this function to commit
 	 * this change to the database.
 	 *
-	 * @param string &$expiration Accepts the expiration time @phan-output-reference
+	 * @since 1.45
+	 *
+	 * @param null|string &$expiration Timestamp at which the generated token expires @phan-output-reference
+	 * @param int|null $tokenLifeTimeSeconds Optional lifetime of the token in seconds.
+	 * Defaults to the value of $wgUserEmailConfirmationTokenExpiry if not set.
 	 * @return string New token
 	 */
-	protected function confirmationToken( &$expiration ) {
-		$userEmailConfirmationTokenExpiry = MediaWikiServices::getInstance()
+	public function getConfirmationToken(
+		?string &$expiration,
+		?int $tokenLifeTimeSeconds = null
+	): string {
+		$tokenLifeTimeSeconds ??= MediaWikiServices::getInstance()
 			->getMainConfig()->get( MainConfigNames::UserEmailConfirmationTokenExpiry );
-		$now = time();
-		$expires = $now + $userEmailConfirmationTokenExpiry;
+		$now = ConvertibleTimestamp::time();
+
+		$expires = $now + $tokenLifeTimeSeconds;
 		$expiration = wfTimestamp( TS_MW, $expires );
 		$this->load();
 		$token = MWCryptRand::generateHex( 32 );
@@ -2958,6 +2959,16 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 		$this->mEmailToken = $hash;
 		$this->mEmailTokenExpires = $expiration;
 		return $token;
+	}
+
+	/**
+	 * Deprecated alias for getConfirmationToken() for CentralAuth.
+	 * @deprecated Use getConfirmationToken() instead.
+	 * @param string|null &$expiration @phan-output-reference
+	 * @return string
+	 */
+	protected function confirmationToken( &$expiration ) {
+		return $this->getConfirmationToken( $expiration );
 	}
 
 	/**
@@ -2972,15 +2983,30 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 
 	/**
 	 * Return a URL the user can use to confirm their email address.
+	 *
+	 * @since 1.45
 	 * @param string $token Accepts the email confirmation token
 	 * @return string New token URL
 	 */
-	protected function confirmationTokenUrl( $token ) {
+	public function getConfirmationTokenUrl( string $token ): string {
 		return $this->getTokenUrl( 'ConfirmEmail', $token );
 	}
 
 	/**
 	 * Return a URL the user can use to invalidate their email address.
+	 *
+	 * @since 1.45
+	 * @param string $token Accepts the email confirmation token
+	 * @return string New token URL
+	 */
+	public function getInvalidationTokenUrl( string $token ): string {
+		return $this->getTokenUrl( 'InvalidateEmail', $token );
+	}
+
+	/**
+	 * Deprecated alias for getInvalidationTokenUrl() for CentralAuth.
+	 *
+	 * @deprecated Use getInvalidationTokenUrl() instead.
 	 * @param string $token Accepts the email confirmation token
 	 * @return string New token URL
 	 */
@@ -2989,7 +3015,7 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	}
 
 	/**
-	 * Internal function to format the e-mail validation/invalidation URLs.
+	 * Function to create a special page URL with a token path parameter.
 	 * This uses a quickie hack to use the
 	 * hardcoded English names of the Special: pages, for ASCII safety.
 	 *
@@ -2998,11 +3024,12 @@ class User implements Stringable, Authority, UserIdentity, UserEmailContact {
 	 * also sometimes can get corrupted in some browsers/mailers
 	 * (T8957 with Gmail and Internet Explorer).
 	 *
+	 * @since 1.45
 	 * @param string $page Special page
 	 * @param string $token
 	 * @return string Formatted URL
 	 */
-	protected function getTokenUrl( $page, $token ) {
+	public function getTokenUrl( string $page, string $token ): string {
 		// Hack to bypass localization of 'Special:'
 		$title = Title::makeTitle( NS_MAIN, "Special:$page/$token" );
 		return $title->getCanonicalURL();

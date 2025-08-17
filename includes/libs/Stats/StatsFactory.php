@@ -80,8 +80,13 @@ class StatsFactory {
 		return $statsFactory->withStatsdDataFactory( $this->statsdDataFactory );
 	}
 
+	/**
+	 * This function existed to support the Graphite->Prometheus transition and is no longer needed.
+	 * @deprecated since 1.45, see: https://www.mediawiki.org/wiki/Manual:Stats
+	 */
 	public function withStatsdDataFactory( ?IBufferingStatsdDataFactory $statsdDataFactory ): StatsFactory {
-		$this->statsdDataFactory = $statsdDataFactory;
+		// TODO: remove this and all other copyToStatsdAt() usage and implementation
+		//$this->statsdDataFactory = $statsdDataFactory;
 		return $this;
 	}
 
@@ -112,6 +117,14 @@ class StatsFactory {
 	/**
 	 * Makes a new TimingMetric or fetches one from cache.
 	 *
+	 * The timing data should be in the range [5ms, 60s]; use
+	 * ::getHistogram() if you need a different range.
+	 *
+	 * This range limitation is a consequence of the recommended
+	 * setup with prometheus/statsd_exporter (as dogstatsd target)
+	 * and Prometheus (as time series database), with
+	 * `statsd_exporter::histogram_buckets` set to a 5ms-60s range.
+	 *
 	 * If a collision occurs, returns a NullMetric to suppress exceptions.
 	 *
 	 * @param string $name
@@ -122,7 +135,14 @@ class StatsFactory {
 	}
 
 	/**
-	 * Makes a new HistogramMetric.
+	 * Makes a new HistogramMetric from a list of buckets.
+	 *
+	 * Beware: this is for storing non-time data in histograms, like byte
+	 * sizes, or time data outside of the range [5ms, 60s].
+	 *
+	 * Avoid changing the bucket list once a metric has been
+	 * deployed.  When bucket list changes are unavoidable, change the metric
+	 * name and handle the transition in PromQL.
 	 *
 	 * @param string $name
 	 * @param array<int|float> $buckets
@@ -180,7 +200,7 @@ class StatsFactory {
 			$metric = $this->cache->get( $this->component, $name, $className );
 		} catch ( TypeError | InvalidArgumentException | InvalidConfigurationException $ex ) {
 			// Log the condition and give the caller something that will absorb calls.
-			trigger_error( $ex->getMessage(), E_USER_WARNING );
+			trigger_error( "Stats: {$name}: {$ex->getMessage()}", E_USER_WARNING );
 			return new NullMetric;
 		}
 		if ( $metric === null ) {

@@ -40,6 +40,10 @@ class ModuleSpecHandler extends SimpleHandler {
 		$this->options = $options;
 	}
 
+	/**
+	 * @param string $moduleName
+	 * @param string $version
+	 */
 	public function run( $moduleName, $version = '' ): array {
 		// TODO: implement caching, get cache key from Router.
 
@@ -124,6 +128,9 @@ class ModuleSpecHandler extends SimpleHandler {
 	private function getPathsSpec( Module $module ): array {
 		$specs = [];
 
+		// XXX: We currently don't support meta-data on OpenAPI path objects
+		//      (summary, description).
+
 		foreach ( $module->getDefinedPaths() as $path => $methods ) {
 			foreach ( $methods as $mth ) {
 				$key = strtolower( $mth );
@@ -167,6 +174,7 @@ class ModuleSpecHandler extends SimpleHandler {
 		return 'includes/Rest/Handler/Schema/ModuleSpec.json';
 	}
 
+	/** @inheritDoc */
 	public function getParamSettings() {
 		return [
 			'module' => [

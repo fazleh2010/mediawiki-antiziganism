@@ -67,8 +67,6 @@ class SpecialUpload extends SpecialPage {
 	private UserOptionsLookup $userOptionsLookup;
 	private NamespaceInfo $nsInfo;
 	private WatchlistManager $watchlistManager;
-	/** @var bool wether uploads by url should be asynchronous or not */
-	public bool $allowAsync;
 	private JobQueueGroup $jobQueueGroup;
 	private LoggerInterface $log;
 
@@ -87,10 +85,6 @@ class SpecialUpload extends SpecialPage {
 		$this->userOptionsLookup = $userOptionsLookup ?? $services->getUserOptionsLookup();
 		$this->nsInfo = $nsInfo ?? $services->getNamespaceInfo();
 		$this->watchlistManager = $watchlistManager ?? $services->getWatchlistManager();
-		$this->allowAsync = (
-			$this->getConfig()->get( MainConfigNames::EnableAsyncUploads ) &&
-			$this->getConfig()->get( MainConfigNames::EnableAsyncUploadsByURL )
-		);
 		$this->log = LoggerFactory::getInstance( 'SpecialUpload' );
 	}
 
@@ -98,6 +92,7 @@ class SpecialUpload extends SpecialPage {
 		$this->getOutput()->addModuleStyles( 'mediawiki.codex.messagebox.styles' );
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -220,7 +215,9 @@ class SpecialUpload extends SpecialPage {
 	 * @return bool
 	 */
 	protected function isAsyncUpload() {
-		return ( $this->mSourceType === 'url' && $this->allowAsync );
+		return $this->mSourceType === 'url'
+			&& $this->getConfig()->get( MainConfigNames::EnableAsyncUploads )
+			&& $this->getConfig()->get( MainConfigNames::EnableAsyncUploadsByURL );
 	}
 
 	/**
@@ -1163,6 +1160,7 @@ class SpecialUpload extends SpecialPage {
 			$gallery->toHTML() . "</li>\n";
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'media';
 	}

@@ -39,7 +39,6 @@ use MediaWiki\Exception\PermissionsError;
 use MediaWiki\Exception\ReadOnlyError;
 use MediaWiki\Html\Html;
 use MediaWiki\HTMLForm\HTMLForm;
-use MediaWiki\Language\RawMessage;
 use MediaWiki\Logger\LoggerFactory;
 use MediaWiki\MainConfigNames;
 use MediaWiki\MediaWikiServices;
@@ -123,6 +122,9 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 	/** @var HTMLForm|null */
 	protected $authForm;
 
+	/**
+	 * @return bool
+	 */
 	abstract protected function isSignup();
 
 	/**
@@ -141,6 +143,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 	 */
 	abstract protected function logAuthResult( $success, UserIdentity $performer, $status = null );
 
+	/** @inheritDoc */
 	protected function setRequest( array $data, $wasPosted = null ) {
 		parent::setRequest( $data, $wasPosted );
 		$this->mLoadedRequest = false;
@@ -274,6 +277,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 		return array_filter( $params, static fn ( $val ) => $val !== null );
 	}
 
+	/** @inheritDoc */
 	protected function beforeExecute( $subPage ) {
 		// finish initializing the class before processing the request - T135924
 		$this->loadRequestParameters();
@@ -526,7 +530,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 	 * Show the success page.
 	 *
 	 * @param string $type Condition of return to; see `executeReturnTo`
-	 * @param string|Message $title Page's title
+	 * @param Message $title Page's title
 	 * @param string $msgname
 	 * @param string $injected_html
 	 * @param StatusValue|null $extraMessages
@@ -535,10 +539,6 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 		$type, $title, $msgname, $injected_html, $extraMessages
 	) {
 		$out = $this->getOutput();
-		if ( is_string( $title ) ) {
-			wfDeprecated( __METHOD__ . ' with string title', '1.41' ); // T343849
-			$title = ( new RawMessage( '$1' ) )->rawParams( $title );
-		}
 		$out->setPageTitleMsg( $title );
 		if ( $msgname ) {
 			$out->addWikiMsg( $msgname, wfEscapeWikiText( $this->getUser()->getName() ) );
@@ -558,7 +558,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 	}
 
 	/**
-	 * @param AuthenticationRequest[] $requests A list of AuthorizationRequest objects,
+	 * @param AuthenticationRequest[] $requests A list of AuthenticationRequest objects,
 	 *   used to generate the form fields. An empty array means a fatal error
 	 *   (authentication cannot continue).
 	 * @param string|Message $msg
@@ -694,20 +694,21 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 		if ( $this->isSignup() && $this->showExtraInformation() ) {
 			if ( !$this->getUser()->isTemp() ) {
 				// The following messages are used here:
-				// * createacct-benefit-icon1 createacct-benefit-head1 createacct-benefit-body1
-				// * createacct-benefit-icon2 createacct-benefit-head2 createacct-benefit-body2
-				// * createacct-benefit-icon3 createacct-benefit-head3 createacct-benefit-body3
+				// * createacct-benefit-icon1 createacct-benefit-head1 createacct-benefit-text1
+				// * createacct-benefit-icon2 createacct-benefit-head2 createacct-benefit-text2
+				// * createacct-benefit-icon3 createacct-benefit-head3 createacct-benefit-text3
 				$benefitCount = 3;
 				$benefitList = '';
 				for ( $benefitIdx = 1; $benefitIdx <= $benefitCount; $benefitIdx++ ) {
-					$headUnescaped = $this->msg( "createacct-benefit-head$benefitIdx" )->text();
+					$numberUnescaped = $this->msg( "createacct-benefit-head$benefitIdx" )->text();
+					$numberHtml = Html::rawElement( 'strong', [], $numberUnescaped );
 					$iconClass = $this->msg( "createacct-benefit-icon$benefitIdx" )->text();
 					$benefitList .= Html::rawElement( 'div', [ 'class' => "mw-number-text $iconClass" ],
-						Html::rawElement( 'span', [],
-							$this->msg( "createacct-benefit-head$benefitIdx" )->escaped()
-						)
-						. Html::rawElement( 'p', [],
-							$this->msg( "createacct-benefit-body$benefitIdx" )->params( $headUnescaped )->escaped()
+						Html::rawElement( 'p', [],
+							$this->msg( "createacct-benefit-text$benefitIdx" )->params(
+								$numberUnescaped,
+								$numberHtml
+							)->parse()
 						)
 					);
 				}
@@ -1120,7 +1121,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 			} elseif ( $this->mEntryErrorType === 'warning' ) {
 				$defaultHtml = Html::warningBox( $this->mEntryError );
 			} elseif ( $this->mEntryErrorType === 'notice' ) {
-				$defaultHtml = Html::noticeBox( $this->mEntryError, '' );
+				$defaultHtml = Html::noticeBox( $this->mEntryError );
 			}
 			$fieldDefinitions['entryError'] = [
 				'type' => 'info',
@@ -1237,6 +1238,9 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 			$this->getContext()->getAuthority()->isAllowed( 'createaccount' );
 	}
 
+	/**
+	 * @return string
+	 */
 	protected function getTokenName() {
 		return $this->isSignup() ? 'wpCreateaccountToken' : 'wpLoginToken';
 	}
@@ -1302,6 +1306,7 @@ abstract class LoginSignupSpecialPage extends AuthManagerSpecialPage {
 		);
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'login';
 	}

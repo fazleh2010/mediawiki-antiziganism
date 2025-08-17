@@ -32,8 +32,8 @@ use Wikimedia\Timestamp\ConvertibleTimestamp;
  * By default, this does not need to be run. The default parser cache
  * backend is CACHE_DB (SqlBagOStuff), and by default that automatically
  * performs incremental purges in the background of write requests.
+ * Check your wiki's $wgParserCacheType setting to determine if you need to run this script.
  *
- * @see {@link MediaWiki\MainConfigSchema::ParserCacheType}
  * @ingroup Maintenance
  */
 class PurgeParserCache extends Maintenance {
@@ -98,7 +98,7 @@ class PurgeParserCache extends Maintenance {
 		$pc = $this->getServiceContainer()->getParserCache()->getCacheStorage();
 		$success = $pc->deleteObjectsExpiringBefore(
 			$timestamp,
-			[ $this, 'showProgressAndWait' ],
+			$this->showProgressAndWait( ... ),
 			INF,
 			// Note that "0" can be a valid server tag, and must not be discarded or changed to null.
 			$this->getOption( 'tag', null )
@@ -110,7 +110,7 @@ class PurgeParserCache extends Maintenance {
 		$this->output( "\nDone\n" );
 	}
 
-	public function showProgressAndWait( int $percent ) {
+	private function showProgressAndWait( int $percent ) {
 		// Parser caches involve mostly-unthrottled writes of large blobs. This is sometimes prone
 		// to replication lag. As such, while our purge queries are simple primary key deletes,
 		// we want to avoid adding significant load to the replication stream, by being

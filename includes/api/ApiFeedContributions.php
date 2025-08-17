@@ -25,6 +25,7 @@ namespace MediaWiki\Api;
 use MediaWiki\Cache\LinkBatchFactory;
 use MediaWiki\CommentFormatter\CommentFormatter;
 use MediaWiki\Content\TextContent;
+use MediaWiki\Feed\ChannelFeed;
 use MediaWiki\Feed\FeedItem;
 use MediaWiki\HookContainer\HookContainer;
 use MediaWiki\Linker\LinkRenderer;
@@ -42,6 +43,7 @@ use MediaWiki\Title\Title;
 use MediaWiki\User\ExternalUserNames;
 use MediaWiki\User\UserFactory;
 use MediaWiki\User\UserRigorOptions;
+use stdClass;
 use Wikimedia\ParamValidator\ParamValidator;
 use Wikimedia\Rdbms\IConnectionProvider;
 
@@ -103,6 +105,7 @@ class ApiFeedContributions extends ApiBase {
 		}
 
 		$feedClasses = $config->get( MainConfigNames::FeedClasses );
+		'@phan-var array<string,class-string<ChannelFeed>> $feedClasses';
 		if ( !isset( $feedClasses[$params['feedformat']] ) ) {
 			$this->dieWithError( 'feed-invalid' );
 		}
@@ -123,7 +126,7 @@ class ApiFeedContributions extends ApiBase {
 			$feedUrl = SpecialPage::getTitleFor( 'Contributions', $target )->getFullURL();
 		}
 
-		$feed = new $feedClasses[$params['feedformat']] (
+		$feed = new $feedClasses[$params['feedformat']](
 			$feedTitle,
 			$msg,
 			$feedUrl
@@ -183,7 +186,11 @@ class ApiFeedContributions extends ApiBase {
 		ApiFormatFeedWrapper::setResult( $this->getResult(), $feed, $feedItems );
 	}
 
-	protected function feedItem( $row ) {
+	/**
+	 * TODO: use stdClass type hint without T398925
+	 * @param stdClass $row
+	 */
+	protected function feedItem( $row ): ?FeedItem {
 		// This hook is the api contributions equivalent to the
 		// ContributionsLineEnding hook. Hook implementers may cancel
 		// the hook to signal the user is not allowed to read this item.
@@ -201,7 +208,7 @@ class ApiFeedContributions extends ApiBase {
 		// Hook completed and did not return a valid feed item
 		$title = Title::makeTitle( (int)$row->page_namespace, $row->page_title );
 
-		if ( $title && $this->getAuthority()->authorizeRead( 'read', $title ) ) {
+		if ( $this->getAuthority()->authorizeRead( 'read', $title ) ) {
 			$date = $row->rev_timestamp;
 			$comments = $title->getTalkPage()->getFullURL();
 			$revision = $this->revisionStore->newRevisionFromRow( $row, 0, $title );
@@ -238,7 +245,7 @@ class ApiFeedContributions extends ApiBase {
 		$msg = $this->msg( 'colon-separator' )->inContentLanguage()->escaped();
 		try {
 			$content = $revision->getContent( SlotRecord::MAIN );
-		} catch ( RevisionAccessException $e ) {
+		} catch ( RevisionAccessException ) {
 			$content = null;
 		}
 
@@ -260,6 +267,7 @@ class ApiFeedContributions extends ApiBase {
 			"</p>\n<hr />\n<div>" . $html . '</div>';
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		$feedFormatNames = array_keys( $this->getConfig()->get( MainConfigNames::FeedClasses ) );
 
@@ -305,6 +313,7 @@ class ApiFeedContributions extends ApiBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		return [
 			'action=feedcontributions&user=Example'
@@ -312,6 +321,7 @@ class ApiFeedContributions extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Feedcontributions';
 	}

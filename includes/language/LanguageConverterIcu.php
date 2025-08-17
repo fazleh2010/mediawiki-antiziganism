@@ -18,7 +18,7 @@
  * @file
  */
 
-use MediaWiki\Language\ReplacementArray;
+use Wikimedia\ReplacementArray;
 
 /**
  * A class that extends LanguageConverterSpecific for converts that use
@@ -44,6 +44,7 @@ abstract class LanguageConverterIcu extends LanguageConverterSpecific {
 		return $tables;
 	}
 
+	/** @inheritDoc */
 	public function translate( $text, $variant ) {
 		$text = parent::translate( $text, $variant );
 		if ( trim( $text ) ) {
@@ -80,9 +81,11 @@ abstract class LanguageConverterIcu extends LanguageConverterSpecific {
 		if ( $this->mTransliterators === null ) {
 			$this->mTransliterators = [];
 			foreach ( $this->getIcuRules() as $variant => $rule ) {
+				// @phan-suppress-next-line PhanTypeMismatchProperty Assume it's not null
 				$this->mTransliterators[$variant] = Transliterator::createFromRules( $rule );
 			}
 			foreach ( $this->getTransliteratorAliases() as $alias => $variant ) {
+				// @phan-suppress-next-line PhanTypeMismatchProperty Assume it's not null
 				$this->mTransliterators[$alias] = $this->mTransliterators[$variant];
 			}
 		}

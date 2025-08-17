@@ -77,6 +77,7 @@ class HTMLCacheUpdateJob extends Job {
 		);
 	}
 
+	/** @inheritDoc */
 	public function run() {
 		$updateRowsPerJob = MediaWikiServices::getInstance()->getMainConfig()->get(
 			MainConfigNames::UpdateRowsPerJob );
@@ -136,7 +137,7 @@ class HTMLCacheUpdateJob extends Job {
 		// anyway. We assume that vast majority of the cache jobs finish before the link jobs,
 		// so using the current timestamp instead of the root timestamp is not expected to
 		// invalidate these cache entries too often.
-		$newTouchedUnix = time();
+		$newTouchedUnix = (int)wfTimestamp();
 		// Timestamp used to bypass pages already invalided since the triggering event
 		$casTsUnix = $rootTsUnix ?? $newTouchedUnix;
 
@@ -181,6 +182,7 @@ class HTMLCacheUpdateJob extends Job {
 		);
 	}
 
+	/** @inheritDoc */
 	public function getDeduplicationInfo() {
 		$info = parent::getDeduplicationInfo();
 		if ( is_array( $info['params'] ) ) {
@@ -195,6 +197,7 @@ class HTMLCacheUpdateJob extends Job {
 		return $info;
 	}
 
+	/** @inheritDoc */
 	public function workItemCount() {
 		if ( !empty( $this->params['recursive'] ) ) {
 			return 0; // nothing actually purged

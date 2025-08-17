@@ -1138,6 +1138,7 @@ class SkinTemplate extends Skin {
 					$content_navigation['views']['view']['text'] = $this->getSkinNavOverrideableLabel(
 						'view-view'
 					);
+					$content_navigation['views']['view']['icon'] = 'eye';
 					// signal to hide this from simple content_actions
 					$content_navigation['views']['view']['redundant'] = true;
 				}
@@ -1152,6 +1153,7 @@ class SkinTemplate extends Skin {
 						'text' => $this->getSkinNavOverrideableLabel(
 							'view-foreign', $page->getWikiDisplayName()
 						),
+						'icon' => 'eye',
 						'href' => $page->getSourceURL(),
 						'primary' => false,
 					];
@@ -1188,6 +1190,7 @@ class SkinTemplate extends Skin {
 							? 'selected'
 							: null
 						) . $isTalkClass,
+						'icon' => 'edit',
 						'text' => $this->getSkinNavOverrideableLabel(
 							"view-$msgKey"
 						),
@@ -1205,6 +1208,7 @@ class SkinTemplate extends Skin {
 							'text' => $this->getSkinNavOverrideableLabel(
 								"action-addsection"
 							),
+							'icon' => 'speechBubbleAdd',
 							'href' => $title->getLocalURL( 'action=edit&section=new' )
 						];
 					}
@@ -1216,6 +1220,7 @@ class SkinTemplate extends Skin {
 						'text' => $this->getSkinNavOverrideableLabel(
 							"action-viewsource"
 						),
+						'icon' => 'editLock',
 						'href' => $title->getLocalURL( $this->editUrlOptions() ),
 						'primary' => true, // don't collapse this in vector
 					];
@@ -1229,6 +1234,7 @@ class SkinTemplate extends Skin {
 						'text' => $this->getSkinNavOverrideableLabel(
 							'view-history'
 						),
+						'icon' => 'history',
 						'href' => $title->getLocalURL( 'action=history' ),
 					];
 
@@ -1366,7 +1372,7 @@ class SkinTemplate extends Skin {
 			// If it's not content, and a request URL is set it's got to be a special page
 			try {
 				$url = $request->getRequestURL();
-			} catch ( MWException $e ) {
+			} catch ( MWException ) {
 				$url = false;
 			}
 			$namespaces['special'] = [
@@ -1490,7 +1496,7 @@ class SkinTemplate extends Skin {
 				// so the xmlID based id is much closer to the actual $key that we want
 				// for that reason we'll just strip out the ca- if present and use
 				// the latter potion of the "id" as the $key
-				if ( isset( $value['id'] ) && substr( $value['id'], 0, 3 ) == 'ca-' ) {
+				if ( isset( $value['id'] ) && str_starts_with( $value['id'], 'ca-' ) ) {
 					$key = substr( $value['id'], 3 );
 				}
 

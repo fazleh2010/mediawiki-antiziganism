@@ -50,22 +50,6 @@ class PermissionsError extends ErrorPageError {
 	 */
 	public function __construct( ?string $permission, $status = [] ) {
 		$this->deprecatePublicProperty( 'permission', '1.43' );
-		$this->deprecatePublicPropertyFallback( 'errors', '1.43',
-			function () {
-				return $this->status->toLegacyErrorArray();
-			},
-			function ( $errors ) {
-				$this->status = PermissionStatus::newEmpty();
-				foreach ( $errors as $error ) {
-					if ( is_array( $error ) ) {
-						// @phan-suppress-next-line PhanParamTooFewUnpack
-						$this->status->fatal( ...$error );
-					} else {
-						$this->status->fatal( $error );
-					}
-				}
-			}
-		);
 
 		if ( is_array( $status ) ) {
 			$errors = $status;
@@ -103,6 +87,7 @@ class PermissionsError extends ErrorPageError {
 		parent::__construct( 'permissionserrors', $status->getMessages()[0] );
 	}
 
+	/** @inheritDoc */
 	public function report( $action = self::SEND_OUTPUT ) {
 		global $wgOut;
 

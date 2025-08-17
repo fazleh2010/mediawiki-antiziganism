@@ -28,7 +28,7 @@ use MediaWiki\SpecialPage\QueryPage;
 use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -55,18 +55,22 @@ class SpecialDoubleRedirects extends QueryPage {
 		$this->setDatabaseProvider( $dbProvider );
 	}
 
+	/** @inheritDoc */
 	public function isExpensive() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	protected function getPageHeader() {
 		return $this->msg( 'doubleredirectstext' )->parseAsBlock();
 	}
@@ -119,10 +123,12 @@ class SpecialDoubleRedirects extends QueryPage {
 		return $retval;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		return $this->reallyGetQueryInfo();
 	}
 
+	/** @inheritDoc */
 	protected function getOrderFields() {
 		return [ 'ra.rd_namespace', 'ra.rd_title' ];
 	}
@@ -215,6 +221,7 @@ class SpecialDoubleRedirects extends QueryPage {
 		return ( "{$linkA} {$edit} {$arrow} {$linkB} {$arrow} {$linkC}" );
 	}
 
+	/** @inheritDoc */
 	public function execute( $par ) {
 		$this->addHelpLink( 'Help:Redirects' );
 		parent::execute( $par );
@@ -223,7 +230,7 @@ class SpecialDoubleRedirects extends QueryPage {
 	/**
 	 * Cache page content model and gender distinction for performance
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -249,6 +256,7 @@ class SpecialDoubleRedirects extends QueryPage {
 		$res->seek( 0 );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'maintenance';
 	}

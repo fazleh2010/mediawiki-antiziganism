@@ -55,12 +55,12 @@ class MemcLockManager extends QuorumLockManager {
 	 *
 	 * @param array $config Parameters include:
 	 *   - lockServers  : Associative array of server names to "<IP>:<port>" strings.
-	 *   - srvsByBucket : An array of up to 16 arrays, each containing the server names
+	 *   - srvsByBucket : [optional] An array of up to 16 arrays, each containing the server names
 	 *                    in a bucket. Each bucket should have an odd number of servers.
-	 *                    If omitted, all servers will be in one bucket. [optional].
-	 *   - memcConfig   : Configuration array for MemcachedBagOStuff::construct() with an
+	 *                    If omitted, all servers will be in one bucket.
+	 *   - memcConfig   : [optional] Configuration array for MemcachedBagOStuff::construct() with an
 	 *                    additional 'class' parameter specifying which MemcachedBagOStuff
-	 *                    subclass to use. The server names will be injected. [optional]
+	 *                    subclass to use. The server names will be injected.
 	 * @throws Exception
 	 */
 	public function __construct( array $config ) {
@@ -90,6 +90,7 @@ class MemcLockManager extends QuorumLockManager {
 		$this->statusCache = new MapCacheLRU( 100 );
 	}
 
+	/** @inheritDoc */
 	protected function getLocksOnServer( $lockSrv, array $pathsByType ) {
 		$status = StatusValue::newGood();
 
@@ -98,7 +99,7 @@ class MemcLockManager extends QuorumLockManager {
 		$paths = array_merge( ...array_values( $pathsByType ) );
 		$paths = array_unique( $paths );
 		// List of affected lock record keys
-		$keys = array_map( [ $this, 'recordKeyForPath' ], $paths );
+		$keys = array_map( $this->recordKeyForPath( ... ), $paths );
 
 		// Lock all of the active lock record keys...
 		if ( !$this->acquireMutexes( $memc, $keys ) ) {
@@ -162,6 +163,7 @@ class MemcLockManager extends QuorumLockManager {
 		return $status;
 	}
 
+	/** @inheritDoc */
 	protected function freeLocksOnServer( $lockSrv, array $pathsByType ) {
 		$status = StatusValue::newGood();
 
@@ -170,7 +172,7 @@ class MemcLockManager extends QuorumLockManager {
 		$paths = array_merge( ...array_values( $pathsByType ) );
 		$paths = array_unique( $paths );
 		// List of affected lock record keys
-		$keys = array_map( [ $this, 'recordKeyForPath' ], $paths );
+		$keys = array_map( $this->recordKeyForPath( ... ), $paths );
 
 		// Lock all of the active lock record keys...
 		if ( !$this->acquireMutexes( $memc, $keys ) ) {

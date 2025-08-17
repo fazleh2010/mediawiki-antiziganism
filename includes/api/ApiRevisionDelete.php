@@ -125,7 +125,7 @@ class ApiRevisionDelete extends ApiBase {
 		}
 
 		$list->reloadFromPrimary();
-		for ( $item = $list->reset(); $list->current(); $item = $list->next() ) {
+		foreach ( $list as $item ) {
 			$data['items'][$item->getId()] += $item->getApiData( $this->getResult() );
 		}
 
@@ -151,14 +151,17 @@ class ApiRevisionDelete extends ApiBase {
 		return $ret;
 	}
 
+	/** @inheritDoc */
 	public function mustBePosted() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function isWriteMode() {
 		return true;
 	}
 
+	/** @inheritDoc */
 	public function getAllowedParams() {
 		return [
 			'type' => [
@@ -192,10 +195,12 @@ class ApiRevisionDelete extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function needsToken() {
 		return 'csrf';
 	}
 
+	/** @inheritDoc */
 	protected function getExamplesMessages() {
 		$title = Title::newMainPage()->getPrefixedText();
 		$mp = rawurlencode( $title );
@@ -210,6 +215,7 @@ class ApiRevisionDelete extends ApiBase {
 		];
 	}
 
+	/** @inheritDoc */
 	public function getHelpUrls() {
 		return 'https://www.mediawiki.org/wiki/Special:MyLanguage/API:Revisiondelete';
 	}

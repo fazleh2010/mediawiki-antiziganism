@@ -32,10 +32,16 @@ class AutoLoader {
 
 	/**
 	 * A mapping of namespace => file path for MediaWiki core.
-	 * The namespaces should follow the PSR-4 standard for autoloading
+	 * The namespaces must follow the PSR-4 standard for autoloading.
+	 *
+	 * MediaWiki core does not use PSR-4 autoloading due to performance issues,
+	 * but enforce the mapping to be maintained for future use.
+	 * Instead using PSR-0, class map stored in autoload.php generated via script:
+	 * php maintenance/run.php generateLocalAutoload
 	 *
 	 * @see <https://www.php-fig.org/psr/psr-4/>
-	 * @internal Only public for usage in AutoloadGenerator
+	 * @see <https://techblog.wikimedia.org/2024/01/16/web-perf-hero-mate-szabo/>
+	 * @internal Only public for usage in AutoloadGenerator/AutoLoaderTest
 	 * @phpcs-require-sorted-array
 	 */
 	public const CORE_NAMESPACES = [
@@ -76,10 +82,8 @@ class AutoLoader {
 		'MediaWiki\\JobQueue\\Jobs\\' => __DIR__ . '/jobqueue/jobs/',
 		'MediaWiki\\JobQueue\\Utils\\' => __DIR__ . '/jobqueue/utils/',
 		'MediaWiki\\Json\\' => __DIR__ . '/json/',
-		'MediaWiki\\Languages\\' => __DIR__ . '/language/',
 		'MediaWiki\\Languages\\Data\\' => __DIR__ . '/languages/data/',
 		'MediaWiki\\Language\\' => __DIR__ . '/language/',
-		'MediaWiki\\Libs\\' => __DIR__ . '/libs/',
 		'MediaWiki\\LinkedData\\' => __DIR__ . '/linkeddata/',
 		'MediaWiki\\Linker\\' => __DIR__ . '/linker/',
 		'MediaWiki\\Logger\\' => __DIR__ . '/debug/logger/',
@@ -117,7 +121,6 @@ class AutoLoader {
 		'MediaWiki\\Widget\\' => __DIR__ . '/widget/',
 		'MediaWiki\\Xml\\' => __DIR__ . '/xml/',
 		'Wikimedia\\' => __DIR__ . '/libs/',
-		'Wikimedia\\ArrayUtils\\' => __DIR__ . '/libs/',
 		'Wikimedia\\Composer\\' => __DIR__ . '/libs/composer/',
 		'Wikimedia\\DependencyStore\\' => __DIR__ . '/ResourceLoader/dependencystore/',
 		'Wikimedia\\EventRelayer\\' => __DIR__ . '/libs/eventrelayer/',
@@ -126,27 +129,21 @@ class AutoLoader {
 		'Wikimedia\\FileBackend\\FileOpHandle\\' => __DIR__ . '/libs/filebackend/fileophandle/',
 		'Wikimedia\\FileBackend\\FileOps\\' => __DIR__ . '/libs/filebackend/fileop/',
 		'Wikimedia\\FileBackend\\FSFile\\' => __DIR__ . '/libs/filebackend/fsfile/',
-		'Wikimedia\\HashRing\\' => __DIR__ . '/libs/',
-		'Wikimedia\\HtmlArmor\\' => __DIR__ . '/libs/',
 		'Wikimedia\\Http\\' => __DIR__ . '/libs/http/',
 		'Wikimedia\\LightweightObjectStore\\' => __DIR__ . '/libs/objectcache/utils/',
-		'Wikimedia\\MapCacheLRU\\' => __DIR__ . '/libs/',
 		'Wikimedia\\Mime\\' => __DIR__ . '/libs/mime/',
-		'Wikimedia\\NonSerializable\\' => __DIR__ . '/libs/',
 		'Wikimedia\\ObjectCache\\' => __DIR__ . '/libs/objectcache/',
 		'Wikimedia\\Rdbms\\Database\\' => __DIR__ . '/libs/rdbms/database/',
 		'Wikimedia\\Rdbms\\Platform\\' => __DIR__ . '/libs/rdbms/platform/',
 		'Wikimedia\\Rdbms\\Replication\\' => __DIR__ . '/libs/rdbms/database/replication/',
-		'Wikimedia\\StringUtils\\' => __DIR__ . '/libs/',
 		'Wikimedia\\Telemetry\\' => __DIR__ . '/libs/telemetry/',
-		'Wikimedia\\Timing\\' => __DIR__ . '/libs/',
 		'Wikimedia\\UUID\\' => __DIR__ . '/libs/uuid/',
 	];
 
 	/**
 	 * @var string[] Namespace (ends with \) => Path (ends with /)
 	 */
-	private static $psr4Namespaces = self::CORE_NAMESPACES;
+	private static $psr4Namespaces = [];
 
 	/**
 	 * @var string[] Class => File
@@ -227,7 +224,7 @@ class AutoLoader {
 			$wgAutoloadClasses[$className] ??
 			false;
 
-		if ( !$filename && strpos( $className, '\\' ) !== false ) {
+		if ( !$filename && str_contains( $className, '\\' ) ) {
 			// This class is namespaced, so look in the namespace map
 			$prefix = $className;
 			// phpcs:ignore Generic.CodeAnalysis.AssignmentInCondition.FoundInWhileCondition
@@ -280,7 +277,7 @@ class AutoLoader {
 	}
 
 	///// Methods used during testing //////////////////////////////////////////////
-	private static function assertTesting( $method ) {
+	private static function assertTesting( string $method ): void {
 		if ( !defined( 'MW_PHPUNIT_TEST' ) ) {
 			throw new LogicException( "$method is not supported outside phpunit tests!" );
 		}

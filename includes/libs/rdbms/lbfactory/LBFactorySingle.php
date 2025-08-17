@@ -66,43 +66,45 @@ class LBFactorySingle extends LBFactory {
 	/**
 	 * @param IDatabase $db Live connection handle
 	 * @param array $params Parameter map to LBFactorySingle::__construct()
-	 * @return LBFactorySingle
 	 * @since 1.28
 	 */
-	public static function newFromConnection( IDatabase $db, array $params = [] ) {
-		return new static( array_merge(
-			[ 'localDomain' => $db->getDomainID() ],
-			$params,
-			[ 'connection' => $db ]
-		) );
+	public static function newFromConnection( IDatabase $db, array $params = [] ): static {
+		return new static( [
+			'localDomain' => $db->getDomainID(),
+			...$params,
+			'connection' => $db,
+		] );
 	}
 
 	/**
 	 * @param array $params Parameter map to LBFactorySingle::__construct()
-	 * @return LBFactorySingle
 	 * @since 1.40
 	 */
-	public static function newDisabled( array $params = [] ) {
+	public static function newDisabled( array $params = [] ): static {
 		return new static( array_merge(
 			$params,
 			[ 'connection' => null ]
 		) );
 	}
 
+	/** @inheritDoc */
 	public function newMainLB( $domain = false ): ILoadBalancerForOwner {
 		// @phan-suppress-previous-line PhanPluginNeverReturnMethod
 		throw new BadMethodCallException( "Method is not supported." );
 	}
 
+	/** @inheritDoc */
 	public function getMainLB( $domain = false ): ILoadBalancer {
 		return $this->mainLB;
 	}
 
+	/** @inheritDoc */
 	public function newExternalLB( $cluster ): ILoadBalancerForOwner {
 		// @phan-suppress-previous-line PhanPluginNeverReturnMethod
 		throw new BadMethodCallException( "Method is not supported." );
 	}
 
+	/** @inheritDoc */
 	public function getExternalLB( $cluster ): ILoadBalancer {
 		// @phan-suppress-previous-line PhanPluginNeverReturnMethod
 		throw new BadMethodCallException( "Method is not supported." );
@@ -116,6 +118,7 @@ class LBFactorySingle extends LBFactory {
 		return [];
 	}
 
+	/** @inheritDoc */
 	protected function getLBsForOwner() {
 		if ( $this->mainLB !== null ) {
 			yield $this->mainLB;

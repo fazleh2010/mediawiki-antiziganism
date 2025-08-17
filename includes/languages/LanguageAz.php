@@ -27,8 +27,9 @@ use MediaWiki\Language\Language;
  */
 class LanguageAz extends Language {
 
+	/** @inheritDoc */
 	public function ucfirst( $str ) {
-		if ( substr( $str, 0, 1 ) === 'i' ) {
+		if ( str_starts_with( $str, 'i' ) ) {
 			return 'İ' . substr( $str, 1 );
 		}
 		return parent::ucfirst( $str );

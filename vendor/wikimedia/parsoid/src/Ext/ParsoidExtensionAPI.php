@@ -116,13 +116,14 @@ class ParsoidExtensionAPI {
 	 * with the localized message.  See T266666
 	 *
 	 * @unstable
-	 * @param string $key
+	 * @param DataMwError|string $key
 	 * @param mixed ...$params
 	 * @return DocumentFragment
 	 */
-	public function pushError( string $key, ...$params ): DocumentFragment {
-		$this->errors[] = new DataMwError( $key, $params );
-		return WTUtils::createInterfaceI18nFragment( $this->getTopLevelDoc(), $key, $params );
+	public function pushError( DataMwError|string $key, ...$params ): DocumentFragment {
+		$err = $key instanceof DataMwError ? $key : new DataMwError( $key, $params );
+		$this->errors[] = $err;
+		return WTUtils::createInterfaceI18nFragment( $this->getTopLevelDoc(), $err->key, $params );
 	}
 
 	/**
@@ -199,6 +200,7 @@ class ParsoidExtensionAPI {
 	 * The use of this method is discouraged; use ::addPageContentI18nAttribute(...) and
 	 * ::addInterfaceI18nAttribute(...) where possible rather than, respectively,
 	 * ::addLangI18nAttribute(..., $wgContLang, ...) and ::addLangI18nAttribute(..., $wgLang, ...).
+	 *
 	 * @param Element $element element on which to add internationalization information
 	 * @param Bcp47Code $lang language in which the  attribute will be localized
 	 * @param string $name name of the attribute whose value will be localized
@@ -207,7 +209,7 @@ class ParsoidExtensionAPI {
 	 */
 	public function addLangI18nAttribute(
 		Element $element, Bcp47Code $lang, string $name, string $key, array $params
-	) {
+	): void {
 		WTUtils::addLangI18nAttribute( $element, $lang, $name, $key, $params );
 	}
 
@@ -237,7 +239,7 @@ class ParsoidExtensionAPI {
 	 * @return string
 	 */
 	public function newAboutId(): string {
-		return $this->env->newAboutId();
+		return DOMDataUtils::getBag( $this->getTopLevelDoc() )->newAboutId();
 	}
 
 	/**
@@ -308,6 +310,7 @@ class ParsoidExtensionAPI {
 	/**
 	 * Are we parsing for a preview?
 	 * FIXME: Right now, we never do; when we do, this needs to be modified to reflect reality
+	 *
 	 * @unstable
 	 * @return bool
 	 */
@@ -336,16 +339,41 @@ class ParsoidExtensionAPI {
 	}
 
 	/**
-	 * Get the content DOM corresponding to an id
-	 * @param string $contentId
+	 * Get the content DOM corresponding to an id or an Element
+	 * @param string|Element $contentIdOrElement
 	 * @return DocumentFragment
 	 */
-	public function getContentDOM( string $contentId ): DocumentFragment {
-		return $this->env->getDOMFragment( $contentId );
+	public function getContentDOM( $contentIdOrElement ): DocumentFragment {
+		if ( $contentIdOrElement instanceof Element ) {
+			return DOMDataUtils::getDataParsoid( $contentIdOrElement )->html;
+		}
+		// Back-compat for old code which passes a string ID.
+		$bag = DOMDataUtils::getBag( $this->getTopLevelDoc() );
+		$nd = $bag->getObject( (int)$contentIdOrElement );
+		return $nd->parsoid->html;
 	}
 
+	/**
+	 * @deprecated Use ::clearContentId() instead
+	 */
 	public function clearContentDOM( string $contentId ): void {
-		$this->env->removeDOMFragment( $contentId );
+		/* does nothing */
+	}
+
+	/**
+	 * Get an ID from a Node which is storing a DOMFragment, which can
+	 * be passed to ::getContentDOM() to retrieve the DOMFragment.
+	 */
+	public function getContentId( Element $node ): string {
+		return DOMCompat::getAttribute( $node, DOMDataUtils::DATA_OBJECT_ATTR_NAME );
+	}
+
+	/**
+	 * Remove the DOMFragment referenced from this node.
+	 */
+	public function clearContentId( Element $node ): void {
+		$dp = DOMDataUtils::getDataParsoid( $node );
+		unset( $dp->html );
 	}
 
 	/**
@@ -472,7 +500,7 @@ class ParsoidExtensionAPI {
 				DOMDataUtils::getDataParsoid( $wrapper )->empty = true;
 			}
 
-			if ( !empty( $this->extTag->isSelfClosed() ) ) {
+			if ( $this->extTag->isSelfClosed() ) {
 				DOMDataUtils::getDataParsoid( $wrapper )->selfClose = true;
 			}
 		}
@@ -621,46 +649,6 @@ class ParsoidExtensionAPI {
 	}
 
 	/**
-	 * Normalizes spaces from extension tag arguments, except for those keyed by values in $exceptions
-	 * @param KV[] &$extArgs Array of extension args
-	 * @param array[] $action array that is either empty or has one key, 'except' or 'only', which defines the
-	 * attributes that should be respectively excluded or only included from the normalization
-	 */
-	public function normalizeWhiteSpaceInArgs( array &$extArgs, array $action = [] ) {
-		$except = $action['except'] ?? null;
-		$only = $action['only'] ?? null;
-
-		if ( $except && $only ) {
-			$this->log( 'warn', 'normalizeWhiteSpaceInArgs should not have both except and only parameters' );
-			return;
-		}
-
-		if ( $except ) {
-			$closure = static function ( $key, $value ) use ( $except ) {
-				if ( in_array( strtolower( trim( $key ) ), $except, true ) ) {
-					return $value;
-				} else {
-					return trim( preg_replace( '/[\r\n\t ]+/', ' ', $value ) );
-				}
-			};
-		} elseif ( $only ) {
-			$closure = static function ( $key, $value ) use ( $only ) {
-				if ( in_array( strtolower( trim( $key ) ), $only, true ) ) {
-					return trim( preg_replace( '/[\r\n\t ]+/', ' ', $value ) );
-				} else {
-					return $value;
-				}
-			};
-		} else {
-			$closure = static function ( $key, $value ) {
-				return trim( preg_replace( '/[\r\n\t ]+/', ' ', $value ) );
-			};
-		}
-
-		$this->updateAllArgs( $extArgs, $closure );
-	}
-
-	/**
 	 * This method adds a new argument to the extension args array
 	 * @param KV[] &$extArgs
 	 * @param string $key
@@ -722,7 +710,7 @@ class ParsoidExtensionAPI {
 	}
 
 	/**
-	 * Copy $from->childNodes to $to and clone the data attributes of $from
+	 * Copy childNodes of $from to $to and clone the data attributes of $from
 	 * to $to.
 	 *
 	 * @param Element $from
@@ -845,9 +833,10 @@ class ParsoidExtensionAPI {
 
 	/**
 	 * FIXME: This is a bit broken - shouldn't be needed ideally
+	 *
 	 * @param string $flag
 	 */
-	public function setHtml2wtStateFlag( string $flag ) {
+	public function setHtml2wtStateFlag( string $flag ): void {
 		$this->serializerState->{$flag} = true;
 	}
 
@@ -1113,7 +1102,7 @@ class ParsoidExtensionAPI {
 			$error = "{$extTagName}_invalid_image";
 			return null;
 		}
-		DOMUtils::assertElt( $thumb );
+		'@phan-var Element $thumb'; // @var Element $thumb
 
 		// Detach the $thumb since the $domFragment is going out of scope
 		// See https://bugs.php.net/bug.php?id=39593
@@ -1143,7 +1132,7 @@ class ParsoidExtensionAPI {
 	 * The converse to ::renderMedia.
 	 *
 	 * @param MediaStructure $ms
-	 * @return array Where,
+	 * @return array{0:string,1:string} Where,
 	 *   [0] is the media title string
 	 *   [1] is the string of media options
 	 */
@@ -1161,17 +1150,19 @@ class ParsoidExtensionAPI {
 
 	/**
 	 * @param array $modules
+	 *
 	 * @deprecated Use ::getMetadata()->appendOutputStrings( MODULE, ...) instead.
 	 */
-	public function addModules( array $modules ) {
+	public function addModules( array $modules ): void {
 		$this->getMetadata()->appendOutputStrings( CMCSS::MODULE, $modules );
 	}
 
 	/**
 	 * @param array $modulestyles
+	 *
 	 * @deprecated Use ::getMetadata()->appendOutputStrings(MODULE_STYLE, ...) instead.
 	 */
-	public function addModuleStyles( array $modulestyles ) {
+	public function addModuleStyles( array $modulestyles ): void {
 		$this->getMetadata()->appendOutputStrings( CMCSS::MODULE_STYLE, $modulestyles );
 	}
 

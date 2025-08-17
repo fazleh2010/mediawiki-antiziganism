@@ -30,11 +30,12 @@ class GlobalDependency extends CacheDependency {
 	/** @var mixed */
 	private $value;
 
-	public function __construct( $name ) {
+	public function __construct( string $name ) {
 		$this->name = $name;
 		$this->value = $GLOBALS[$name];
 	}
 
+	/** @inheritDoc */
 	public function isExpired() {
 		if ( !isset( $GLOBALS[$this->name] ) ) {
 			return true;

@@ -68,6 +68,7 @@ use Wikimedia\Bcp47Code\Bcp47Code;
 use Wikimedia\DebugInfo\DebugInfoTrait;
 use Wikimedia\Message\MessageParam;
 use Wikimedia\Message\MessageSpecifier;
+use Wikimedia\ReplacementArray;
 use Wikimedia\StringUtils\StringUtils;
 use Wikimedia\Timestamp\ConvertibleTimestamp;
 
@@ -435,7 +436,10 @@ class Language implements Bcp47Code {
 
 	/**
 	 * A convenience function that returns getNamespaces() with spaces instead of underscores
-	 * in values. Useful for producing output to be displayed e.g. in `<select>` forms.
+	 * in values.
+	 *
+	 * NOTE: This is not suitable for UI text, as language variants of namespace names
+	 * defined via system messages are ignored. Use LanguageConverter::convertNamespace() instead.
 	 *
 	 * @return string[]
 	 */
@@ -3697,7 +3701,7 @@ class Language implements Bcp47Code {
 	 * @param-taint $list tainted
 	 * @return string
 	 */
-	public function commaList( array $list ) {
+	public function commaList( array $list ): string {
 		return implode(
 			$this->msg( 'comma-separator' )->escaped(),
 			$list
@@ -3711,7 +3715,7 @@ class Language implements Bcp47Code {
 	 * @param-taint $list tainted
 	 * @return string
 	 */
-	public function semicolonList( array $list ) {
+	public function semicolonList( array $list ): string {
 		return implode(
 			$this->msg( 'semicolon-separator' )->escaped(),
 			$list
@@ -3724,7 +3728,7 @@ class Language implements Bcp47Code {
 	 * @param-taint $list tainted
 	 * @return string
 	 */
-	public function pipeList( array $list ) {
+	public function pipeList( array $list ): string {
 		return implode(
 			$this->msg( 'pipe-separator' )->escaped(),
 			$list
@@ -3857,7 +3861,7 @@ class Language implements Bcp47Code {
 	 */
 	protected function removeBadCharLast( $string ) {
 		if ( $string != '' ) {
-			$char = ord( $string[strlen( $string ) - 1] );
+			$char = ord( substr( $string, -1 ) );
 			$m = [];
 			if ( $char >= 0xc0 ) {
 				# We got the first byte only of a multibyte char; remove it.
@@ -4304,7 +4308,7 @@ class Language implements Bcp47Code {
 	 * @since 1.42
 	 * @param bool $includeOther Whether to include the 'other' option in the list of
 	 *     suggestions
-	 * @return string[]
+	 * @return array<string,string>
 	 */
 	public function getBlockDurations( $includeOther = true ): array {
 		$msg = $this->msg( 'ipboptions' )->text();
@@ -4510,7 +4514,7 @@ class Language implements Bcp47Code {
 	 * @return string
 	 */
 	private function fixVariableInNamespace( $talk ) {
-		if ( strpos( $talk, '$1' ) === false ) {
+		if ( !str_contains( $talk, '$1' ) ) {
 			return $talk;
 		}
 
@@ -4793,7 +4797,7 @@ class Language implements Bcp47Code {
 			}
 			// @suppress PhanParamTooFew Phan thinks this always requires 3 parameters, that's wrong
 			return new NumberFormatter( $code, NumberFormatter::DECIMAL );
-		} catch ( \ValueError $_ ) {
+		} catch ( \ValueError ) {
 			// Value Errors are thrown since php8.4 for invalid locales
 			return null;
 		}

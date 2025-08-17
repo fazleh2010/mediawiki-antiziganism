@@ -230,7 +230,7 @@ class RedisConnectionPool implements LoggerAwareInterface {
 		if ( !$server ) {
 			throw new InvalidArgumentException(
 				__CLASS__ . ": invalid configured server \"$server\"" );
-		} elseif ( substr( $server, 0, 1 ) === '/' ) {
+		} elseif ( str_starts_with( $server, '/' ) ) {
 			// UNIX domain socket
 			// These are required by the redis extension to start with a slash, but
 			// we still need to set the port to a special value to make it work.
@@ -245,7 +245,7 @@ class RedisConnectionPool implements LoggerAwareInterface {
 				// (ip, uri or path, port)
 				[ $host, $port ] = [ $m[1], (int)$m[2] ];
 				if (
-					substr( $host, 0, 6 ) === 'tls://'
+					str_starts_with( $host, 'tls://' )
 					&& version_compare( phpversion( 'redis' ), '5.0.0' ) < 0
 				) {
 					throw new RuntimeException(
@@ -424,7 +424,7 @@ class RedisConnectionPool implements LoggerAwareInterface {
 					/** @var Redis $conn */
 					$conn = $connection['conn'];
 					$conn->close();
-				} catch ( RedisException $e ) {
+				} catch ( RedisException ) {
 					// The destructor can be called on shutdown when random parts of the system
 					// have been destructed already, causing weird errors. Ignore them.
 				}

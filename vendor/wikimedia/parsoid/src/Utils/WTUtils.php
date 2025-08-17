@@ -1,18 +1,15 @@
 <?php
 declare( strict_types = 1 );
-// Suppress UnusedPluginSuppression because
-// Phan on PHP 7.4 and PHP 8.1 need different suppressions
-// @phan-file-suppress UnusedPluginSuppression,UnusedPluginFileSuppression
 
 namespace Wikimedia\Parsoid\Utils;
 
-use DOMException;
 use Wikimedia\Assert\UnreachableException;
 use Wikimedia\Bcp47Code\Bcp47Code;
 use Wikimedia\Parsoid\Config\Env;
 use Wikimedia\Parsoid\DOM\Comment;
 use Wikimedia\Parsoid\DOM\Document;
 use Wikimedia\Parsoid\DOM\DocumentFragment;
+use Wikimedia\Parsoid\DOM\DOMException;
 use Wikimedia\Parsoid\DOM\Element;
 use Wikimedia\Parsoid\DOM\Node;
 use Wikimedia\Parsoid\DOM\Text;
@@ -644,7 +641,7 @@ class WTUtils {
 		// that the string "-->" never shows up.  (See above.)
 		return preg_replace_callback( '/--(&(amp;)*gt;|>)/', static function ( $m ) {
 			$s = $m[0];
-				return $s === '-->' ? '--&gt;' : '--&amp;' . substr( $s, 3 );
+			return $s === '-->' ? '--&gt;' : '--&amp;' . substr( $s, 3 );
 		}, $trueValue );
 	}
 
@@ -667,7 +664,6 @@ class WTUtils {
 				$syntaxLen = 4;
 			}
 		} elseif ( $node instanceof CommentTk ) {
-			// @phan-suppress-next-line PhanUndeclaredProperty dynamic property
 			if ( isset( $node->dataParsoid->unclosedComment ) ) {
 				$syntaxLen = 4;
 			}

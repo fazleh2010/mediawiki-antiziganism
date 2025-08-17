@@ -72,6 +72,7 @@ class BotPasswordSessionProvider extends ImmutableSessionProviderWithCookie {
 			?? ( defined( 'MW_API' ) || defined( 'MW_REST_API' ) );
 	}
 
+	/** @inheritDoc */
 	public function provideSessionInfo( WebRequest $request ) {
 		// Only relevant for the (Action or REST) API
 		if ( !$this->isApiRequest ) {
@@ -96,6 +97,7 @@ class BotPasswordSessionProvider extends ImmutableSessionProviderWithCookie {
 		] );
 	}
 
+	/** @inheritDoc */
 	public function newSessionInfo( $id = null ) {
 		// We don't activate by default
 		return null;
@@ -193,6 +195,7 @@ class BotPasswordSessionProvider extends ImmutableSessionProviderWithCookie {
 		BotPassword::removeAllPasswordsForUser( $username );
 	}
 
+	/** @inheritDoc */
 	public function getAllowedUserRights( SessionBackend $backend ) {
 		if ( $backend->getProvider() !== $this ) {
 			throw new InvalidArgumentException( 'Backend\'s provider isn\'t $this' );
@@ -211,7 +214,7 @@ class BotPasswordSessionProvider extends ImmutableSessionProviderWithCookie {
 		if ( $data && isset( $data['restrictions'] ) && is_string( $data['restrictions'] ) ) {
 			try {
 				return MWRestrictions::newFromJson( $data['restrictions'] );
-			} catch ( InvalidArgumentException $e ) {
+			} catch ( InvalidArgumentException ) {
 				$this->logger->warning( __METHOD__ . ': Failed to parse restrictions: {restrictions}', [
 					'restrictions' => $data['restrictions']
 				] );

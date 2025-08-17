@@ -33,7 +33,7 @@ use MediaWiki\Title\Title;
 use stdClass;
 use Wikimedia\HtmlArmor\HtmlArmor;
 use Wikimedia\Rdbms\IConnectionProvider;
-use Wikimedia\Rdbms\IDatabase;
+use Wikimedia\Rdbms\IReadableDatabase;
 use Wikimedia\Rdbms\IResultWrapper;
 
 /**
@@ -57,10 +57,12 @@ class SpecialMostLinkedCategories extends QueryPage {
 		$this->languageConverter = $languageConverterFactory->getLanguageConverter( $this->getContentLanguage() );
 	}
 
+	/** @inheritDoc */
 	public function isSyndicated() {
 		return false;
 	}
 
+	/** @inheritDoc */
 	public function getQueryInfo() {
 		$dbr = $this->getDatabaseProvider()->getReplicaDatabase();
 		return [
@@ -72,6 +74,7 @@ class SpecialMostLinkedCategories extends QueryPage {
 		];
 	}
 
+	/** @inheritDoc */
 	protected function sortDescending() {
 		return true;
 	}
@@ -79,7 +82,7 @@ class SpecialMostLinkedCategories extends QueryPage {
 	/**
 	 * Fetch user page links and cache their existence
 	 *
-	 * @param IDatabase $db
+	 * @param IReadableDatabase $db
 	 * @param IResultWrapper $res
 	 */
 	public function preprocessResults( $db, $res ) {
@@ -112,6 +115,7 @@ class SpecialMostLinkedCategories extends QueryPage {
 		return $this->getLanguage()->specialList( $plink, $nlinks );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'highuse';
 	}

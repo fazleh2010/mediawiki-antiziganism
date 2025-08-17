@@ -78,10 +78,10 @@ class HTTPFileStreamer {
 		$this->path = $path;
 
 		$this->obResetFunc = $params['obResetFunc'] ??
-			[ __CLASS__, 'resetOutputBuffers' ];
+			[ self::class, 'resetOutputBuffers' ];
 
 		$this->streamMimeFunc = $params['streamMimeFunc'] ??
-			[ __CLASS__, 'contentTypeFromPath' ];
+			[ self::class, 'contentTypeFromPath' ];
 
 		$this->headerFunc = $params['headerFunc'] ?? 'header';
 	}
@@ -112,7 +112,7 @@ class HTTPFileStreamer {
 			? static function ( $header ) {
 				// no-op
 			}
-			: [ $this, 'header' ];
+			: $this->header( ... );
 
 		AtEase::suppressWarnings();
 		$info = stat( $this->path );

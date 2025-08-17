@@ -45,6 +45,7 @@ use MediaWiki\Message\Message;
 use MediaWiki\Permissions\PermissionStatus;
 use MediaWiki\PoolCounter\PoolCounterWorkViaCallback;
 use MediaWiki\Profiler\ProfilingContext;
+use MediaWiki\Request\ContentSecurityPolicy;
 use MediaWiki\Request\HeaderCallback;
 use MediaWiki\Status\Status;
 use MediaWiki\Title\Title;
@@ -264,6 +265,11 @@ class ThumbnailEntryPoint extends MediaWikiEntryPoint {
 			}
 		}
 
+		$cspHeader = ContentSecurityPolicy::getMediaHeader( $thumbName );
+		if ( $cspHeader ) {
+			$headers[] = 'Content-Security-Policy: ' . $cspHeader;
+		}
+
 		$dispositionType = isset( $params['download'] ) ? 'attachment' : 'inline';
 
 		// Suggest a good name for users downloading this thumbnail
@@ -433,7 +439,7 @@ class ThumbnailEntryPoint extends MediaWikiEntryPoint {
 			} elseif ( is_string( $result ) ) { // error
 				$errorHtml = $result;
 			}
-		} catch ( Exception $e ) {
+		} catch ( Exception ) {
 			// Tried to select a page on a non-paged file?
 		}
 

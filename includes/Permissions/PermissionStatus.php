@@ -83,24 +83,8 @@ class PermissionStatus extends StatusValue {
 		$this->setOK( false );
 	}
 
-	/**
-	 * @return static
-	 */
-	public static function newEmpty() {
+	public static function newEmpty(): static {
 		return new static();
-	}
-
-	/**
-	 * Returns this permission status in legacy error array format.
-	 *
-	 * @deprecated since 1.43
-	 * @see PermissionManager::getPermissionErrors()
-	 *
-	 * @return array[]
-	 */
-	public function toLegacyErrorArray(): array {
-		wfDeprecated( __METHOD__, '1.43' );
-		return $this->getStatusArray();
 	}
 
 	/**

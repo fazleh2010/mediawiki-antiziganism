@@ -211,10 +211,7 @@ class MWExceptionHandler {
 		// Make sure we don't claim success on exit for CLI scripts (T177414)
 		if ( wfIsCLI() ) {
 			register_shutdown_function(
-				/**
-				 * @return never
-				 */
-				static function () {
+				static function (): never {
 					exit( 255 );
 				}
 			);
@@ -331,9 +328,7 @@ class MWExceptionHandler {
 		self::logError( $e, $severity, self::CAUGHT_BY_HANDLER );
 
 		// If $propagateErrors is true return false so PHP shows/logs the error normally.
-		// Ignore $propagateErrors if track_errors is set
-		// (which means someone is counting on regular PHP error handling behavior).
-		return !( self::$propagateErrors || ini_get( 'track_errors' ) );
+		return !self::$propagateErrors;
 	}
 
 	/**
@@ -737,7 +732,7 @@ TXT;
 
 			( new HookRunner( MediaWikiServices::getInstance()->getHookContainer() ) )
 				->onLogException( $e, $suppressed );
-		} catch ( RecursiveServiceDependencyException $e ) {
+		} catch ( RecursiveServiceDependencyException ) {
 			// An error from the HookContainer wiring will lead here (T379125)
 		}
 	}

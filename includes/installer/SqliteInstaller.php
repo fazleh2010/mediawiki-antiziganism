@@ -38,7 +38,7 @@ use Wikimedia\Rdbms\DBConnectionError;
 class SqliteInstaller extends DatabaseInstaller {
 
 	/** @inheritDoc */
-	public static $minimumVersion = '3.24.0';
+	public static $minimumVersion = '3.31.0';
 	/** @inheritDoc */
 	protected static $notMinimumVersionMessage = 'config-outdated-sqlite';
 
@@ -53,10 +53,12 @@ class SqliteInstaller extends DatabaseInstaller {
 		'wgSQLiteDataDir',
 	];
 
+	/** @inheritDoc */
 	public function getName() {
 		return 'sqlite';
 	}
 
+	/** @inheritDoc */
 	public function isCompiled() {
 		return self::checkExtension( 'pdo_sqlite' );
 	}
@@ -84,6 +86,7 @@ class SqliteInstaller extends DatabaseInstaller {
 		return $result;
 	}
 
+	/** @inheritDoc */
 	public function getGlobalDefaults() {
 		global $IP;
 		$defaults = parent::getGlobalDefaults();

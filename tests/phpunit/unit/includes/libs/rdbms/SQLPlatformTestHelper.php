@@ -44,19 +44,22 @@ class SQLPlatformTestHelper extends SQLPlatform {
 		return $s;
 	}
 
+	/** @inheritDoc */
 	public function useIndexClause( $index ) {
-		return "FORCE INDEX (" . $this->indexName( $index ) . ")";
+		return "FORCE INDEX (" . $index . ")";
 	}
 
+	/** @inheritDoc */
 	public function ignoreIndexClause( $index ) {
-		return "IGNORE INDEX (" . $this->indexName( $index ) . ")";
+		return "IGNORE INDEX (" . $index . ")";
 	}
 
+	/** @inheritDoc */
 	public function unionSupportsOrderAndLimit() {
 		return $this->unionSupportsOrderAndLimit;
 	}
 
-	public function setUnionSupportsOrderAndLimit( $v ) {
-		$this->unionSupportsOrderAndLimit = (bool)$v;
+	public function setUnionSupportsOrderAndLimit( bool $v ) {
+		$this->unionSupportsOrderAndLimit = $v;
 	}
 }

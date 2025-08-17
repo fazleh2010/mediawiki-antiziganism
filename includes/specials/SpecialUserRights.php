@@ -70,6 +70,8 @@ class SpecialUserRights extends SpecialPage {
 	/** @var bool */
 	protected $isself = false;
 
+	protected ?array $changeableGroups = null;
+
 	private UserGroupManagerFactory $userGroupManagerFactory;
 
 	/** @var UserGroupManager|null The UserGroupManager of the target username or null */
@@ -103,6 +105,7 @@ class SpecialUserRights extends SpecialPage {
 		$this->tempUserConfig = $tempUserConfig ?? $services->getTempUserConfig();
 	}
 
+	/** @inheritDoc */
 	public function doesWrites() {
 		return true;
 	}
@@ -126,9 +129,11 @@ class SpecialUserRights extends SpecialPage {
 			return false;
 		}
 
-		$userGroupManager = $this->userGroupManagerFactory
-			->getUserGroupManager( $targetUser->getWikiId() );
-		$available = $userGroupManager->getGroupsChangeableBy( $this->getAuthority() );
+		if ( $this->userGroupManager === null ) {
+			$this->userGroupManager = $this->userGroupManagerFactory
+				->getUserGroupManager( $targetUser->getWikiId() );
+		}
+		$available = $this->changeableGroups();
 		if ( $available['add'] || $available['remove'] ) {
 			// can change some rights for any user
 			return true;
@@ -334,7 +339,7 @@ class SpecialUserRights extends SpecialPage {
 	 * Data comes from the editUserGroupsForm() form function
 	 *
 	 * @param string $reason Reason for group change
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @return Status
 	 */
 	protected function saveUserGroups( string $reason, UserIdentity $user ) {
@@ -423,7 +428,7 @@ class SpecialUserRights extends SpecialPage {
 	 *
 	 * This function can be used without submitting the special page
 	 *
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @param string[] $add Array of groups to add
 	 * @param string[] $remove Array of groups to remove
 	 * @param string $reason Reason for group change
@@ -435,19 +440,20 @@ class SpecialUserRights extends SpecialPage {
 	public function doSaveUserGroups( $user, array $add, array $remove, string $reason = '',
 		array $tags = [], array $groupExpiries = []
 	) {
+		// Set properties that other methods rely on if not already set, e.g. if called from the API
+		$this->mTarget ??= $user->getName();
+		$this->mFetchedUser ??= $user;
+
 		// Validate input set...
 		$isself = $user->getName() == $this->getUser()->getName();
-		if ( $this->userGroupManager !== null ) {
-			// Used after form submit
-			$userGroupManager = $this->userGroupManager;
-		} else {
-			// Used as backend-function
-			$userGroupManager = $this->userGroupManagerFactory
+		if ( $this->userGroupManager === null ) {
+			// This is being called as a backend-function, rather than after form submit
+			$this->userGroupManager = $this->userGroupManagerFactory
 				->getUserGroupManager( $user->getWikiId() );
 		}
-		$groups = $userGroupManager->getUserGroups( $user );
-		$ugms = $userGroupManager->getUserGroupMemberships( $user );
-		$changeable = $userGroupManager->getGroupsChangeableBy( $this->getAuthority() );
+		$groups = $this->userGroupManager->getUserGroups( $user );
+		$ugms = $this->userGroupManager->getUserGroupMemberships( $user );
+		$changeable = $this->changeableGroups();
 		$addable = array_merge( $changeable['add'], $isself ? $changeable['add-self'] : [] );
 		$removable = array_merge( $changeable['remove'], $isself ? $changeable['remove-self'] : [] );
 
@@ -480,13 +486,13 @@ class SpecialUserRights extends SpecialPage {
 		$this->getHookRunner()->onChangeUserGroups( $this->getUser(), $hookUser, $add, $remove );
 
 		$oldGroups = $groups;
-		$oldUGMs = $userGroupManager->getUserGroupMemberships( $user );
+		$oldUGMs = $this->userGroupManager->getUserGroupMemberships( $user );
 		$newGroups = $oldGroups;
 
 		// Remove groups, then add new ones/update expiries of existing ones
 		if ( $remove ) {
 			foreach ( $remove as $index => $group ) {
-				if ( !$userGroupManager->removeUserFromGroup( $user, $group ) ) {
+				if ( !$this->userGroupManager->removeUserFromGroup( $user, $group ) ) {
 					unset( $remove[$index] );
 				}
 			}
@@ -495,14 +501,14 @@ class SpecialUserRights extends SpecialPage {
 		if ( $add ) {
 			foreach ( $add as $index => $group ) {
 				$expiry = $groupExpiries[$group] ?? null;
-				if ( !$userGroupManager->addUserToGroup( $user, $group, $expiry, true ) ) {
+				if ( !$this->userGroupManager->addUserToGroup( $user, $group, $expiry, true ) ) {
 					unset( $add[$index] );
 				}
 			}
 			$newGroups = array_merge( $newGroups, $add );
 		}
 		$newGroups = array_unique( $newGroups );
-		$newUGMs = $userGroupManager->getUserGroupMemberships( $user );
+		$newUGMs = $this->userGroupManager->getUserGroupMemberships( $user );
 
 		// Ensure that caches are cleared
 		$this->userFactory->invalidateCache( $user );
@@ -540,7 +546,7 @@ class SpecialUserRights extends SpecialPage {
 
 	/**
 	 * Add a rights log entry for an action.
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @param array $oldGroups
 	 * @param array $newGroups
 	 * @param string $reason
@@ -742,7 +748,7 @@ class SpecialUserRights extends SpecialPage {
 	/**
 	 * Show the form to edit group memberships.
 	 *
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @param string[] $groups Array of groups the user is in. Not used by this implementation
 	 *   anymore, but kept for backward compatibility with subclasses
 	 * @param UserGroupMembership[] $groupMemberships Associative array of (group name => UserGroupMembership
@@ -908,7 +914,7 @@ class SpecialUserRights extends SpecialPage {
 	 *
 	 * @param UserGroupMembership[] $usergroups Associative array of (group name as string =>
 	 *   UserGroupMembership object) for groups the user belongs to
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @return array Array with 2 elements: the XHTML table element with checkxboes, and
 	 * whether any groups are changeable
 	 */
@@ -996,6 +1002,15 @@ class SpecialUserRights extends SpecialPage {
 					'class' => 'mw-userrights-groupcheckbox',
 					'disabled' => $checkbox['disabled'],
 				] ) . '&nbsp;' . Html::label( $text, "wpGroup-$group" );
+
+				$groups = $this->changeableGroups();
+				if ( isset( $groups['unaddable'][$group] ) ) {
+					$checkboxHtml .= Html::rawElement(
+						'div',
+						[ 'class' => 'mw-userrights-unaddable-reason' ],
+						$this->msg( $groups['unaddable'][$group] )->parse()
+					);
+				}
 
 				if ( $this->canProcessExpiries() ) {
 					$uiUser = $this->getUser();
@@ -1130,11 +1145,36 @@ class SpecialUserRights extends SpecialPage {
 	 *   'remove' => [ removablegroups ],
 	 *   'add-self' => [ addablegroups to self ],
 	 *   'remove-self' => [ removable groups from self ]
+	 *   'unaddable' => [ map of unchangeable groups to reasons ]
 	 *  ]
 	 * @phan-return array{add:list<string>,remove:list<string>,add-self:list<string>,remove-self:list<string>}
 	 */
 	protected function changeableGroups() {
-		return $this->userGroupManager->getGroupsChangeableBy( $this->getContext()->getAuthority() );
+		if ( $this->changeableGroups === null ) {
+			$authority = $this->getContext()->getAuthority();
+			$groups = $this->userGroupManager->getGroupsChangeableBy( $authority );
+
+			if ( $this->mFetchedUser !== null ) {
+				// Allow extensions to define groups that cannot be added, given the target user and
+				// the performer. This allows policy restrictions to be enforced via software. This
+				// could be done via configuration in the future, as discussed in T393615.
+				$unaddableGroups = [];
+				$this->getHookRunner()->onSpecialUserRightsChangeableGroups(
+					$authority,
+					$this->mFetchedUser,
+					$groups['add'],
+					$unaddableGroups
+				);
+
+				$unaddableGroupNames = array_keys( $unaddableGroups );
+				$groups['add'] = array_diff( $groups['add'], $unaddableGroupNames );
+				$groups['unaddable'] = $unaddableGroups;
+			}
+
+			$this->changeableGroups = $groups;
+		}
+
+		return $this->changeableGroups;
 	}
 
 	/**
@@ -1142,7 +1182,7 @@ class SpecialUserRights extends SpecialPage {
 	 * Use UserIdentity::getName for {{GENDER:}} in messages and
 	 * use the "display user name" for visible user names in logs or messages
 	 *
-	 * @param UserIdentity $user
+	 * @param UserIdentity $user The target user
 	 * @return string
 	 */
 	private function getDisplayUsername( UserIdentity $user ) {
@@ -1186,6 +1226,7 @@ class SpecialUserRights extends SpecialPage {
 			->search( UserNamePrefixSearch::AUDIENCE_PUBLIC, $search, $limit, $offset );
 	}
 
+	/** @inheritDoc */
 	protected function getGroupName() {
 		return 'users';
 	}

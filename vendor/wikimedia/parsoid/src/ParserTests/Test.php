@@ -208,7 +208,7 @@ class Test extends Item {
 		}
 
 		if ( !empty( $testFilter['string'] ) ) {
-			return strpos( $this->testName, $testFilter['raw'] ) !== false;
+			return str_contains( $this->testName, $testFilter['raw'] );
 		}
 
 		return true; // Trivial match because of a bad test filter
@@ -262,10 +262,8 @@ class Test extends Item {
 	/**
 	 * Apply manually-specified changes, which are provided in a pseudo-jQuery
 	 * format.
-	 *
-	 * @param Document $doc
 	 */
-	public function applyManualChanges( Document $doc ) {
+	public function applyManualChanges( Document $doc ): void {
 		$changes = $this->options['parsoid']['changes'];
 		$err = null;
 		// changes are specified using jquery methods.
@@ -277,9 +275,7 @@ class Test extends Item {
 		// on the results of the selector in the first argument, which is
 		// a good way to get at the text and comment nodes
 		$jquery = [
-			'after' => static function ( Node $node, string $html ) {
-				$div = null;
-				$tbl = null;
+			'after' => static function ( Node $node, string $html ): void {
 				if ( DOMCompat::nodeName( $node->parentNode ) === 'tbody' ) {
 					$tbl = $node->ownerDocument->createElement( 'table' );
 					DOMCompat::setInnerHTML( $tbl, $html );
@@ -299,7 +295,7 @@ class Test extends Item {
 					DOMUtils::migrateChildren( $div, $node->parentNode, $node->nextSibling );
 				}
 			},
-			'append' => static function ( Node $node, string $html ) {
+			'append' => static function ( Node $node, string $html ): void {
 				if ( DOMCompat::nodeName( $node ) === 'tr' ) {
 					$tbl = $node->ownerDocument->createElement( 'table' );
 					DOMCompat::setInnerHTML( $tbl, $html );
@@ -311,13 +307,11 @@ class Test extends Item {
 					DOMUtils::migrateChildren( $div, $node );
 				}
 			},
-			'attr' => static function ( Node $node, string $name, string $val ) {
+			'attr' => static function ( Node $node, string $name, string $val ): void {
 				'@phan-var Element $node'; // @var Element $node
 				$node->setAttribute( $name, $val );
 			},
-			'before' => static function ( Node $node, string $html ) {
-				$div = null;
-				$tbl = null;
+			'before' => static function ( Node $node, string $html ): void {
 				if ( DOMCompat::nodeName( $node->parentNode ) === 'tbody' ) {
 					$tbl = $node->ownerDocument->createElement( 'table' );
 					DOMCompat::setInnerHTML( $tbl, $html );
@@ -336,26 +330,26 @@ class Test extends Item {
 					DOMUtils::migrateChildren( $div, $node->parentNode, $node );
 				}
 			},
-			'removeAttr' => static function ( Node $node, string $name ) {
+			'removeAttr' => static function ( Node $node, string $name ): void {
 				'@phan-var Element $node'; // @var Element $node
 				$node->removeAttribute( $name );
 			},
-			'removeClass' => static function ( Node $node, string $c ) {
+			'removeClass' => static function ( Node $node, string $c ): void {
 				'@phan-var Element $node'; // @var Element $node
 				DOMCompat::getClassList( $node )->remove( $c );
 			},
-			'addClass' => static function ( Node $node, string $c ) {
+			'addClass' => static function ( Node $node, string $c ): void {
 				'@phan-var Element $node'; // @var Element $node
 				DOMCompat::getClassList( $node )->add( $c );
 			},
-			'text' => static function ( Node $node, string $t ) {
+			'text' => static function ( Node $node, string $t ): void {
 				$node->textContent = $t;
 			},
-			'html' => static function ( Node $node, string $h ) {
+			'html' => static function ( Node $node, string $h ): void {
 				'@phan-var Element $node'; // @var Element $node
 				DOMCompat::setInnerHTML( $node, $h );
 			},
-			'remove' => static function ( Node $node, ?string $optSelector = null ) {
+			'remove' => static function ( Node $node, ?string $optSelector = null ): void {
 				// jquery lets us specify an optional selector to further
 				// restrict the removed elements.
 				// text nodes don't have the "querySelectorAll" method, so
@@ -375,11 +369,11 @@ class Test extends Item {
 					}
 				}
 			},
-			'empty' => static function ( Node $node ) {
+			'empty' => static function ( Node $node ): void {
 				'@phan-var Element $node'; // @var Element $node
 				DOMCompat::replaceChildren( $node );
 			},
-			'wrap' => static function ( Node $node, string $w ) {
+			'wrap' => static function ( Node $node, string $w ): void {
 				$frag = $node->ownerDocument->createElement( 'div' );
 				DOMCompat::setInnerHTML( $frag, $w );
 				$first = $frag->firstChild;
@@ -414,7 +408,7 @@ class Test extends Item {
 				$change = array_slice( $change, 1 );
 				$acc = [];
 				foreach ( $els as $el ) {
-					PHPUtils::pushArray( $acc, iterator_to_array( $el->childNodes ) );
+					PHPUtils::pushArray( $acc, DOMUtils::childNodes( $el ) );
 				}
 				$els = $acc;
 			}
@@ -436,12 +430,8 @@ class Test extends Item {
 
 	/**
 	 * Make changes to a DOM in order to run a selser test on it.
-	 *
-	 * @param array $dumpOpts
-	 * @param Document $doc
-	 * @param array $changelist
 	 */
-	public function applyChanges( array $dumpOpts, Document $doc, array $changelist ) {
+	public function applyChanges( array $dumpOpts, Document $doc, array $changelist ): void {
 		$logger = $dumpOpts['logger'] ?? null;
 		// Seed the random-number generator based on the item title and changelist
 		$alea = new Alea( ( json_encode( $changelist ) ) . ( $this->testName ?? '' ) );
@@ -462,7 +452,6 @@ class Test extends Item {
 			$str = $randomString();
 			$ownerDoc = $n->ownerDocument;
 			$wrapperName = null;
-			$newNode = null;
 
 			// Don't separate legacy IDs from their H? node.
 			if ( WTUtils::isFallbackIdSpan( $n ) ) {
@@ -527,14 +516,9 @@ class Test extends Item {
 			&$applyChangesInternal, $removeNode, $insertNewNode,
 			$randomString, $logger
 		): void {
-			if ( count( $node->childNodes ) < count( $changes ) ) {
+			$nodeArray = DOMUtils::childNodes( $node );
+			if ( count( $nodeArray ) < count( $changes ) ) {
 				throw new Error( "Error: more changes than nodes to apply them to!" );
-			}
-
-			// Clone array since we are mutating the children in the changes loop below
-			$nodeArray = [];
-			foreach ( $node->childNodes as $n ) {
-				$nodeArray[] = $n;
 			}
 
 			foreach ( $changes as $i => $change ) {
@@ -710,8 +694,7 @@ class Test extends Item {
 		): array {
 			// Seed the random-number generator based on the item title
 			$changelist = [];
-			$children = $node->childNodes ? iterator_to_array( $node->childNodes ) : [];
-			foreach ( $children as $child ) {
+			foreach ( DOMUtils::childNodes( $node ) as $child ) {
 				$changeType = $defaultChangeType;
 				if ( $domSubtreeIsEditable( $child ) ) {
 					if ( $nodeIsUneditable( $child ) || $alea->random() < 0.5 ) {
@@ -746,7 +729,6 @@ class Test extends Item {
 
 		$body = DOMCompat::getBody( $doc );
 
-		$changetree = null;
 		$numAttempts = 0;
 		do {
 			$numAttempts++;
@@ -869,7 +851,8 @@ class Test extends Item {
 	 * @param Element|string $actual
 	 * @param ?string $normExpected
 	 * @param bool $standalone
-	 * @return array
+	 *
+	 * @return list{string, string}
 	 */
 	public function normalizeHTML( $actual, ?string $normExpected, bool $standalone = true ): array {
 		$opts = $this->options;
@@ -933,7 +916,8 @@ class Test extends Item {
 	 * @param string $actual
 	 * @param string $expected
 	 * @param bool $standalone
-	 * @return array
+	 *
+	 * @return list{string, string}
 	 */
 	public function normalizeWT( string $actual, string $expected, bool $standalone = true ): array {
 		// No other normalizations at this time
