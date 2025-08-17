@@ -1,0 +1,62 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "Wikibase Search Domain REST API",
+		"version": "0.1",
+		"description": "OpenAPI fragment of the Wikibase Search domain REST API"
+	},
+	"paths": {
+		"/v0/search/items": {
+			"get": {
+				"operationId": "simpleItemSearch",
+				"tags": [ "item search" ],
+				"summary": "[WIP] Simple Item search by label and aliases",
+				"description": "This endpoint is currently in development and is not recommended for production use",
+				"parameters": [
+					{
+						"$ref": "./global/parameters.json#/SearchQuery",
+						"example": "potato"
+					},
+					{ "$ref": "./global/parameters.json#/SearchLanguage" },
+					{ "$ref": "./global/parameters.json#/Limit" },
+					{ "$ref": "./global/parameters.json#/Offset" }
+				],
+				"responses": {
+					"200": { "$ref": "./global/responses.json#/SearchItemSuccess" },
+					"400": { "$ref": "./global/responses.json#/BadRequest" }
+				}
+			}
+		},
+		"/v0/search/properties": {
+			"get": {
+				"operationId": "simplePropertySearch",
+				"tags": [ "property search" ],
+				"summary": "[WIP] Simple Property search by label and aliases",
+				"description": "This endpoint is currently in development and is not recommended for production use",
+				"parameters": [
+					{
+						"$ref": "./global/parameters.json#/SearchQuery",
+						"example": "taxon"
+					},
+					{ "$ref": "./global/parameters.json#/SearchLanguage" },
+					{ "$ref": "./global/parameters.json#/Limit" },
+					{ "$ref": "./global/parameters.json#/Offset" }
+				],
+				"responses": {
+					"200": { "$ref": "./global/responses.json#/SearchPropertySuccess" },
+					"400": { "$ref": "./global/responses.json#/BadRequest" }
+				}
+			}
+		}
+	},
+	"tags": [
+		{
+			"name": "item search",
+			"description": "Simple item search"
+		},
+		{
+			"name": "property search",
+			"description": "Simple property search"
+		}
+	]
+}

@@ -1,0 +1,67 @@
+{
+	"name": "wikibase/internal-serialization",
+	"type": "library",
+	"description": "Serializers and deserializers for the data access layer of Wikibase Repository",
+	"keywords": [
+		"wikibase",
+		"DataModel",
+		"serializers",
+		"serialization",
+		"deserializers",
+		"wikidata"
+	],
+	"homepage": "https://github.com/wmde/WikibaseInternalSerialization",
+	"license": "GPL-2.0-or-later",
+	"authors": [
+		{
+			"name": "Jeroen De Dauw",
+			"email": "jeroendedauw@gmail.com",
+			"homepage": "https://www.entropywins.wtf/"
+		},
+		{
+			"name": "The Wikidata team",
+			"role": "Developer"
+		}
+	],
+	"support": {
+		"irc": "irc://irc.libera.chat/wikidata"
+	},
+	"require": {
+		"php": "^7.4|^8.0",
+		"wikibase/data-model": "dev-master",
+		"wikibase/data-model-serialization": "dev-master",
+		"serialization/serialization": "~4.0|~3.2"
+	},
+	"require-dev": {
+		"phpmd/phpmd": "~2.3",
+		"phpunit/phpunit": "~8.0",
+		"wikibase/data-model-services": "dev-master",
+		"data-values/common": "~1.2",
+		"data-values/geo": "^4.5.1",
+		"data-values/number": "~0.13",
+		"data-values/time": "~1.2"
+	},
+	"autoload": {
+		"psr-4": {
+			"Wikibase\\InternalSerialization\\": "src/"
+		}
+	},
+	"extra": {
+		"branch-alias": {
+			"dev-master": "2.10.x-dev"
+		}
+	},
+	"scripts": {
+		"test": [
+			"composer validate --no-interaction",
+			"@cs",
+			"phpunit"
+		],
+		"cs": [
+			"phpmd src/ text phpmd.xml"
+		],
+		"ci": [
+			"@test"
+		]
+	}
+}
