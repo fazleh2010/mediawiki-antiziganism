@@ -183,6 +183,9 @@ $wgFileExtensions = array_merge(
 $wgVerifyMimeType = false;
 $wgEnableUploads = true;
 
+wfLoadExtension( 'UploadWizard' );
+
+
 
 
 
