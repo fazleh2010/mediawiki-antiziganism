@@ -168,4 +168,21 @@ wfLoadSkin( 'Vector' );
 
 # End of automatically generated settings.
 # Add more configuration options below.
+# Allow Excel uploads
+
+# Enable uploads
+$wgEnableUploads = true;
+
+# (Optional) Enable file types
+$wgFileExtensions = array_merge(
+    $wgFileExtensions,
+    [ 'png', 'jpg', 'jpeg', 'gif', 'pdf', 'xlsx', 'xls', 'csv' ]
+);
+
+# (Optional) Relax MIME checks if you face upload errors
+$wgVerifyMimeType = false;
+$wgEnableUploads = true;
+
+
+
 
