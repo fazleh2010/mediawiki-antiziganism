@@ -185,6 +185,17 @@ $wgEnableUploads = true;
 
 wfLoadExtension( 'UploadWizard' );
 
+# (optional) Make UploadWizard the default upload page
+$wgUploadNavigationUrl = "$wgScriptPath/index.php/Special:UploadWizard";
+
+# (optional) Limit to logged-in users only
+$wgGroupPermissions['user']['upload'] = true;
+$wgGroupPermissions['user']['upload_by_url'] = true;
+
+$wgGroupPermissions['*']['read'] = false;
+$wgGroupPermissions['*']['edit'] = false;
+
+
 
 
 
