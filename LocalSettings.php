@@ -183,7 +183,7 @@ $wgFileExtensions = array_merge(
 $wgVerifyMimeType = false;
 $wgEnableUploads = true;
 
-wfLoadExtension( 'UploadWizard' );
+# # wfLoadExtension( 'UploadWizard' );
 
 # (optional) Make UploadWizard the default upload page
 $wgUploadNavigationUrl = "$wgScriptPath/index.php/Special:UploadWizard";
@@ -196,7 +196,9 @@ $wgGroupPermissions['*']['read'] = false;
 $wgGroupPermissions['*']['edit'] = false;
 
 
+wfLoadExtension( 'SemanticMediaWiki' );
+enableSemantics( 'example.org' );
 
 
-
+wfLoadExtension( 'UploadWizard' );
 

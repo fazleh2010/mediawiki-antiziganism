@@ -419,3 +419,7 @@
 2025-08-19 16:15:52 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting stashedit rate for Melahi
 2025-08-19 16:15:52 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting edit rate for Melahi
 2025-08-19 16:15:52 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting linkpurge rate for Melahi
+2025-08-19 18:03:34 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting edit rate for Melahi
+2025-08-19 18:03:34 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting linkpurge rate for Melahi
+2025-08-19 18:05:08 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting edit rate for Melahi
+2025-08-19 18:05:08 melahi-Latitude-7410 my_wiki: MediaWiki\Permissions\RateLimiter::limit: limiting linkpurge rate for Melahi
